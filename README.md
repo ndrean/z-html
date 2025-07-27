@@ -1,2 +1,3 @@
 # z-html
-Zig wrapper for lexobr
+
+Zig wrapper for [lexbor](https://github.com/lexbor/lexbor)
