@@ -40,7 +40,7 @@ pub fn main() !void {
     const doc = try lexbor.parseHtml(html);
     defer lexbor.lxb_html_document_destroy(doc);
     const doc_node = lexbor.getDocumentNode(doc);
-    const name = lexbor.getNodeName(doc_node);
+    const name = try lexbor.getNodeName(doc_node);
     std.debug.print("Document Node: {s}\n", .{name});
 
     _ = lexbor.printDocumentStructure(doc);
