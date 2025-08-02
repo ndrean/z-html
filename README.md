@@ -7,4 +7,3 @@ Zig wrapper for [lexbor](https://github.com/lexbor/lexbor)
 ```sh
 make -f Makefile.lexbor
 ```
-

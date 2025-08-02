@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const testing = std.testing;
+const Print = std.debug.print;
+
 //=============================================================================
 // TYPES AND CONSTANTS
 //=============================================================================
@@ -40,19 +43,26 @@ pub const LexborError = error{
     SearchFailed,
     NotANode,
     NotAnElement,
+    NoNode,
+    EmptyTextContent,
+    SetTextContentFailed,
 };
 
 //=============================================================================
 // CORE DOCUMENT FUNCTIONS
 //=============================================================================
 
-pub extern "c" fn lxb_html_document_create() OptionalHtmlDocumentPtr;
-pub extern "c" fn lxb_html_document_destroy(doc: HtmlDocumentPtr) void;
-pub extern "c" fn lxb_html_document_parse(doc: HtmlDocumentPtr, html: [*]const u8, len: usize) usize;
+extern "c" fn lxb_html_document_create() OptionalHtmlDocumentPtr;
+extern "c" fn lxb_html_document_destroy(doc: HtmlDocumentPtr) void;
+extern "c" fn lxb_html_document_parse(doc: HtmlDocumentPtr, html: [*]const u8, len: usize) usize;
 
 /// Create a new HTML document
 pub fn createDocument() !HtmlDocumentPtr {
     return lxb_html_document_create() orelse LexborError.DocCreateFailed;
+}
+
+pub fn destroyDocument(doc: HtmlDocumentPtr) void {
+    lxb_html_document_destroy(doc);
 }
 
 /// Parse HTML into document
@@ -86,16 +96,16 @@ extern "c" fn lexbor_create_dom_element(doc: HtmlDocumentPtr, tag_name: [*]const
 //=============================================================================
 
 /// Get first child - confirmed to exist
-pub extern "c" fn lxb_dom_node_first_child_noi(node: DomNodePtr) OptionalDomNodePtr;
+extern "c" fn lxb_dom_node_first_child_noi(node: DomNodePtr) OptionalDomNodePtr;
 
 /// Get next sibling - confirmed to exist
-pub extern "c" fn lxb_dom_node_next_noi(node: DomNodePtr) OptionalDomNodePtr;
+extern "c" fn lxb_dom_node_next_noi(node: DomNodePtr) OptionalDomNodePtr;
 
 /// Get node name - this one works directly
-pub extern "c" fn lxb_dom_node_name(node: DomNodePtr, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_node_name(node: DomNodePtr, len: ?*usize) [*:0]const u8;
 
 /// Insert child - IMPORTANT: returns void, not status!
-pub extern "c" fn lxb_dom_node_insert_child(parent: DomNodePtr, child: DomNodePtr) void;
+extern "c" fn lxb_dom_node_insert_child(parent: DomNodePtr, child: DomNodePtr) void;
 
 //=============================================================================
 // FRAGMENT PARSING
@@ -111,6 +121,14 @@ pub fn parseFragmentAsDocument(fragment: SliceU8) !HtmlDocumentPtr {
 //=============================================================================
 // TYPE CONVERSION FUNCTIONS
 //=============================================================================
+
+/// Destroy a DOM node
+extern "c" fn lxb_dom_node_destroy(node: DomNodePtr) void;
+
+/// Destroy a DOM node - wrapper for C function
+pub fn destroyNode(node: DomNodePtr) void {
+    lxb_dom_node_destroy(node);
+}
 
 /// Convert any lexbor object to DOM node
 pub fn objectToNode(obj: *anyopaque) DomNodePtr {
@@ -141,10 +159,40 @@ pub fn createElement(doc: HtmlDocumentPtr, tag_name: SliceU8) !DomElementPtr {
     return lexbor_create_dom_element(doc, tag_name.ptr, tag_name.len) orelse LexborError.CreateElementFailed;
 }
 
+// lxb_dom_document_create_comment(lxb_dom_document_t *document, const lxb_char_t *data, size_t len)
+
 /// Get the document's body element
 pub fn getBodyElement(doc: HtmlDocumentPtr) OptionalDomElementPtr {
     return lexbor_get_body_element_wrapper(doc);
 }
+
+test "create element" {
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const element = try createElement(doc, "div");
+    defer destroyNode(elementToNode(element));
+    const name = try getElementName(element);
+    try testing.expectEqualStrings("DIV", name);
+}
+
+test "check error get body of empty element" {
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const body_element = getBodyElement(doc) orelse
+        LexborError.EmptyTextContent;
+
+    try testing.expectError(LexborError.EmptyTextContent, body_element);
+}
+
+// test "get body element" {
+//     const doc = try createDocument();
+//     defer destroyDocument(doc);
+//     const body_element = getBodyElement(doc) orelse
+//         LexborError.EmptyTextContent;
+
+//     Print("{any}", .{body_element});
+//     // testing.expect(body_element != null);
+// }
 
 //=============================================================================
 // DOM NAVIGATION
@@ -161,21 +209,147 @@ pub fn getNextSibling(node: DomNodePtr) OptionalDomNodePtr {
 }
 
 /// Get node's tag name as Zig string
-pub fn getNodeName(node: DomNodePtr) !SliceU8 {
-    const name_ptr = lxb_dom_node_name(node, null); // orelse LexborError.NotANode;
+pub fn getNodeName(node: DomNodePtr) SliceU8 {
+    const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
 
 /// Get element's tag name as Zig string
 pub fn getElementName(element: DomElementPtr) !SliceU8 {
     const node = elementToNode(element);
-    const name = getNodeName(node);
-    return name;
+    return getNodeName(node);
+    // return name;
 }
 
 /// Insert child node into parent - no error handling needed since it returns void
 pub fn insertChild(parent: DomNodePtr, child: DomNodePtr) void {
     lxb_dom_node_insert_child(parent, child); // No status to check!
+}
+
+test "getElementName" {
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const element = try createElement(doc, "div");
+    defer destroyNode(elementToNode(element));
+    // lxb.printDocumentStructure(doc);
+    const name = try getElementName(element);
+    try testing.expectEqualStrings("DIV", name);
+}
+
+test "getNodeName" {
+    const fragment = "<div></div><p></p>";
+    const doc = try parseFragmentAsDocument(fragment);
+    defer destroyDocument(doc);
+
+    const doc_node = getDocumentNode(doc);
+    try testing.expectEqualStrings(getNodeName(doc_node), "#document");
+    const body_element = getBodyElement(doc);
+    const body_node = elementToNode(body_element.?);
+    try testing.expectEqualStrings(getNodeName(body_node), "BODY");
+    const first_child = getFirstChild(body_node);
+    try testing.expectEqualStrings(getNodeName(first_child.?), "DIV");
+    const next_sibling = getNextSibling(first_child.?);
+    try testing.expectEqualStrings(getNodeName(next_sibling.?), "P");
+}
+
+test "insertChild" {
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const parent = try createElement(doc, "div");
+    defer destroyNode(elementToNode(parent));
+    const child = try createElement(doc, "span");
+    defer destroyNode(elementToNode(child));
+
+    insertChild(elementToNode(parent), elementToNode(child));
+
+    const first_child = getFirstChild(elementToNode(parent)) orelse {
+        return LexborError.EmptyTextContent;
+    };
+    const child_name = try getElementName(nodeToElement(first_child).?);
+    try testing.expectEqualStrings("SPAN", child_name);
+}
+
+//=============================================================================
+// TEXT CONTENT FUNCTIONS -
+//=============================================================================
+
+/// Get text content of a node (returns allocated string)
+/// WARNING: You must free the returned string with lexbor_free()
+extern "c" fn lxb_dom_node_text_content(node: DomNodePtr, len: ?*usize) ?[*:0]lxb_char_t;
+
+/// Set text content of a node
+extern "c" fn lxb_dom_node_text_content_set(node: DomNodePtr, content: [*]const lxb_char_t, len: usize) lxb_status_t;
+
+/// Check if node is empty (only whitespace)
+extern "c" fn lxb_dom_node_is_empty(node: DomNodePtr) bool;
+
+/// Free lexbor-allocated memory
+extern "c" fn lexbor_free(ptr: *anyopaque) void;
+
+/// Get text content as Zig string (copies to Zig-managed memory)
+pub fn getNodeTextContent(allocator: std.mem.Allocator, node: DomNodePtr) ![]u8 {
+    var len: usize = 0;
+    const text_ptr = lxb_dom_node_text_content(node, &len);
+
+    if (len == 0) {
+        Print("Text content length is 0\n", .{});
+        return LexborError.EmptyTextContent;
+    }
+
+    const result = try allocator.alloc(u8, len);
+    if (text_ptr) |t_ptr| {
+        // Copy the text content to Zig-managed memory
+        @memcpy(result, t_ptr[0..len]);
+        return result;
+    } else {
+        return LexborError.EmptyTextContent;
+    }
+}
+
+/// Set text content from Zig string
+pub fn setNodeTextContent(node: DomNodePtr, content: []const u8) !void {
+    const status = lxb_dom_node_text_content_set(node, content.ptr, content.len);
+    if (status != LXB_STATUS_OK) return LexborError.SetTextContentFailed;
+}
+
+/// Check if node contains only whitespace
+pub fn isNodeEmpty(node: DomNodePtr) bool {
+    return lxb_dom_node_is_empty(node);
+}
+
+test "get & set NodeTextContent & empty node" {
+    const allocator = std.testing.allocator;
+    const doc = try createDocument();
+    const element = try createElement(doc, "div");
+    defer destroyDocument(doc);
+    const node = elementToNode(element);
+
+    try testing.expectError(
+        error.EmptyTextContent,
+        getNodeTextContent(allocator, node),
+    );
+
+    try setNodeTextContent(node, "Hello, world!");
+
+    const text_content = try getNodeTextContent(allocator, node);
+    defer allocator.free(text_content);
+
+    try testing.expectEqualStrings("Hello, world!", text_content);
+}
+
+test "get all text elements from Fragment" {
+    const fragment = "<div><p>First<span>Second</span></p><p>Third</p></div><div><ul><li>Fourth</li><li>Fifth</li></ul></div>";
+
+    const allocator = testing.allocator;
+    const doc = try parseFragmentAsDocument(fragment);
+    defer destroyDocument(doc);
+    const body_element = getBodyElement(doc);
+    // orelse LexborError.EmptyTextContent;
+
+    const body_node = elementToNode(body_element.?);
+    const text_content = try getNodeTextContent(allocator, body_node);
+    defer allocator.free(text_content);
+    try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
 }
 
 //=============================================================================
@@ -186,7 +360,7 @@ pub fn insertChild(parent: DomNodePtr, child: DomNodePtr) void {
 pub fn walkTree(node: *lxb_dom_node_t, depth: u32) void {
     var child = getFirstChild(node);
     while (child != null) {
-        const name = try getNodeName(child.?);
+        const name = getNodeName(child.?);
         const indent = switch (@min(depth, 10)) {
             0 => "",
             1 => "  ",
@@ -196,7 +370,7 @@ pub fn walkTree(node: *lxb_dom_node_t, depth: u32) void {
             5 => "          ",
             else => "            ", // For deeper levels
         };
-        std.debug.print("{s}{s}\n", .{ indent, name });
+        Print("{s}{s}\n", .{ indent, name });
 
         walkTree(child.?, depth + 1);
         child = getNextSibling(child.?);
@@ -205,12 +379,9 @@ pub fn walkTree(node: *lxb_dom_node_t, depth: u32) void {
 
 /// Print document structure (for debugging)
 pub fn printDocumentStructure(doc: HtmlDocumentPtr) void {
-    std.debug.print("\n=== DOCUMENT STRUCTURE ===\n", .{});
+    Print("\n--- DOCUMENT STRUCTURE ----\n", .{});
     const root = getDocumentNode(doc);
     walkTree(root, 0);
-    std.debug.print("\n{s}\n", .{try getNodeName(root)});
-    std.debug.print("\n{s}\n", .{try getElementName(getBodyElement(doc).?)});
-    std.debug.print("\n=== END STRUCTURE ===\n", .{});
 }
 
 /// Parse and display fragment (for testing)
@@ -218,7 +389,7 @@ pub fn demonstrateFragmentParsing(fragment: SliceU8) !void {
     std.debug.print("\nParsing fragment: {s}\n", .{fragment});
 
     const frag_doc = try parseFragmentAsDocument(fragment);
-    defer lxb_html_document_destroy(frag_doc);
+    defer destroyDocument(frag_doc);
 
     std.debug.print("Fragment parsed successfully!\n", .{});
 

@@ -1,37 +1,6 @@
 const std = @import("std");
-const lxb = @import("lexbor.zig");
-
 const testing = std.testing;
 const Print = std.debug.print;
-
-pub fn main() !void {
-    const allocator = std.heap.c_allocator;
-    const fragment =
-        \\<div>
-        \\<p>First<span>
-        \\Second</span>
-        \\</p>
-        \\<p>Third </p>
-        \\</div>
-        \\<div>
-        \\ <ul>
-        \\<li>Fourth</li>
-        \\<li>Fifth</li>
-        \\</ul>
-        \\</div>"
-    ;
-
-    // const allocator = testing.allocator;
-    const doc = try lxb.parseFragmentAsDocument(fragment);
-    defer lxb.destroyDocument(doc);
-    const body_element = lxb.getBodyElement(doc);
-    // orelse LexborError.EmptyTextContent;
-
-    const body_node = lxb.elementToNode(body_element.?);
-    const text_content = try lxb.getNodeTextContent(allocator, body_node);
-    defer allocator.free(text_content);
-    Print("{s}\n", .{text_content});
-}
 
 test "slice comparison examples" {
     const allocator = testing.allocator;
