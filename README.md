@@ -1,8 +1,8 @@
 # z-html
 
-Zig wrapper for [lexbor](https://github.com/lexbor/lexbor)
+`zhtml` is a `Zig` wrapper for [lexbor](https://github.com/lexbor/lexbor)
 
-## Compile lexbor
+## First step: compile `lexbor`
 
 ```sh
 make -f Makefile.lexbor
@@ -10,17 +10,27 @@ make -f Makefile.lexbor
 
 ## Files
 
-- _lexbor.zig_:
-  - document and fragment parsing,
-  - DOM navigation,
-  - whitespace,
-  - serialization
-- _chunks_zig_
-- _selectors.zig_ (work in progress)
+- src /
+  - __zhtml.zig__
+  - _minimal.c_
+  - _errors.zig_
+  - _lexbor.zig_:
+    - document and fragment parsing,
+    - DOM navigation,
+    - whitespace,
+    - serialization
+  - _chunks.zig_
+  - _selectors.zig_
+
+  - demo in _main.zig_ (TODO)
+- __build.zig__
+- Makefile.lexbor
+- vendor/lexbor
   
 ## Run tests
 
-The _build.zig_ file runs all the tests from the files _lexbor.zig_ and _chunks.zig_.
+The _build.zig_ file runs all the tests from the _zhtml.zig_ file (which imports all the submodule and run the tests via `std.testing.refAllDecls`)
+
 
 ```sh
  zig build test --summary all -Doptimize=Debug
