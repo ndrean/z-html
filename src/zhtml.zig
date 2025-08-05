@@ -4,6 +4,7 @@
 pub const lexbor = @import("lexbor.zig");
 pub const chunks = @import("chunks.zig");
 pub const css = @import("css_selectors.zig");
+pub const attributes = @import("attributes.zig");
 pub const Err = @import("errors.zig").LexborError;
 
 // Re-export commonly used types and functions
@@ -58,6 +59,12 @@ pub const isCommentNode = lexbor.isCommentNode;
 // CSS selectors - unified top-level access
 pub const findElements = css.findElements;
 
+// Attribute manipulation
+pub const getAttribute = attributes.getAttribute;
+pub const setAttribute = attributes.setAttribute;
+pub const hasAttribute = attributes.hasAttribute;
+pub const getAttributeValue = attributes.getAttributeValue;
+
 // Utility functions
 pub const printDocumentStructure = lexbor.printDocumentStructure;
 pub const walkTree = lexbor.walkTree;
@@ -77,29 +84,39 @@ pub const walkTree = lexbor.walkTree;
 //     };
 //     return elements;
 // }
-pub fn parseAndFind(allocator: std.mem.Allocator, html: []const u8, selector: []const u8) ![]*DomElement {
+pub fn parseAndFind(
+    allocator: std.mem.Allocator,
+    html: []const u8,
+    selector: []const u8,
+) ![]*DomElement {
     const doc = try parseFragmentAsDocument(html);
     defer destroyDocument(doc);
 
     return try findElements(allocator, doc, selector);
 }
 /// Parse HTML and get all text content
-pub fn parseAndGetText(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+pub fn parseAndGetText(
+    allocator: std.mem.Allocator,
+    html: []const u8,
+) ![]u8 {
     const doc = try parseFragmentAsDocument(html);
     defer destroyDocument(doc);
 
-    const body = getBodyElement(doc) orelse return try allocator.alloc(u8, 0);
+    const body = getBodyElement(doc) orelse return Err.NoBodyElement;
     const body_node = elementToNode(body);
 
     return try getNodeTextContent(allocator, body_node);
 }
 
 /// Parse HTML, clean whitespace, and serialize
-pub fn parseCleanAndSerialize(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+pub fn parseCleanAndSerialize(
+    allocator: std.mem.Allocator,
+    html: []const u8,
+) ![]u8 {
     const doc = try parseFragmentAsDocument(html);
     defer destroyDocument(doc);
 
-    const body = getBodyElement(doc) orelse return try allocator.alloc(u8, 0);
+    const body = getBodyElement(doc) orelse return Err.NoBodyElement;
     const body_node = elementToNode(body);
 
     try removeWhitespaceOnlyTextNodes(allocator, body_node);

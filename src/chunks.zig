@@ -111,11 +111,11 @@ test "chunks1" {
     defer allocator.free(children);
     try testing.expect(children.len > 0);
     try testing.expectEqualStrings(
-        lxb.getElementName(children[0].?),
+        lxb.getElementName(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        lxb.getElementName(children[1].?),
+        lxb.getElementName(children[1]),
         "P",
     );
 
@@ -163,10 +163,10 @@ test "chunk parsing comprehensive" {
     try testing.expect(children.len == 3); // h1, p, div
 
     // Check element names
-    try testing.expectEqualStrings(lxb.getElementName(children[0].?), "H1");
-    try testing.expectEqualStrings(lxb.getElementName(children[1].?), "P");
+    try testing.expectEqualStrings(lxb.getElementName(children[0]), "H1");
+    try testing.expectEqualStrings(lxb.getElementName(children[1]), "P");
 
-    try testing.expectEqualStrings(lxb.getElementName(children[2].?), "SPAN");
+    try testing.expectEqualStrings(lxb.getElementName(children[2]), "SPAN");
 
     // Test serialization
     const html = try lxb.serializeTree(allocator, body_node);

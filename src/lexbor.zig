@@ -319,6 +319,52 @@ pub fn insertChild(parent: *DomNode, child: *DomNode) void {
     lxb_dom_node_insert_child(parent, child); // No status to check!
 }
 
+/// Get first element child (skip text nodes, comments, etc.)
+pub fn getFirstElementChild(node: *DomNode) ?*DomElement {
+    var child = getFirstChild(node);
+    while (child != null) {
+        if (nodeToElement(child.?)) |element| {
+            return element;
+        }
+        child = getNextSibling(child.?);
+    }
+    return null;
+}
+
+/// Get next element sibling (skip text nodes)
+pub fn getNextElementSibling(node: *DomNode) ?*DomElement {
+    var sibling = getNextSibling(node);
+    while (sibling != null) {
+        if (nodeToElement(sibling.?)) |element| {
+            return element;
+        }
+        sibling = getNextSibling(sibling.?);
+    }
+    return null;
+}
+
+// Helper: Collect only element children
+// Returns a slice of optional elements (no text nodes) and need to be freed
+pub fn getElementChildren(
+    allocator: std.mem.Allocator,
+    parent_node: *DomNode,
+) ![]*DomElement {
+    var elements = std.ArrayList(*DomElement).init(allocator);
+    // defer elements.deinit(); <-- defer is not needed here since we return the slice
+
+    var child = getFirstChild(parent_node);
+    while (child != null) {
+        if (isElementNode(child.?)) {
+            if (nodeToElement(child.?)) |element| {
+                try elements.append(element);
+            }
+        }
+        child = getNextSibling(child.?);
+    }
+
+    return elements.toOwnedSlice();
+}
+
 test "navigation & getNodeName" {
     const fragment = "<div></div><p></p>";
     const doc = try parseFragmentAsDocument(fragment);
@@ -372,6 +418,14 @@ extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const lx
 /// Check if node is empty (only whitespace)
 extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
 
+// extern "c" fn lxb_dom_document_destroy_text(doc: *anyopaque, text: [*]lxb_char_t) void;
+
+/// Get owner document from node
+extern "c" fn lexbor_node_owner_document(node: *DomNode) *HtmlDocument;
+
+/// Destroy text with proper cleanup
+extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]lxb_char_t) void;
+
 /// Free lexbor-allocated memory
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
 
@@ -379,21 +433,24 @@ extern "c" fn lexbor_free(ptr: *anyopaque) void;
 /// Caller must free the returned string
 pub fn getNodeTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     var len: usize = 0;
-    const text_ptr = lxb_dom_node_text_content(node, &len);
+    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return LexborError.EmptyTextContent;
 
-    if (len == 0) {
-        // print("Text content length is 0 => returns error.EmptyTextContent\n", .{});
-        return LexborError.EmptyTextContent;
-    }
+    defer lexbor_destroy_text_wrapper(node, text_ptr);
+
+    if (len == 0) return LexborError.EmptyTextContent;
 
     const result = try allocator.alloc(u8, len);
-    if (text_ptr) |t_ptr| {
-        // Copy the text content to Zig-managed memory
-        @memcpy(result, t_ptr[0..len]);
-        return result;
-    } else {
-        return LexborError.EmptyTextContent;
-    }
+    @memcpy(result, text_ptr[0..len]);
+    return result;
+
+    // const result = try allocator.alloc(u8, len);
+    // if (text_ptr) |t_ptr| {
+    //     // Copy the text content to Zig-managed memory
+    //     @memcpy(result, t_ptr[0..len]);
+    //     return result;
+    // } else {
+    //     return LexborError.EmptyTextContent;
+    // }
 }
 
 /// Set text content from Zig string
@@ -453,6 +510,29 @@ test "gets all text elements from Fragment" {
     try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
 }
 
+test "text content" {
+    const allocator = testing.allocator;
+
+    const html = "<p>Hello <strong>World</strong>!</p>";
+    const doc = try parseFragmentAsDocument(html);
+    defer destroyDocument(doc);
+
+    const body = getBodyElement(doc).?;
+    const body_node = elementToNode(body);
+    const p_node = getFirstChild(body_node).?;
+    const text = try getNodeTextContent(allocator, p_node);
+    defer allocator.free(text);
+    // print("text: {s}\n", .{text});
+
+    try testing.expectEqualStrings("Hello World!", text);
+    const text_node = getFirstChild(p_node);
+    const strong_node = getNextSibling(text_node.?);
+    const strong_text = try getNodeTextContent(allocator, strong_node.?);
+    defer allocator.free(strong_text);
+    // print("Strong text: {s}\n", .{strong_text});
+    try testing.expectEqualStrings("World", strong_text);
+}
+
 test "getNodeTextContent" {
     const frag = "<p>First<span>Second</span></p><p>Third</p>";
     const allocator = std.testing.allocator;
@@ -478,22 +558,20 @@ test "getNodeTextContent" {
     try testing.expectEqualStrings("Third", second_text);
 }
 
-/// Helper: Collect only element children
-/// Returns a slice of optional elements and need to be freed
-pub fn getElementChildren(allocator: std.mem.Allocator, parent_node: *DomNode) ![]?*DomElement {
-    var elements = std.ArrayList(?*DomElement).init(allocator);
-    defer elements.deinit();
+// pub fn getElementChildren(allocator: std.mem.Allocator, parent_node: *DomNode) ![]?*DomElement {
+//     var elements = std.ArrayList(?*DomElement).init(allocator);
+//     defer elements.deinit();
 
-    var child = getFirstChild(parent_node);
-    while (child != null) {
-        if (nodeToElement(child.?)) |element| {
-            try elements.append(element);
-        }
-        child = getNextSibling(child.?);
-    }
+//     var child = getFirstChild(parent_node);
+//     while (child != null) {
+//         if (nodeToElement(child.?)) |element| {
+//             try elements.append(element);
+//         }
+//         child = getNextSibling(child.?);
+//     }
 
-    return elements.toOwnedSlice();
-}
+//     return elements.toOwnedSlice();
+// }
 
 test "getElementChildren from createElement" {
     const allocator = std.testing.allocator;
@@ -515,13 +593,12 @@ test "getElementChildren from createElement" {
     // Get children
     const children = try getElementChildren(allocator, elementToNode(parent));
     defer allocator.free(children);
+    // print("len: {d}\n", .{children.len});
 
     try testing.expect(children.len == 2);
-    try testing.expect(children[0] != null);
-    try testing.expect(children[1] != null);
     for (children) |child| {
         // print("{s}\n", .{getElementName(child.?)});
-        try testing.expect(isNodeEmpty(elementToNode(child.?)));
+        try testing.expect(isNodeEmpty(elementToNode(child)));
     }
 }
 
@@ -540,18 +617,16 @@ test "getElementChildren from fragment" {
     try testing.expect(children1.len == 1); // Only one child <div>
     try testing.expect(!isNodeEmpty(body_node)); // DIV contains SPAN and P elements
 
-    const div_node = children1[0] orelse return LexborError.EmptyTextContent;
+    const div_node = children1[0];
     const children2 = try getElementChildren(allocator, elementToNode(div_node));
     defer allocator.free(children2);
-    try testing.expect(children2[0] != null);
-    try testing.expectEqualStrings(getElementName(children2[0].?), "SPAN");
+    try testing.expectEqualStrings(getElementName(children2[0]), "SPAN");
 
-    try testing.expect(children2[1] != null);
-    try testing.expectEqualStrings(getElementName(children2[1].?), "P");
+    try testing.expectEqualStrings(getElementName(children2[1]), "P");
 
     for (children2) |child| {
         // print("{s}\n", .{getElementName(child.?)});
-        try testing.expect(isNodeEmpty(elementToNode(child.?)));
+        try testing.expect(isNodeEmpty(elementToNode(child)));
     }
     // printDocumentStructure(doc);
 }

@@ -2,7 +2,7 @@
 
 `zhtml` is a `Zig` wrapper for [lexbor](https://github.com/lexbor/lexbor)
 
-## First step: compile `lexbor`
+## First step: compile `lexbor` with static linking
 
 ```sh
 make -f Makefile.lexbor
@@ -30,7 +30,6 @@ make -f Makefile.lexbor
 ## Run tests
 
 The _build.zig_ file runs all the tests from the _zhtml.zig_ file (which imports all the submodule and run the tests via `std.testing.refAllDecls`)
-
 
 ```sh
  zig build test --summary all -Doptimize=Debug

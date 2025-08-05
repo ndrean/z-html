@@ -48,3 +48,16 @@ lxb_html_document_t *lexbor_parse_fragment_as_document(const lxb_char_t *html, s
 
   return frag_doc;
 }
+
+// Wrapper to get the owner document from a node
+lxb_html_document_t *lexbor_node_owner_document(lxb_dom_node_t *node)
+{
+  return lxb_html_interface_document(node->owner_document);
+}
+
+// Wrapper to destroy text with proper document
+void lexbor_destroy_text_wrapper(lxb_dom_node_t *node, lxb_char_t *text)
+{
+  if (text != NULL)
+    lxb_dom_document_destroy_text(node->owner_document, text);
+}
