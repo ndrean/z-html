@@ -1,0 +1,199 @@
+const std = @import("std");
+const testing = std.testing;
+
+const lxb = @import("lexbor.zig");
+const err = @import("errors.zig");
+
+extern "c" fn lxb_html_parser_create() *lxb.HtmlParser;
+extern "c" fn lxb_html_parser_init(*lxb.HtmlParser) lxb.lxb_status_t;
+extern "c" fn lxb_html_parser_destroy(parser: *lxb.HtmlParser) void;
+extern "c" fn lxb_html_document_parse_chunk_begin(document: *lxb.HtmlDocument) lxb.lxb_status_t;
+extern "c" fn lxb_html_document_parse_chunk_end(document: *lxb.HtmlDocument) lxb.lxb_status_t;
+extern "c" fn lxb_html_document_parse_chunk(document: *lxb.HtmlDocument, chunk: [*:0]const u8, len: usize) lxb.lxb_status_t;
+
+pub const ChunkParser = struct {
+    doc: *lxb.HtmlDocument,
+    parser: *lxb.HtmlParser,
+    allocator: std.mem.Allocator,
+    parsing_active: bool = false,
+
+    pub fn init(allocator: std.mem.Allocator) !ChunkParser {
+        const doc = lxb.createDocument() catch return err.LexborError.DocCreateFailed;
+        return .{
+            .doc = doc,
+            .allocator = allocator,
+            .parser = lxb_html_parser_create(),
+        };
+    }
+
+    pub fn deinit(self: *ChunkParser) void {
+        if (self.parsing_active) {
+            _ = lxb_html_document_parse_chunk_end(self.doc);
+            lxb_html_parser_destroy(self.parser);
+        }
+        lxb.destroyDocument(self.doc);
+    }
+
+    pub fn beginParsing(self: *ChunkParser) !void {
+        if (self.parsing_active) {
+            return err.LexborError.ChunkBeginFailed;
+        }
+
+        if (lxb_html_document_parse_chunk_begin(self.doc) != 0) {
+            return err.LexborError.ChunkBeginFailed;
+        }
+        self.parsing_active = true;
+        if (lxb_html_parser_init(self.parser) != lxb.LXB_STATUS_OK) {
+            return err.LexborError.ParserInitFailed;
+        }
+        self.parsing_active = true;
+    }
+
+    pub fn processChunk(self: *ChunkParser, html_chunk: lxb.SliceU8) !void {
+        // Print("chunk: {s}\n", .{html_chunk});
+        if (!self.parsing_active) {
+            return err.LexborError.ChunkProcessFailed;
+        }
+
+        const html_ptr = try self.allocator.dupeZ(u8, html_chunk);
+        defer self.allocator.free(html_ptr);
+
+        if (lxb_html_document_parse_chunk(self.doc, html_ptr, html_chunk.len) != 0) {
+            return err.LexborError.ChunkProcessFailed;
+        }
+    }
+
+    pub fn endParsing(self: *ChunkParser) !void {
+        if (!self.parsing_active) {
+            return err.LexborError.ChunkEndFailed;
+        }
+
+        if (lxb_html_document_parse_chunk_end(self.doc) != 0) {
+            return err.LexborError.ChunkEndFailed;
+        }
+        self.parsing_active = false;
+    }
+
+    pub fn getDocument(self: *ChunkParser) *lxb.HtmlDocument {
+        return self.doc;
+    }
+
+    pub fn getHtmlDocument(self: *ChunkParser) lxb.HtmlDocument {
+        return .{
+            .doc = self.doc,
+            // .allocator = self.allocator,
+        };
+    }
+};
+
+test "chunks1" {
+    const allocator = testing.allocator;
+    var chunk_parser = try ChunkParser.init(allocator);
+    defer chunk_parser.deinit();
+    try chunk_parser.beginParsing();
+    try chunk_parser.processChunk("<html><head><title>");
+    try chunk_parser.processChunk("My Page</");
+    try chunk_parser.processChunk("title></head><body>");
+    try chunk_parser.processChunk("<h1>Hello</h1>");
+    try chunk_parser.processChunk("<p>World!</p>");
+    try chunk_parser.processChunk("</body></html>");
+    try chunk_parser.endParsing();
+
+    const doc = chunk_parser.getDocument();
+    const body = lxb.getBodyElement(doc);
+    const body_node = lxb.elementToNode(body.?);
+    const children = try lxb.getElementChildren(
+        allocator,
+        body_node,
+    );
+    defer allocator.free(children);
+    try testing.expect(children.len > 0);
+    try testing.expectEqualStrings(
+        lxb.getElementName(children[0].?),
+        "H1",
+    );
+    try testing.expectEqualStrings(
+        lxb.getElementName(children[1].?),
+        "P",
+    );
+
+    const html = try lxb.serializeTree(
+        allocator,
+        body_node,
+    );
+    defer allocator.free(html);
+    try testing.expectEqualStrings(
+        html,
+        "<body><h1>Hello</h1><p>World!</p></body>",
+    );
+
+    // lxb.printDocumentStructure(doc);
+}
+
+test "chunk parsing comprehensive" {
+    const allocator = testing.allocator;
+
+    var chunk_parser = try ChunkParser.init(allocator);
+    defer chunk_parser.deinit();
+
+    try chunk_parser.beginParsing();
+
+    // Parse HTML in chunks (simulating streaming)
+    const chunks = [_][]const u8{ "<html><head><title", ">My Page<", "/title></head><body>", "<h1>Hello", "</h1><p>World!</p>", "<span>Nested</span></", "div></body></html>" };
+
+    for (chunks) |chunk| {
+        try chunk_parser.processChunk(chunk);
+    }
+
+    try chunk_parser.endParsing();
+
+    // Verify the parsed structure
+    const doc = chunk_parser.getDocument();
+
+    std.debug.print("\n=== CHUNK PARSED STRUCTURE ===\n", .{});
+    lxb.printDocumentStructure(doc);
+
+    const body = lxb.getBodyElement(doc).?;
+    const body_node = lxb.elementToNode(body);
+
+    const children = try lxb.getElementChildren(allocator, body_node);
+    defer allocator.free(children);
+
+    try testing.expect(children.len == 3); // h1, p, div
+
+    // Check element names
+    try testing.expectEqualStrings(lxb.getElementName(children[0].?), "H1");
+    try testing.expectEqualStrings(lxb.getElementName(children[1].?), "P");
+
+    try testing.expectEqualStrings(lxb.getElementName(children[2].?), "SPAN");
+
+    // Test serialization
+    const html = try lxb.serializeTree(allocator, body_node);
+    defer allocator.free(html);
+
+    std.debug.print("Serialized: {s}\n", .{html});
+
+    // Should contain all elements
+    try testing.expect(std.mem.indexOf(u8, html, "<h1>Hello</h1>") != null);
+    try testing.expect(std.mem.indexOf(u8, html, "<p>World!</p>") != null);
+    try testing.expect(std.mem.indexOf(u8, html, "<span>Nested</span>") != null);
+}
+
+test "chunk parsing error handling" {
+    const allocator = testing.allocator;
+
+    var chunk_parser = try ChunkParser.init(allocator);
+    defer chunk_parser.deinit();
+
+    // Test processing without beginning
+    const result = chunk_parser.processChunk("<div>test</div>");
+    try testing.expectError(err.LexborError.ChunkProcessFailed, result);
+
+    // Test double begin
+    try chunk_parser.beginParsing();
+    const result2 = chunk_parser.beginParsing();
+    try testing.expectError(err.LexborError.ChunkBeginFailed, result2);
+
+    // Clean up
+    try chunk_parser.endParsing();
+}

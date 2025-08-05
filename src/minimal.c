@@ -1,5 +1,6 @@
 #include <lexbor/html/html.h>
 #include <lexbor/dom/dom.h>
+#include <lexbor/html/serialize.h>
 
 // Keep only the wrappers we actually need:
 
