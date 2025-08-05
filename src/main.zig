@@ -1,8 +1,7 @@
 const std = @import("std");
-const lxb = @import("lexbor.zig");
+const zhtml = @import("zhtml.zig");
 
-const testing = std.testing;
-const Print = std.debug.print;
+const print = std.debug.print;
 
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
@@ -22,49 +21,23 @@ pub fn main() !void {
     ;
 
     // const allocator = testing.allocator;
-    const doc = try lxb.parseFragmentAsDocument(fragment);
-    defer lxb.destroyDocument(doc);
-    const body_element = lxb.getBodyElement(doc);
+    const doc = try zhtml.parseFragmentAsDocument(fragment);
+    defer zhtml.destroyDocument(doc);
+    const body_element = zhtml.getBodyElement(doc);
     // orelse LexborError.EmptyTextContent;
 
-    const body_node = lxb.elementToNode(body_element.?);
-    const text_content = try lxb.getNodeTextContent(allocator, body_node);
+    const body_node = zhtml.elementToNode(body_element.?);
+    const text_content = try zhtml.getNodeTextContent(allocator, body_node);
     defer allocator.free(text_content);
-    Print("{s}\n", .{text_content});
-}
+    print("{s}\n", .{text_content});
 
-test "slice comparison examples" {
-    const allocator = testing.allocator;
+    const elements = try zhtml.findElements(allocator, doc, "p");
+    defer allocator.free(elements);
+    print("elements: {s}\n", .{elements});
 
-    // String/slice content comparison
-    const text1 = try allocator.dupe(u8, "hello");
-    defer allocator.free(text1);
-    const text2 = "hello";
+    var chunk_parser = try zhtml.ChunkParser.init(allocator);
+    defer chunk_parser.deinit();
 
-    // ✅ Compare slice contents
-    try testing.expectEqualStrings(text1, text2);
-
-    // ❌ This would fail - different pointers
-    // try testing.expectEqual(text1, text2);
-
-    // Numbers and primitives
-    const num1: u32 = 42;
-    const num2: u32 = 42;
-
-    // ✅ Compare primitive values
-    try testing.expectEqual(num1, num2);
-
-    // Optional comparison
-    const maybe_text: ?[]const u8 = "hello";
-
-    // ✅ Compare optional contents
-    try testing.expect(maybe_text != null);
-    try testing.expectEqualStrings("hello", maybe_text.?);
-
-    // Array comparison
-    const arr1 = [_]u8{ 1, 2, 3 };
-    const arr2 = [_]u8{ 1, 2, 3 };
-
-    // ✅ Compare array contents
-    try testing.expectEqualSlices(u8, &arr1, &arr2);
+    const new_doc = try zhtml.parseFragmentAsDocument("<div><p class='test'>Hello World</p></div>");
+    defer zhtml.destroyDocument(new_doc);
 }

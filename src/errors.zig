@@ -18,4 +18,11 @@ pub const LexborError = error{
     SerializeFailed,
     RemoveWhitespaceFailed,
     ParserInitFailed,
+    CssParserCreateFailed,
+    CssParserInitFailed,
+    CssSelectorsCreateFailed,
+    CssSelectorsInitFailed,
+    CssSelectorParseFailed,
+    CssSelectorFindFailed,
+    CssEngineNotInitialized,
 };
