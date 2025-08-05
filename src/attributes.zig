@@ -31,6 +31,8 @@ extern "c" fn lxb_dom_element_set_attribute(
     value_len: usize,
 ) ?*anyopaque;
 
+extern "c" fn lxb_dom_element_remove_attribute(element: *lxb.DomElement, qualified_name: [*]const u8, qn_len: usize) ?*anyopaque;
+
 /// Get attribute value
 pub fn getAttribute(
     allocator: std.mem.Allocator,
@@ -83,6 +85,23 @@ pub fn getAttributeValue(element: *lxb.DomElement, name: []const u8) ?[]const u8
     return value_ptr[0..value_len];
 }
 
+/// Remove attribute from element
+pub fn removeAttribute(element: *lxb.DomElement, name: []const u8) !void {
+    const result = lxb_dom_element_remove_attribute(
+        element,
+        name.ptr,
+        name.len,
+    );
+    // Note: According to DOM spec, removeAttribute doesn't fail if attribute doesn't exist
+    _ = result; // Ignore return value for now
+}
+
+/// Check if removing attribute succeeded (if you want to know)
+pub fn removeAttributeCheck(element: *lxb.DomElement, name: []const u8) bool {
+    const result = lxb_dom_element_remove_attribute(element, name.ptr, name.len);
+    return result != null;
+}
+
 test "attribute management" {
     const allocator = testing.allocator;
 
@@ -119,7 +138,11 @@ test "attribute management" {
     try testing.expect(hasAttribute(p_element, "id"));
     try testing.expect(hasAttribute(p_element, "class"));
     try testing.expect(hasAttribute(p_element, "data-value"));
+
     try testing.expect(!hasAttribute(p_element, "nonexistent"));
+
+    // Remove non-existent attribute (should not fail)
+    try removeAttribute(p_element, "nonexistent");
 
     // print("✅ hasAttribute tests passed\n", .{});
 
@@ -204,6 +227,18 @@ test "attribute management" {
         defer allocator.free(placeholder);
         try testing.expectEqualStrings("Enter name", placeholder);
     }
+
+    try removeAttribute(p_element, "id");
+    try removeAttribute(p_element, "data-value");
+    try removeAttribute(span_element, "hidden");
+    try removeAttribute(span_element, "title");
+
+    // Verify all attributes are gone
+    try testing.expect(!hasAttribute(p_element, "id"));
+    try testing.expect(hasAttribute(p_element, "class"));
+    try testing.expect(!hasAttribute(p_element, "data-value"));
+    try testing.expect(!hasAttribute(span_element, "hidden"));
+    try testing.expect(!hasAttribute(span_element, "title"));
 
     // print("✅ Different element tests passed\n", .{});
 }
