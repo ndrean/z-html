@@ -1,12 +1,20 @@
 # z-html
 
-`zhtml` is a `Zig` wrapper for [lexbor](https://github.com/lexbor/lexbor)
+`zhtml` is a `Zig` wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor).
 
-## First step: compile `lexbor` with static linking
+`lexbor` follows <https://dom.spec.whatwg.org/>
 
-```sh
-make -f Makefile.lexbor
-```
+We expose a _small_ but significant subset of all available functions.
+
+Eveents are not wrapped.
+
+- document and fragment and chunk parsing
+- node/element/fragment/document serialization including whitespace management
+  - via HTML aware manipulations
+  - via string transformations of the serialized fragment
+- CSS selectors using `lexbor` "css_parser" engine
+- HTML attributes on an HTMLElement via a "name" or a `DomAttr`.
+- DOM node manipulation
 
 ## Files
 
@@ -18,15 +26,26 @@ make -f Makefile.lexbor
     - document and fragment parsing,
     - DOM navigation,
     - whitespace,
-    - serialization
+    - escaping
   - _chunks.zig_
-  - _selectors.zig_
+  - _css_selectors.zig_
+  - _HTMLelement_attributes.zig_
+  - _serialize.zig_
+    - innerHTML,
+    - serialize nodes / HTMLElements
+  - _title.zig_ (TODO)
 
   - demo in _main.zig_ (TODO)
 - __build.zig__
 - Makefile.lexbor
-- vendor/lexbor
+- lexbor_src
   
+## `lexbor` built with static linking
+
+```sh
+make -f Makefile.lexbor
+```
+
 ## Run tests
 
 The _build.zig_ file runs all the tests from the _zhtml.zig_ file (which imports all the submodule and run the tests via `std.testing.refAllDecls`)
@@ -34,6 +53,18 @@ The _build.zig_ file runs all the tests from the _zhtml.zig_ file (which imports
 ```sh
  zig build test --summary all -Doptimize=Debug
  ```
+
+## Usage example demo
+
+__main.zig__: TODO
+
+ ```sh
+ zig build run -Doptimize=Debug | ReleaseFast
+ ```
+
+## Source: `lexbor` examples
+
+<https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
 ## Searching in `lexbor` library
 

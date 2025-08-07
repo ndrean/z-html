@@ -1,16 +1,20 @@
-//! Z-HTML: Zig HTML parsing and manipulation library
+//! Z-HTML: Zig wrapper of the C library  lexbor, HTML parsing and manipulation library
 
 // Re-export all modules
-pub const lexbor = @import("lexbor.zig");
-pub const chunks = @import("chunks.zig");
-pub const css = @import("css_selectors.zig");
-pub const attributes = @import("attributes.zig");
+const lxb = @import("lexbor.zig");
+const chunks = @import("chunks.zig");
+const css = @import("css_selectors.zig");
+const attributes = @import("attributes.zig");
+const serialize = @import("serialize.zig");
+const Tag = @import("tags.zig");
+const Type = @import("node_types.zig");
 pub const Err = @import("errors.zig").LexborError;
 
 // Re-export commonly used types and functions
-pub const HtmlDocument = lexbor.HtmlDocument;
-pub const DomNode = lexbor.DomNode;
-pub const DomElement = lexbor.DomElement;
+pub const HtmlDocument = lxb.HtmlDocument;
+pub const DomNode = lxb.DomNode;
+pub const DomElement = lxb.DomElement;
+pub const DomAttr = attributes.DomAttr;
 
 // CSS selectors
 pub const CssSelectorEngine = css.CssSelectorEngine;
@@ -18,56 +22,97 @@ pub const CssSelectorEngine = css.CssSelectorEngine;
 // Chunk parsing
 pub const ChunkParser = chunks.ChunkParser;
 
-pub const createDocument = lexbor.createDocument;
-pub const destroyDocument = lexbor.destroyDocument;
-pub const parseHtml = lexbor.parseHtml;
-pub const parseFragmentAsDocument = lexbor.parseFragmentAsDocument;
-pub const parseDocument = lexbor.parseLxbDocument;
+// Tags
+pub const HtmlTag = Tag.HtmlTag;
+pub const ElementTag = lxb.ElementTag;
+
+pub const createDocument = lxb.createDocument;
+pub const destroyDocument = lxb.destroyDocument;
+pub const parseHtml = lxb.parseHtml;
+pub const parseFragmentAsDocument = lxb.parseFragmentAsDocument;
+pub const parseDocHtml = lxb.parseDocHtml;
+pub const createElement = lxb.createElement;
 
 // DOM access and navigation
-pub const getBodyElement = lexbor.getBodyElement;
-pub const getDocumentNode = lexbor.getDocumentNode;
-pub const elementToNode = lexbor.elementToNode;
-pub const nodeToElement = lexbor.nodeToElement;
-pub const objectToNode = lexbor.objectToNode;
-pub const getFirstChild = lexbor.getFirstChild;
-pub const getNextSibling = lexbor.getNextSibling;
-pub const getNodeName = lexbor.getNodeName;
-pub const getElementChildren = lexbor.getElementChildren;
+pub const getBodyElement = lxb.getBodyElement;
+pub const getDocumentNode = lxb.getDocumentNode;
+pub const elementToNode = lxb.elementToNode;
+pub const nodeToElement = lxb.nodeToElement;
+pub const objectToNode = lxb.objectToNode;
+pub const getNodeFirstChildNode = lxb.getNodeFirstChildNode;
+pub const getNodeNextSiblingNode = lxb.getNodeNextSiblingNode;
+pub const getNodeName = lxb.getNodeName;
+pub const getNodeChildrenElements = lxb.getNodeChildrenElements;
 
 // DOM manipulation
-pub const removeWhitespaceOnlyTextNodes = lexbor.removeWhitespaceOnlyTextNodes;
-pub const destroyNode = lexbor.destroyNode;
-pub const isNodeEmpty = lexbor.isNodeEmpty;
+pub const removeWhitespaceOnlyTextNodes = lxb.removeWhitespaceOnlyTextNodes;
+pub const destroyNode = lxb.destroyNode;
+pub const isNodeEmpty = lxb.isNodeEmpty;
 
 // Serialization
-pub const serializeTree = lexbor.serializeTree;
-pub const serializeNode = lexbor.serializeNode;
-pub const serializeElement = lexbor.serializeElement;
+pub const serializeTree = serialize.serializeTree;
+pub const serializeNode = serialize.serializeNode;
+pub const serializeElement = serialize.serializeElement;
+
+// InnerHTML manipulation
+pub const setElementInnerHTML = serialize.setElementInnerHTML;
+pub const getElementHTMLAsString = serialize.serializeElement;
 
 // Text content
-pub const getNodeTextContent = lexbor.getNodeTextContent;
-pub const isWhitepaceOnlyText = lexbor.isWhitepaceOnlyText;
+pub const getNodeTextContentOpts = lxb.getNodeTextContentOpts;
+// pub const getTextContentEscaped = lxb.getTextContentEscaped;
+pub const isWhitepaceOnlyText = lxb.isWhitepaceOnlyText;
 
-// Node type detection
-pub const NodeType = lexbor.NodeType;
-pub const getNodeType = lexbor.getNodeType;
-pub const isElementNode = lexbor.isElementNode;
-pub const isTextNode = lexbor.isTextNode;
-pub const isCommentNode = lexbor.isCommentNode;
+// NodeTypes
+pub const NodeType = Type.NodeType;
+pub const getNodeType = Type.getNodeType;
+pub const getNodeTypeName = Type.getNodeTypeName;
+
+pub const isElementNode = Type.isElementNode;
+pub const isTextNode = Type.isTextNode;
+pub const isDocumentNode = Type.isDocumentNode;
+pub const isCommentNode = Type.isCommentNode;
 
 // CSS selectors - unified top-level access
 pub const findElements = css.findElements;
 
-// Attribute manipulation
-pub const getAttribute = attributes.getAttribute;
-pub const setAttribute = attributes.setAttribute;
-pub const hasAttribute = attributes.hasAttribute;
-pub const getAttributeValue = attributes.getAttributeValue;
+// Attributes
+pub const getNamedAttributeFromElement = attributes.getNamedAttributeFromElement;
+
+pub const elementHasNamedAttribute = attributes.elementHasNamedAttribute;
+
+pub const setNamedAttributeValueToElement =
+    attributes.setNamedAttributeValueToElement;
+
+pub const getNamedAttributeValueFromElement =
+    attributes.getNamedAttributeValueFromElement;
+
+pub const getAttributeName =
+    attributes.getAttributeName;
+
+pub const getAttributeValue =
+    attributes.getAttributeValue;
+
+pub const removeNamedAttributeFromElement =
+    attributes.removeNamedAttributeFromElement;
+
+pub const getElementFirstAttribute =
+    attributes.getElementFirstAttribute;
+
+pub const getElementNextAttribute =
+    attributes.getElementNextAttribute;
+
+pub const getElementClass =
+    attributes.getElementClass;
+
+pub const getElementId =
+    attributes.getElementId;
 
 // Utility functions
-pub const printDocumentStructure = lexbor.printDocumentStructure;
-pub const walkTree = lexbor.walkTree;
+pub const printDocumentStructure =
+    lxb.printDocumentStructure;
+pub const walkTree =
+    lxb.walkTree;
 
 //-------------------------------------------------------------------------------------
 // HIGH-LEVEL CONVENIENCE FUNCTIONS
@@ -105,7 +150,7 @@ pub fn parseAndGetText(
     const body = getBodyElement(doc) orelse return Err.NoBodyElement;
     const body_node = elementToNode(body);
 
-    return try getNodeTextContent(allocator, body_node);
+    return try getNodeTextContentOpts(allocator, body_node, .{});
 }
 
 /// Parse HTML, clean whitespace, and serialize
@@ -119,7 +164,11 @@ pub fn parseCleanAndSerialize(
     const body = getBodyElement(doc) orelse return Err.NoBodyElement;
     const body_node = elementToNode(body);
 
-    try removeWhitespaceOnlyTextNodes(allocator, body_node);
+    try removeWhitespaceOnlyTextNodes(
+        allocator,
+        body_node,
+        .{},
+    );
 
     return try serializeTree(allocator, body_node);
 }

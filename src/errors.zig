@@ -26,4 +26,7 @@ pub const LexborError = error{
     CssSelectorFindFailed,
     CssEngineNotInitialized,
     SetAttributeFailed,
+    CreateCommentFailed,
+    GetAttributeFailed,
+    SetAttributeValueFailed,
 };

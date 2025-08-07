@@ -1,10 +1,19 @@
 const std = @import("std");
 const zhtml = @import("zhtml.zig");
+const builtin = @import("builtin");
 
 const print = std.debug.print;
 
 pub fn main() !void {
-    const allocator = std.heap.c_allocator;
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator, const is_debug = switch (builtin.mode) {
+        .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+        .ReleaseFast, .ReleaseSmall => .{ std.heap.c_allocator, false },
+    };
+    defer if (is_debug) {
+        _ = debug_allocator.deinit();
+    };
+
     const fragment =
         \\<div>
         \\<p>First<span>
@@ -27,7 +36,7 @@ pub fn main() !void {
     // orelse LexborError.EmptyTextContent;
 
     const body_node = zhtml.elementToNode(body_element.?);
-    const text_content = try zhtml.getNodeTextContent(allocator, body_node);
+    const text_content = try zhtml.getTextContent(allocator, body_node, .{});
     defer allocator.free(text_content);
     print("{s}\n", .{text_content});
 

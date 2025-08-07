@@ -238,18 +238,18 @@ test "CSS selector basic functionality" {
     const class_elements = try findElements(allocator, doc, ".highlight");
     defer allocator.free(class_elements);
 
-    print("Found {} elements with class 'highlight'\n", .{class_elements.len});
+    // print("Found {} elements with class 'highlight'\n", .{class_elements.len});
     try testing.expect(class_elements.len == 2); // p and span
 
     // Test ID selector
     const id_elements = try findElements(allocator, doc, "#my-id");
     defer allocator.free(id_elements);
 
-    print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
+    // print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
     try testing.expect(id_elements.len == 1);
 
     const element_name = lxb.getNodeName(lxb.elementToNode(id_elements[0]));
-    print("Element with ID 'my-id' is: {s}\n", .{element_name});
+    // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
 }
 
@@ -304,7 +304,7 @@ test "challenging CSS selectors - lexbor example" {
     const first_results = try css_engine.find(body_node, first_selector);
     defer allocator.free(first_results);
 
-    print("First selector '{s}' found {d} elements\n", .{ first_selector, first_results.len });
+    // print("First selector '{s}' found {d} elements\n", .{ first_selector, first_results.len });
 
     // Should find:
     // 1. <p class='x z'> </p> (matches .x)
@@ -316,21 +316,21 @@ test "challenging CSS selectors - lexbor example" {
     const second_results = try css_engine.find(body_node, second_selector);
     defer allocator.free(second_results);
 
-    print("Second selector '{s}' found {d} elements\n", .{ second_selector, second_results.len });
+    // print("Second selector '{s}' found {d} elements\n", .{ second_selector, second_results.len });
 
     // Should find the <p> with only whitespace
     try testing.expect(second_results.len == 1);
 
     // Verify the results
-    for (first_results, 0..) |node, i| {
-        const node_name = lxb.getNodeName(node);
-        print("First result {d}: {s}\n", .{ i, node_name });
-    }
+    // for (first_results, 0..) |node, i| {
+    //     const node_name = lxb.getNodeName(node);
+    //     print("First result {d}: {s}\n", .{ i, node_name });
+    // }
 
-    for (second_results, 0..) |node, i| {
-        const node_name = lxb.getNodeName(node);
-        print("Second result {d}: {s}\n", .{ i, node_name });
-    }
+    // for (second_results, 0..) |node, i| {
+    //     const node_name = lxb.getNodeName(node);
+    //     print("Second result {d}: {s}\n", .{ i, node_name });
+    // }
 }
 
 test "CSS selector edge cases" {
@@ -373,7 +373,8 @@ test "CSS selector edge cases" {
     };
 
     for (test_cases, 0..) |test_case, i| {
-        std.debug.print("\nTest case {}: {s}\n", .{ i + 1, test_case.description });
+        _ = i;
+        // print("\nTest case {}: {s}\n", .{ i + 1, test_case.description });
 
         const doc = try lxb.parseFragmentAsDocument(test_case.html);
         defer lxb.destroyDocument(doc);
@@ -384,7 +385,7 @@ test "CSS selector edge cases" {
         const results = try css_engine.find(body_node, test_case.selector);
         defer allocator.free(results);
 
-        print("  Selector: '{s}' -> {d} results (expected {d})\n", .{ test_case.selector, results.len, test_case.expected_count });
+        // print("  Selector: '{s}' -> {d} results (expected {d})\n", .{ test_case.selector, results.len, test_case.expected_count });
 
         try testing.expectEqual(test_case.expected_count, results.len);
     }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const zhtml = @import("zhtml.zig");
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -51,7 +52,7 @@ pub const ChunkParser = struct {
         self.parsing_active = true;
     }
 
-    pub fn processChunk(self: *ChunkParser, html_chunk: lxb.SliceU8) !void {
+    pub fn processChunk(self: *ChunkParser, html_chunk: []const u8) !void {
         // print("chunk: {s}\n", .{html_chunk});
         if (!self.parsing_active) {
             return err.ChunkProcessFailed;
@@ -104,7 +105,7 @@ test "chunks1" {
     const doc = chunk_parser.getDocument();
     const body = lxb.getBodyElement(doc);
     const body_node = lxb.elementToNode(body.?);
-    const children = try lxb.getElementChildren(
+    const children = try lxb.getNodeChildrenElements(
         allocator,
         body_node,
     );
@@ -119,7 +120,7 @@ test "chunks1" {
         "P",
     );
 
-    const html = try lxb.serializeTree(
+    const html = try zhtml.serializeTree(
         allocator,
         body_node,
     );
@@ -157,7 +158,7 @@ test "chunk parsing comprehensive" {
     const body = lxb.getBodyElement(doc).?;
     const body_node = lxb.elementToNode(body);
 
-    const children = try lxb.getElementChildren(allocator, body_node);
+    const children = try lxb.getNodeChildrenElements(allocator, body_node);
     defer allocator.free(children);
 
     try testing.expect(children.len == 3); // h1, p, div
@@ -169,7 +170,7 @@ test "chunk parsing comprehensive" {
     try testing.expectEqualStrings(lxb.getElementName(children[2]), "SPAN");
 
     // Test serialization
-    const html = try lxb.serializeTree(allocator, body_node);
+    const html = try zhtml.serializeTree(allocator, body_node);
     defer allocator.free(html);
 
     // print("Serialized: {s}\n", .{html});
