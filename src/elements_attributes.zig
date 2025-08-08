@@ -203,7 +203,7 @@ test "named attribute operations" {
     const allocator = testing.allocator;
 
     const html = "<div class='container test' id='main-div' data-value='123' title='tooltip'>Content</div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -249,7 +249,7 @@ test "attribute modification" {
     const allocator = testing.allocator;
 
     const html = "<p>Original content</p>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -300,7 +300,7 @@ test "attribute iteration" {
     const allocator = testing.allocator;
 
     const html = "<div class='test' id='main' data-value='123' title='tooltip' hidden>Content</div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -337,7 +337,7 @@ test "special attribute getters" {
     const allocator = testing.allocator;
 
     const html = "<section class='main-section' id='content'>Section content</section>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -366,7 +366,7 @@ test "attribute edge cases" {
     const allocator = testing.allocator;
 
     const html = "<div data-empty='' title='  spaces  '>Content</div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -419,7 +419,7 @@ test "attribute error handling" {
     const allocator = testing.allocator;
 
     const html = "<div>Test</div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;

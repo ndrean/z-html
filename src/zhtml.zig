@@ -36,9 +36,9 @@ pub const ElementTag = lxb.ElementTag;
 
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
-pub const parseHtml = lxb.parseHtml;
-pub const parseFragmentAsDocument = lxb.parseFragmentAsDocument;
-pub const parseDocHtml = lxb.parseDocHtml;
+pub const parseHtmlString = lxb.parseHtmlString;
+// pub const parseFragmentAsDocument = lxb.parseFragmentAsDocument;
+// pub const parseDocHtml = lxb.parseDocHtml;
 pub const createElement = lxb.createElement;
 
 // DOM access and navigation

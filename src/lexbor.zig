@@ -37,41 +37,27 @@ pub const LXB_TAG_SCRIPT: u32 = 0x29;
 //=============================================================================
 
 extern "c" fn lxb_html_document_create() ?*HtmlDocument;
+
 /// Create a new HTML document
 pub fn createDocument() !*HtmlDocument {
     return lxb_html_document_create() orelse Err.DocCreateFailed;
 }
 
 extern "c" fn lxb_html_document_destroy(doc: *HtmlDocument) void;
+
 pub fn destroyDocument(doc: *HtmlDocument) void {
     lxb_html_document_destroy(doc);
 }
 
 extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len: usize) usize;
-/// Parse HTML into document
-pub fn parseDocHtml(doc: *HtmlDocument, html: []const u8) !void {
+
+/// Parse HTML string into document and creates a new document
+/// Returns a new document
+pub fn parseHtmlString(html: []const u8) !*HtmlDocument {
+    const doc = try createDocument();
     const status = lxb_html_document_parse(doc, html.ptr, html.len);
     if (status != zhtml.LXB_STATUS_OK) return Err.ParseFailed;
-}
-
-/// Parse HTML string into new document (convenience function)
-pub fn parseHtml(html: []const u8) !*HtmlDocument {
-    const doc = try createDocument();
-    parseDocHtml(doc, html) catch |err| {
-        destroyDocument(doc);
-        return err;
-    };
     return doc;
-}
-
-//=============================================================================
-// FRAGMENT PARSING
-//=============================================================================
-
-extern "c" fn lexbor_parse_fragment_as_document(html: [*]const u8, html_len: usize) ?*HtmlDocument;
-/// Parse HTML fragment as a standalone document
-pub fn parseFragmentAsDocument(fragment: []const u8) !*HtmlDocument {
-    return lexbor_parse_fragment_as_document(fragment.ptr, fragment.len) orelse Err.FragmentParseFailed;
 }
 
 // =============================================================================
@@ -93,9 +79,9 @@ pub const ElementTag = union(enum) {
     }
 };
 
-extern "c" fn lexbor_create_dom_element(doc: *HtmlDocument, tag_name: [*]const u8, tag_len: usize) ?*DomElement;
+extern "c" fn lxb_html_document_create_element_noi(doc: *HtmlDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
 
-// Create a DOM element in the document
+/// [lexbor] Create a DOM element in the document
 /// tags are in an enum
 pub fn createElement(
     doc: *HtmlDocument,
@@ -105,14 +91,15 @@ pub fn createElement(
         .tag => |enum_tag| enum_tag.toString(),
         .custom => |string_tag| string_tag,
     };
-    return lexbor_create_dom_element(
+    return lxb_html_document_create_element_noi(
         doc,
         tag_name.ptr,
         tag_name.len,
+        null,
     ) orelse Err.CreateElementFailed;
 }
 
-/// Create element with attributes in one call
+/// [lexbor] Create element with attributes in one call
 pub fn createElementWithAttrs(
     doc: *HtmlDocument,
     tag: zhtml.ElementTag,
@@ -185,11 +172,11 @@ pub fn getCommentTextContent(
 
 //=============================================================================
 
-extern "c" fn lexbor_get_body_element_wrapper(doc: *HtmlDocument) ?*DomElement;
+extern "c" fn lxb_html_document_body_element_noi(doc: *HtmlDocument) ?*DomElement;
 
 /// [lexbor] Get the document's body element
 pub fn getBodyElement(doc: *HtmlDocument) ?*DomElement {
-    return lexbor_get_body_element_wrapper(doc);
+    return lxb_html_document_body_element_noi(doc);
 }
 
 extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
@@ -305,7 +292,7 @@ test "void vs empty element detection" {
         \\</div>
     ;
 
-    const doc = try parseFragmentAsDocument(html);
+    const doc = try parseHtmlString(html);
     defer destroyDocument(doc);
 
     const body = getBodyElement(doc).?;
@@ -441,7 +428,7 @@ pub fn getNodeChildrenElements(
 
 test "navigation & getNodeName" {
     const fragment = "<div></div><p></p>";
-    const doc = try parseFragmentAsDocument(fragment);
+    const doc = try parseHtmlString(fragment);
     defer destroyDocument(doc);
     // printDocumentStructure(doc);
 
@@ -617,7 +604,7 @@ test "gets all text elements from Fragment" {
     const fragment = "<div><p>First<span>Second</span></p><p>Third</p></div><div><ul><li>Fourth</li><li>Fifth</li></ul></div>";
 
     const allocator = testing.allocator;
-    const doc = try parseFragmentAsDocument(fragment);
+    const doc = try parseHtmlString(fragment);
     defer destroyDocument(doc);
     const body_element = getBodyElement(doc);
     const body_node = elementToNode(body_element.?);
@@ -630,7 +617,7 @@ test "text content" {
     const allocator = testing.allocator;
 
     const html = "<p>Hello <strong>World</strong>!</p>";
-    const doc = try parseFragmentAsDocument(html);
+    const doc = try parseHtmlString(html);
     defer destroyDocument(doc);
 
     const body = getBodyElement(doc).?;
@@ -659,7 +646,7 @@ test "text content" {
 test "getNodeTextContent" {
     const frag = "<p>First<span>Second</span></p><p>Third</p>";
     const allocator = std.testing.allocator;
-    const doc = try parseFragmentAsDocument(frag);
+    const doc = try parseHtmlString(frag);
     defer destroyDocument(doc);
 
     const body_element = getBodyElement(doc);
@@ -725,7 +712,7 @@ test "getElementChildren from createElement" {
 test "getElementChildren from fragment" {
     const frag = "<div><span></span><p></p></div>";
     const allocator = std.testing.allocator;
-    const doc = try parseFragmentAsDocument(frag);
+    const doc = try parseHtmlString(frag);
     defer destroyDocument(doc);
 
     const body_element = getBodyElement(doc);
@@ -767,7 +754,7 @@ pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomEl
 //=============================================================================
 
 test "simple empty node" {
-    const doc = try parseFragmentAsDocument("<p></p>");
+    const doc = try parseHtmlString("<p></p>");
     defer destroyDocument(doc);
     const body = getBodyElement(doc);
     const body_node = elementToNode(body.?);
@@ -781,7 +768,7 @@ test "simple empty node" {
 
 test "node with whitespace like characters IS empty but contains characters" {
     // this is "lxb_empty" too
-    const doc = try parseFragmentAsDocument("<p> \n</p>");
+    const doc = try parseHtmlString("<p> \n</p>");
     defer destroyDocument(doc);
     const body = getBodyElement(doc);
     const body_node = elementToNode(body.?);
@@ -796,7 +783,7 @@ test "node with whitespace like characters IS empty but contains characters" {
 
 test "node with (non empty) inenr text is NOT empty" {
     // node with inner text node
-    const doc = try parseFragmentAsDocument("<p>Text</p>");
+    const doc = try parseHtmlString("<p>Text</p>");
     defer destroyDocument(doc);
     const body = getBodyElement(doc);
     const body_node = elementToNode(body.?);
@@ -805,7 +792,7 @@ test "node with (non empty) inenr text is NOT empty" {
 }
 
 test "node with an (empty text content) node is NOT empty" {
-    const doc2 = try parseFragmentAsDocument("<p><span><strong></strong></span></p>");
+    const doc2 = try parseHtmlString("<p><span><strong></strong></span></p>");
     defer destroyDocument(doc2);
     const body2 = getBodyElement(doc2);
     const body_node2 = elementToNode(body2.?);
@@ -872,7 +859,7 @@ pub fn isWhitespaceOnlyNode(node: *DomNode) bool {
 
 test "isWhitespaceOnlyNode" {
     // one way to create some nodes
-    const doc = try parseFragmentAsDocument("<p>   </p>");
+    const doc = try parseHtmlString("<p>   </p>");
     defer destroyDocument(doc);
     const body = getBodyElement(doc);
     const body_node = elementToNode(body.?);
@@ -914,7 +901,7 @@ pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
 }
 
 test "isWhitespaceOnlyElement" {
-    const doc = try parseFragmentAsDocument("<div>   </div>");
+    const doc = try parseHtmlString("<div>   </div>");
     defer destroyDocument(doc);
     const body = getBodyElement(doc);
     try testing.expect(
@@ -1246,7 +1233,7 @@ test "complete DOM cleaning with proper node removal" {
         \\</div>
     ;
 
-    const doc = try parseFragmentAsDocument(messy_html);
+    const doc = try parseHtmlString(messy_html);
     defer destroyDocument(doc);
 
     const body = getBodyElement(doc).?;

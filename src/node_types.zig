@@ -109,7 +109,7 @@ test "node type detection using getNodeName" {
         \\</div>
     ;
 
-    const doc = try zhtml.parseFragmentAsDocument(fragment);
+    const doc = try zhtml.parseHtmlString(fragment);
     defer zhtml.destroyDocument(doc);
     // zhtml.printDocumentStructure(doc);
 

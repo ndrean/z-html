@@ -187,7 +187,7 @@ test "set innerHTML" {
     const allocator = std.testing.allocator;
     const html = "<div><span>blah-blah-blah</div>";
     const inner = "<ul><li>1<li>2<li>3</ul>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     const body = zhtml.getBodyElement(doc);
     const div = zhtml.getNodeFirstChildNode(zhtml.elementToNode(body.?));
     const div_elt = zhtml.nodeToElement(div.?);
@@ -216,7 +216,7 @@ test "set innerHTML" {
 test "direct serialization" {
     const allocator = testing.allocator;
     const fragment = "<div><p>Hi <strong>there</strong></p></div>";
-    const doc = try zhtml.parseFragmentAsDocument(fragment);
+    const doc = try zhtml.parseHtmlString(fragment);
     defer zhtml.destroyDocument(doc);
 
     if (zhtml.getBodyElement(doc)) |body| {
@@ -235,7 +235,7 @@ test "direct serialization" {
 test "serialize Node vs tree functionality" {
     const allocator = testing.allocator;
     const fragment = "<div id=\"my-div\"><p class=\"bold\">Hello <strong>World</strong></p>   </div>";
-    const doc = try zhtml.parseFragmentAsDocument(fragment);
+    const doc = try zhtml.parseHtmlString(fragment);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc) orelse {
@@ -290,7 +290,7 @@ test "serialize Node vs tree functionality" {
 //         \\</div>
 //     ;
 
-//     const doc = try zhtml.parseFragmentAsDocument(fragment);
+//     const doc = try zhtml.parseHtmlString(fragment);
 //     defer zhtml.destroyDocument(doc);
 //     zhtml.printDocumentStructure(doc);
 
@@ -355,7 +355,7 @@ test "behaviour of serializeNode" {
     };
 
     for (test_cases) |case| {
-        const doc = try zhtml.parseFragmentAsDocument(case.html);
+        const doc = try zhtml.parseHtmlString(case.html);
         defer zhtml.destroyDocument(doc);
 
         const body = zhtml.getBodyElement(doc).?;
@@ -397,7 +397,7 @@ test "serializeNode vs serializeTree comparison" {
 
     const fragment = "<article><header>Title</header><section>Content <span>inside</span></section></article>";
 
-    const doc = try zhtml.parseFragmentAsDocument(fragment);
+    const doc = try zhtml.parseHtmlString(fragment);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;

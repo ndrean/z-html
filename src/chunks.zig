@@ -8,11 +8,11 @@ const testing = std.testing;
 const print = std.debug.print;
 
 extern "c" fn lxb_html_parser_create() *zhtml.HtmlParser;
-extern "c" fn lxb_html_parser_init(*zhtml.HtmlParser) zhtml.lxb_status_t;
+extern "c" fn lxb_html_parser_init(*zhtml.HtmlParser) usize;
 extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) void;
-extern "c" fn lxb_html_document_parse_chunk_begin(document: *zhtml.HtmlDocument) zhtml.lxb_status_t;
-extern "c" fn lxb_html_document_parse_chunk_end(document: *zhtml.HtmlDocument) zhtml.lxb_status_t;
-extern "c" fn lxb_html_document_parse_chunk(document: *zhtml.HtmlDocument, chunk: [*:0]const u8, len: usize) zhtml.lxb_status_t;
+extern "c" fn lxb_html_document_parse_chunk_begin(document: *zhtml.HtmlDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk_end(document: *zhtml.HtmlDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk(document: *zhtml.HtmlDocument, chunk: [*:0]const u8, len: usize) usize;
 
 pub const ChunkParser = struct {
     doc: *zhtml.HtmlDocument,

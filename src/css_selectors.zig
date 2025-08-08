@@ -213,7 +213,7 @@ test "CSS selector basic functionality" {
 
     // Create HTML document
     const html = "<div><p class='highlight'>Hello</p><p id='my-id'>World</p><span class='highlight'>Test</span></div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     // Test class selector
@@ -239,7 +239,7 @@ test "CSS selector engine reuse" {
     const allocator = testing.allocator;
 
     const html = "<article><h1>Title</h1><p>Para 1</p><p>Para 2</p><footer>End</footer></article>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -272,7 +272,7 @@ test "challenging CSS selectors - lexbor example" {
 
     // Exact HTML from lexbor example
     const html = "<div><p class='x z'> </p><p id='y'>abc</p></div>";
-    const doc = try zhtml.parseFragmentAsDocument(html);
+    const doc = try zhtml.parseHtmlString(html);
     defer zhtml.destroyDocument(doc);
 
     const body = zhtml.getBodyElement(doc).?;
@@ -358,7 +358,7 @@ test "CSS selector edge cases" {
         _ = i;
         // print("\nTest case {}: {s}\n", .{ i + 1, test_case.description });
 
-        const doc = try zhtml.parseFragmentAsDocument(test_case.html);
+        const doc = try zhtml.parseHtmlString(test_case.html);
         defer zhtml.destroyDocument(doc);
 
         const body = zhtml.getBodyElement(doc).?;
