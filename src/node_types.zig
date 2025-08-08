@@ -1,10 +1,10 @@
 const std = @import("std");
+const zhtml = @import("zhtml.zig");
+
 const testing = std.testing;
 const print = std.debug.print;
 
-const zhtml = @import("zhtml.zig");
-
-pub const NodeType = enum(u32) {
+pub const NodeType = enum(u16) {
     element = 1,
     text = 3,
     comment = 8,
@@ -23,7 +23,7 @@ pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
-/// Get node type by parsing the node name
+/// [node_types] Get node type by parsing the node name
 pub fn getNodeType(node: *zhtml.DomNode) NodeType {
     const node_name = zhtml.getNodeName(node);
 
@@ -42,7 +42,7 @@ pub fn getNodeType(node: *zhtml.DomNode) NodeType {
     }
 }
 
-/// human-readable type name
+/// [node_types] human-readable type name
 pub fn getNodeTypeName(node: *zhtml.DomNode) []const u8 {
     return switch (getNodeType(node)) {
         .element => "element",
@@ -53,28 +53,33 @@ pub fn getNodeTypeName(node: *zhtml.DomNode) []const u8 {
     };
 }
 
-pub fn isElementNode(node: *zhtml.DomNode) bool {
+/// [node_types] Check if node is of a specific type
+pub fn isNodeElementType(node: *zhtml.DomNode) bool {
     return getNodeType(node) == .element;
 }
 
-pub fn isTextNode(node: *zhtml.DomNode) bool {
+/// [node_types] Check if node is a text node
+pub fn isNodeTextType(node: *zhtml.DomNode) bool {
     return getNodeType(node) == .text;
 }
 
-pub fn isCommentNode(node: *zhtml.DomNode) bool {
+/// [node_types] Check if node is a comment node
+pub fn isNodeCommentType(node: *zhtml.DomNode) bool {
     return getNodeType(node) == .comment;
 }
 
-pub fn isDocumentNode(node: *zhtml.DomNode) bool {
+/// [node_types] Check if node is a document node
+pub fn isNodeDocumentType(node: *zhtml.DomNode) bool {
     return getNodeType(node) == .document;
 }
 
+/// [node_types] Debug:  Walk the DOM tree and print node types with indentation:
 pub fn walkTreeWithTypes(node: *zhtml.DomNode, depth: u32) void {
     var child = zhtml.getNodeFirstChildNode(node);
     while (child != null) {
-        const name = zhtml.getNodeName(child.?);
+        // const name = zhtml.getNodeName(child.?);
         const node_type = zhtml.getNodeType(child.?);
-        const type_name = zhtml.getNodeTypeName(child.?);
+        // const type_name = zhtml.getNodeTypeName(child.?);
 
         // Create indentation
         var i: u32 = 0;
@@ -82,7 +87,7 @@ pub fn walkTreeWithTypes(node: *zhtml.DomNode, depth: u32) void {
             print("  ", .{});
         }
 
-        print("{s} ({s})\n", .{ name, type_name });
+        // print("{s} ({s})\n", .{ name, type_name });
 
         // Only recurse into elements
         if (node_type == .element) {
@@ -106,27 +111,27 @@ test "node type detection using getNodeName" {
 
     const doc = try zhtml.parseFragmentAsDocument(fragment);
     defer zhtml.destroyDocument(doc);
-    zhtml.printDocumentStructure(doc);
+    // zhtml.printDocumentStructure(doc);
 
-    std.debug.print("\n--- NODE TYPE ANALYSIS ---\n", .{});
+    // print("\n--- NODE TYPE ANALYSIS ---\n", .{});
 
     const body = zhtml.getBodyElement(doc).?;
     const body_node = zhtml.elementToNode(body);
 
     var child = zhtml.getNodeFirstChildNode(body_node);
     while (child != null) {
-        const node_name = zhtml.getNodeName(child.?);
-        const node_type = zhtml.getNodeType(child.?);
-        const type_name = zhtml.getNodeTypeName(child.?);
+        // const node_name = zhtml.getNodeName(child.?);
+        // const node_type = zhtml.getNodeType(child.?);
+        // const type_name = zhtml.getNodeTypeName(child.?);
 
-        print("Node: '{s}' -> Type: {d} ({s})\n", .{ node_name, @intFromEnum(node_type), type_name });
+        // print("Node: '{s}' -> Type: {d} ({s})\n", .{ node_name, @intFromEnum(node_type), type_name });
 
         // // Test helper functions
-        print("  isElement: {}, isText: {}, isComment: {}\n", .{ zhtml.isElementNode(child.?), zhtml.isTextNode(child.?), zhtml.isCommentNode(child.?) });
+        // print("  isElement: {}, isText: {}, isComment: {}\n", .{ isNodeElementType(child.?), isNodeTextType(child.?), isNodeCommentType(child.?) });
 
         child = zhtml.getNodeFirstChildNode(child.?);
     }
 
-    print("\n-- TREE WITH TYPES --\n", .{});
-    walkTreeWithTypes(body_node, 0);
+    // print("\n-- TREE WITH TYPES --\n", .{});
+    // walkTreeWithTypes(body_node, 0);
 }

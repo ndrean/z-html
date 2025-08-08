@@ -29,4 +29,5 @@ pub const LexborError = error{
     CreateCommentFailed,
     GetAttributeFailed,
     SetAttributeValueFailed,
+    NotTextNode,
 };

@@ -1,11 +1,12 @@
 // compile time safety check
 const std = @import("std");
+const zhtml = @import("zhtml.zig");
+
 const testing = std.testing;
 const print = std.debug.print;
 
-const zhtml = @import("zhtml.zig");
-
 pub const HtmlTag = enum {
+    // Common HTML5 elements
     div,
     p,
     span,

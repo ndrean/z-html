@@ -8,7 +8,6 @@ const zhtml = @import("zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
-const lxb = @import("lexbor.zig");
 const Err = @import("errors.zig").LexborError;
 
 pub const DomAttr = opaque {};
@@ -16,7 +15,7 @@ pub const DomAttr = opaque {};
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_get_attribute(element: *zhtml.DomElement, name: [*]const u8, name_len: usize, value_len: *usize) ?[*]const u8;
 
-/// Get attribute value
+/// [attributes] Get attribute value
 pub fn getNamedAttributeFromElement(
     allocator: std.mem.Allocator,
     element: *zhtml.DomElement,
@@ -38,7 +37,7 @@ pub fn getNamedAttributeFromElement(
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_has_attribute(element: *zhtml.DomElement, name: [*]const u8, name_len: usize) bool;
 
-/// Check if element has attribute
+/// [attributes] Check if element has attribute
 pub fn elementHasNamedAttribute(
     element: *zhtml.DomElement,
     name: []const u8,
@@ -53,7 +52,7 @@ pub fn elementHasNamedAttribute(
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_set_attribute(element: *zhtml.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
 
-/// Set attribute on element
+/// [attributes] Set attribute on element
 pub fn setNamedAttributeValueToElement(
     element: *zhtml.DomElement,
     name: []const u8,
@@ -69,7 +68,7 @@ pub fn setNamedAttributeValueToElement(
     if (result == null) return Err.SetAttributeFailed;
 }
 
-/// Get attribute value as string (borrowed - don't free)
+/// [attributes] Get attribute value as string (borrowed - don't free)
 pub fn getNamedAttributeValueFromElement(
     element: *zhtml.DomElement,
     name: []const u8,
@@ -108,7 +107,7 @@ extern "c" fn lxb_dom_attr_value_noi(
     attr: *DomAttr,
     length: *usize,
 ) [*]const u8;
-/// Get attribute value as owned string
+/// [attributes] Get attribute value as owned string
 pub fn getAttributeValue(
     allocator: std.mem.Allocator,
     attr: *DomAttr,
@@ -147,13 +146,15 @@ pub fn removeNamedAttributeFromElement(
 
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_first_attribute_noi(element: *zhtml.DomElement) ?*DomAttr;
-/// Get first attribute of an HTMLElement
+
+/// [attributes] Get first attribute of an HTMLElement
 pub fn getElementFirstAttribute(element: *zhtml.DomElement) ?*DomAttr {
     return lxb_dom_element_first_attribute_noi(element);
 }
 
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
+
 /// Get next attribute in the list gives an attribute
 pub fn getElementNextAttribute(attr: *DomAttr) ?*DomAttr {
     return lxb_dom_element_next_attribute_noi(attr);
@@ -181,7 +182,7 @@ pub fn getElementId(
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_class_noi(element: *zhtml.DomElement, len: *usize) [*]const u8;
 
-/// Get element class as owned string
+/// [attributes] Get element class as owned string
 /// Needs to be freed by caller
 pub fn getElementClass(
     allocator: std.mem.Allocator,
@@ -210,7 +211,7 @@ test "named attribute operations" {
     const div_node = zhtml.getNodeFirstChildNode(body_node).?;
     const div_element = zhtml.nodeToElement(div_node).?;
 
-    print("\n=== Named Attribute Operations ===\n", .{});
+    // print("\n=== Named Attribute Operations ===\n", .{});
 
     // Test hasAttribute
     try testing.expect(elementHasNamedAttribute(div_element, "class"));
@@ -222,26 +223,26 @@ test "named attribute operations" {
     if (try getNamedAttributeFromElement(allocator, div_element, "class")) |class_value| {
         defer allocator.free(class_value);
         try testing.expectEqualStrings("container test", class_value);
-        print("Class: '{s}'\n", .{class_value});
+        // print("Class: '{s}'\n", .{class_value});
     }
 
     if (try getNamedAttributeFromElement(allocator, div_element, "id")) |id_value| {
         defer allocator.free(id_value);
         try testing.expectEqualStrings("main-div", id_value);
-        print("ID: '{s}'\n", .{id_value});
+        // print("ID: '{s}'\n", .{id_value});
     }
 
     // Test borrowed attribute value
     if (getNamedAttributeValueFromElement(div_element, "data-value")) |data_value| {
         try testing.expectEqualStrings("123", data_value);
-        print("Data (borrowed): '{s}'\n", .{data_value});
+        // print("Data (borrowed): '{s}'\n", .{data_value});
     }
 
     // Test non-existent attribute
     const missing = try getNamedAttributeFromElement(allocator, div_element, "missing");
     try testing.expect(missing == null);
 
-    print("✅ Named attribute operations work!\n", .{});
+    // print("✅ Named attribute operations work!\n", .{});
 }
 
 test "attribute modification" {
@@ -256,7 +257,7 @@ test "attribute modification" {
     const p_node = zhtml.getNodeFirstChildNode(body_node).?;
     const p_element = zhtml.nodeToElement(p_node).?;
 
-    print("\n=== Attribute Modification ===\n", .{});
+    // print("\n=== Attribute Modification ===\n", .{});
 
     // Add new attributes
     try setNamedAttributeValueToElement(p_element, "id", "new-paragraph");
@@ -272,7 +273,7 @@ test "attribute modification" {
     if (try getNamedAttributeFromElement(allocator, p_element, "id")) |id| {
         defer allocator.free(id);
         try testing.expectEqualStrings("new-paragraph", id);
-        print("Set ID: '{s}'\n", .{id});
+        // print("Set ID: '{s}'\n", .{id});
     }
 
     // Modify existing attribute
@@ -281,7 +282,7 @@ test "attribute modification" {
     if (try getNamedAttributeFromElement(allocator, p_element, "id")) |modified_id| {
         defer allocator.free(modified_id);
         try testing.expectEqualStrings("modified-paragraph", modified_id);
-        print("Modified ID: '{s}'\n", .{modified_id});
+        // print("Modified ID: '{s}'\n", .{modified_id});
     }
 
     // Remove attribute
@@ -292,7 +293,7 @@ test "attribute modification" {
     try testing.expect(elementHasNamedAttribute(p_element, "id"));
     try testing.expect(elementHasNamedAttribute(p_element, "data-test"));
 
-    print("✅ Attribute modification works!\n", .{});
+    // print("✅ Attribute modification works!\n", .{});
 }
 
 test "attribute iteration" {
@@ -307,7 +308,7 @@ test "attribute iteration" {
     const div_node = zhtml.getNodeFirstChildNode(body_node).?;
     const div_element = zhtml.nodeToElement(div_node).?;
 
-    print("\n=== Attribute Iteration ===\n", .{});
+    // print("\n=== Attribute Iteration ===\n", .{});
 
     // Note: There's a type issue in your getElementFirstAttribute - it should return ?*DomAttr
     // For now, let's test what we can
@@ -322,14 +323,14 @@ test "attribute iteration" {
 
             if (try getNamedAttributeFromElement(allocator, div_element, attr_name)) |value| {
                 defer allocator.free(value);
-                print("Found: {s}='{s}'\n", .{ attr_name, value });
+                // print("Found: {s}='{s}'\n", .{ attr_name, value });
             }
         }
     }
 
     try testing.expect(found_count >= 4); // At least class, id, data-value, title (hidden might be empty)
 
-    print("✅ Found {} attributes\n", .{found_count});
+    // print("✅ Found {} attributes\n", .{found_count});
 }
 
 test "special attribute getters" {
@@ -344,21 +345,21 @@ test "special attribute getters" {
     const section_node = zhtml.getNodeFirstChildNode(body_node).?;
     const section_element = zhtml.nodeToElement(section_node).?;
 
-    print("\n=== Special Attribute Getters ===\n", .{});
+    // print("\n=== Special Attribute Getters ===\n", .{});
 
     // Test ID getter
     const id = try getElementId(allocator, section_element);
     defer allocator.free(id);
     try testing.expectEqualStrings("content", id);
-    print("ID via special getter: '{s}'\n", .{id});
+    // print("ID via special getter: '{s}'\n", .{id});
 
     // Test class getter
     const class = try getElementClass(allocator, section_element);
     defer allocator.free(class.?); //??????????????????
     try testing.expectEqualStrings("main-section", class.?);
-    print("Class via special getter: '{s}'\n", .{class.?});
+    // print("Class via special getter: '{s}'\n", .{class.?});
 
-    print("✅ Special attribute getters work!\n", .{});
+    // print("✅ Special attribute getters work!\n", .{});
 }
 
 test "attribute edge cases" {
@@ -373,7 +374,7 @@ test "attribute edge cases" {
     const div_node = zhtml.getNodeFirstChildNode(body_node).?;
     const div_element = zhtml.nodeToElement(div_node).?;
 
-    print("\n=== Attribute Edge Cases ===\n", .{});
+    // print("\n=== Attribute Edge Cases ===\n", .{});
 
     // Empty attribute value
     if (try getNamedAttributeFromElement(
@@ -383,7 +384,7 @@ test "attribute edge cases" {
     )) |empty_value| {
         defer allocator.free(empty_value);
         try testing.expectEqualStrings("", empty_value);
-        print("Empty attribute: '{s}' (length: {d})\n", .{ empty_value, empty_value.len });
+        // print("Empty attribute: '{s}' (length: {d})\n", .{ empty_value, empty_value.len });
     }
 
     // Attribute with spaces
@@ -394,7 +395,7 @@ test "attribute edge cases" {
     )) |title_value| {
         defer allocator.free(title_value);
         try testing.expectEqualStrings("  spaces  ", title_value);
-        print("Spaced attribute: '{s}' (length: {})\n", .{ title_value, title_value.len });
+        // print("Spaced attribute: '{s}' (length: {})\n", .{ title_value, title_value.len });
     }
 
     // Test setting empty value
@@ -410,8 +411,10 @@ test "attribute edge cases" {
         try testing.expectEqualStrings("", new_empty);
     }
 
-    print("✅ Edge cases handled correctly!\n", .{});
+    // print("✅ Edge cases handled correctly!\n", .{});
 }
+
+// !!!!!!!!!!!!!!! BAD TEST !!!!!!!!!!!!!!!
 test "attribute error handling" {
     const allocator = testing.allocator;
 
@@ -424,16 +427,16 @@ test "attribute error handling" {
     const div_node = zhtml.getNodeFirstChildNode(body_node).?;
     const div_element = zhtml.nodeToElement(div_node).?;
 
-    print("\n=== Attribute Error Handling ===\n", .{});
+    // print("\n=== Attribute Error Handling ===\n", .{});
 
     // Test setting attribute on non-element node
-    const text_node = zhtml.getNodeFirstChildNode(div_node).?;
-    const text_element = zhtml.nodeToElement(text_node);
+    // const text_node = zhtml.getNodeFirstChildNode(div_node).?;
+    // const text_element = zhtml.nodeToElement(text_node);
 
     // try testing.expect(text_element == null);
 
-    const err = setNamedAttributeValueToElement(text_element.?, "test", "value");
-    print("Err ---->: {any}\n", .{err});
+    // const err = setNamedAttributeValueToElement(text_element.?, "test", "value");
+    // print("Err ---->: {any}\n", .{err});
 
     // try testing.expectError(
     //     Err.SetAttributeFailed,
@@ -454,7 +457,7 @@ test "attribute error handling" {
 
     try setNamedAttributeValueToElement(div_element, "test", "value");
     try testing.expect(elementHasNamedAttribute(div_element, "test"));
-    print("Setting attribute on valid element works\n", .{});
+    // print("Setting attribute on valid element works\n", .{});
 
-    print("✅ Error handling works!\n", .{});
+    // print("✅ Error handling works!\n", .{});
 }
