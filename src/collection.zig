@@ -150,6 +150,65 @@ pub fn iterator(collection: *z.DomCollection) CollectionIterator {
 // ELEMENT SEARCH FUNCTIONS
 //=============================================================================
 
+/// [collection] Find all elements with a specific tag name (like JavaScript's getElementsByTagName).
+///
+/// This is implemented using DOM traversal since the native lexbor function may not be available.
+/// Returns a DomCollection containing all elements with the specified tag name.
+/// Examples: "div", "p", "span", "img", etc.
+///
+/// Caller is responsible for freeing the collection with `destroyCollection`
+pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.DomCollection {
+    // Start from the body element but also check the body itself
+    const root = try z.getDocumentBodyElement(doc);
+    const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
+
+    if (collectElementsByTagName(root, collection, tag_name)) {
+        return collection;
+    } else {
+        destroyCollection(collection);
+        return null;
+    }
+}
+
+/// [collection] Helper function to recursively collect elements with a specific tag name
+fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection, tag_name: []const u8) bool {
+    // Check if current element matches the tag name
+    const element_tag_name = z.getElementName(element);
+    if (std.mem.eql(u8, element_tag_name, tag_name)) {
+        const status = lxb_dom_collection_append_noi(collection, element);
+        if (status != 0) return false;
+    }
+
+    // Traverse children
+    const element_node = z.elementToNode(element);
+    var child_node = z.getNodeFirstChildNode(element_node);
+
+    while (child_node) |node| {
+        if (z.nodeToElement(node)) |child_element| {
+            if (!collectElementsByTagName(child_element, collection, tag_name)) {
+                return false;
+            }
+        }
+        child_node = z.getNodeNextSiblingNode(node);
+    }
+
+    return true;
+}
+
+/// [collection] Find all elements with a specific name attribute (like JavaScript's getElementsByName).
+///
+/// This is commonly used for form elements that share the same name.
+/// This is implemented as a wrapper around getElementsByAttribute for the name attribute.
+///
+/// Caller is responsible for freeing the collection with `destroyCollection`
+pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollection {
+    return getElementsByAttribute(
+        doc,
+        .{ .name = "name", .value = name },
+        false, // case sensitive
+    );
+}
+
 /// [collection] Find element by its ID attribute (like JavaScript's getElementById).
 ///
 /// Returns the first element with the matching ID, or null if not found.
@@ -238,6 +297,7 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 ///
 /// This searches for any element that has the __named attribute__.
 ///
+///
 /// It returns a DomCollection
 ///
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
@@ -269,8 +329,10 @@ pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, i
 
 /// [collection] Helper function to recursively collect elements with a specific attribute _name_
 fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollection, attr_name: []const u8) bool {
-    // Check if current element has the attribute
-    if (z.elementHasNamedAttribute(element, attr_name)) {
+    // Early return if element has no attributes at all - performance optimization
+    if (!z.elementHasAnyAttribute(element)) {
+        // Still need to traverse children, so continue below
+    } else if (z.elementHasNamedAttribute(element, attr_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
         if (status != 0) return false;
     }
@@ -821,6 +883,94 @@ test "performance comparison: getElementById vs getElementsByAttribute" {
     try testing.expect(element1 == element2);
 }
 
+test "elementHasAnyAttribute performance demonstration" {
+    const html =
+        \\<div>
+        \\  <p>No attributes</p>
+        \\  <p>No attributes</p>
+        \\  <p>No attributes</p>
+        \\  <p id="with-attr">Has attribute</p>
+        \\  <p>No attributes</p>
+        \\  <p>No attributes</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.getDocumentBodyElement(doc);
+    const first_child = z.getNodeFirstChildNode(z.elementToNode(body)) orelse return error.NoChild;
+    const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
+
+    // Demonstrate that elementHasAnyAttribute correctly identifies elements with/without attributes
+    var child_node = z.getNodeFirstChildNode(z.elementToNode(div_element));
+    var elements_with_attrs: usize = 0;
+    var elements_without_attrs: usize = 0;
+
+    while (child_node) |node| {
+        if (z.nodeToElement(node)) |element| {
+            if (z.elementHasAnyAttribute(element)) {
+                elements_with_attrs += 1;
+            } else {
+                elements_without_attrs += 1;
+            }
+        }
+        child_node = z.getNodeNextSiblingNode(node);
+    }
+
+    try testing.expectEqual(@as(usize, 1), elements_with_attrs);
+    try testing.expectEqual(@as(usize, 5), elements_without_attrs);
+
+    // Test that getElementsByAttributeName correctly finds only the element with the id attribute
+    const id_elements = try getElementsByAttributeName(doc, "id", 5) orelse return error.CollectionFailed;
+    defer destroyCollection(id_elements);
+
+    try testing.expectEqual(@as(usize, 1), getCollectionLength(id_elements));
+
+    const found_element = getCollectionElementAt(id_elements, 0).?;
+    try testing.expect(z.elementHasNamedAttribute(found_element, "id"));
+
+    const id_value = z.elementGetNamedAttributeValue(found_element, "id").?;
+    try testing.expect(std.mem.eql(u8, id_value, "with-attr"));
+}
+
+test "getElementsByAttributeName performance optimization" {
+    const html =
+        \\<html>
+        \\  <body>
+        \\    <div id="container" class="main">
+        \\      <p id="para1" class="text">Paragraph with attributes</p>
+        \\      <p>Paragraph without any attributes</p>
+        \\      <p>Another paragraph without attributes</p>
+        \\      <p>Yet another paragraph without attributes</p>
+        \\      <span id="span1">Span with ID</span>
+        \\      <span>Span without attributes</span>
+        \\      <span>Another span without attributes</span>
+        \\      <span>Yet another span without attributes</span>
+        \\    </div>
+        \\  </body>
+        \\</html>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    // Test that getElementsByAttributeName still works correctly with the optimization
+    const id_elements = try getElementsByAttributeName(doc, "id", 10) orelse return error.CollectionFailed;
+    defer destroyCollection(id_elements);
+
+    const count = getCollectionLength(id_elements);
+    try testing.expect(count == 3); // container, para1, span1
+
+    // Verify that elements without any attributes were correctly skipped
+    // but elements with attributes were still processed correctly
+    for (0..count) |i| {
+        const element = getCollectionElementAt(id_elements, i).?;
+        try testing.expect(z.elementHasNamedAttribute(element, "id"));
+        try testing.expect(z.elementHasAnyAttribute(element)); // Should have at least some attribute
+    }
+}
+
 test "getElementsByAttributeName functionality" {
     const html =
         \\<html>
@@ -919,5 +1069,118 @@ test "getElementsByAttributeName functionality" {
         // all_with_id should have more elements than specific_id
         try testing.expect(getCollectionLength(all_with_id) > getCollectionLength(specific_id));
         try testing.expectEqual(@as(usize, 1), getCollectionLength(specific_id));
+    }
+}
+
+test "getElementsByTagName functionality" {
+    const html =
+        \\<html>
+        \\  <body>
+        \\    <div id="container">
+        \\      <p>First paragraph</p>
+        \\      <p>Second paragraph</p>
+        \\      <span>A span</span>
+        \\      <div>
+        \\        <p>Nested paragraph</p>
+        \\        <span>Nested span</span>
+        \\      </div>
+        \\    </div>
+        \\  </body>
+        \\</html>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    // Test 1: Find all paragraphs (note: Lexbor returns uppercase tag names)
+    {
+        const paragraphs = try getElementsByTagName(doc, "P") orelse return error.CollectionFailed;
+        defer destroyCollection(paragraphs);
+
+        try testing.expectEqual(@as(usize, 3), getCollectionLength(paragraphs));
+
+        // Verify all found elements are indeed paragraphs
+        for (0..getCollectionLength(paragraphs)) |i| {
+            const element = getCollectionElementAt(paragraphs, i).?;
+            const tag_name = z.getElementName(element);
+            try testing.expect(std.mem.eql(u8, tag_name, "P"));
+        }
+    }
+
+    // Test 2: Find all divs
+    {
+        const divs = try getElementsByTagName(doc, "DIV") orelse return error.CollectionFailed;
+        defer destroyCollection(divs);
+
+        try testing.expectEqual(@as(usize, 2), getCollectionLength(divs)); // container + nested div
+    }
+
+    // Test 3: Find all spans
+    {
+        const spans = try getElementsByTagName(doc, "SPAN") orelse return error.CollectionFailed;
+        defer destroyCollection(spans);
+
+        try testing.expectEqual(@as(usize, 2), getCollectionLength(spans));
+    }
+
+    // Test 4: Find non-existent tag
+    {
+        const articles = try getElementsByTagName(doc, "ARTICLE") orelse return error.CollectionFailed;
+        defer destroyCollection(articles);
+
+        try testing.expectEqual(@as(usize, 0), getCollectionLength(articles));
+    }
+}
+
+test "getElementsByName functionality" {
+    const html =
+        \\<html>
+        \\  <body>
+        \\    <form>
+        \\      <input type="text" name="username" value="john">
+        \\      <input type="password" name="password" value="secret">
+        \\      <input type="radio" name="gender" value="male" checked>
+        \\      <input type="radio" name="gender" value="female">
+        \\      <select name="country">
+        \\        <option value="us">USA</option>
+        \\        <option value="uk">UK</option>
+        \\      </select>
+        \\    </form>
+        \\  </body>
+        \\</html>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    // Test 1: Find elements with name="gender" (radio buttons)
+    {
+        const gender_inputs = try getElementsByName(doc, "gender") orelse return error.CollectionFailed;
+        defer destroyCollection(gender_inputs);
+
+        try testing.expectEqual(@as(usize, 2), getCollectionLength(gender_inputs));
+
+        // Verify all found elements have the correct name attribute
+        for (0..getCollectionLength(gender_inputs)) |i| {
+            const element = getCollectionElementAt(gender_inputs, i).?;
+            const name_value = z.elementGetNamedAttributeValue(element, "name").?;
+            try testing.expect(std.mem.eql(u8, name_value, "gender"));
+        }
+    }
+
+    // Test 2: Find unique name
+    {
+        const username_input = try getElementsByName(doc, "username") orelse return error.CollectionFailed;
+        defer destroyCollection(username_input);
+
+        try testing.expectEqual(@as(usize, 1), getCollectionLength(username_input));
+    }
+
+    // Test 3: Find non-existent name
+    {
+        const nonexistent = try getElementsByName(doc, "nonexistent") orelse return error.CollectionFailed;
+        defer destroyCollection(nonexistent);
+
+        try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
     }
 }

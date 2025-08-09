@@ -3,6 +3,7 @@ pub const LexborError = error{
     DocCreateFailed,
     ParseFailed,
     CreateElementFailed,
+    CreateTextNodeFailed,
     FragmentParseFailed,
     InsertChildFailed,
     CollectionFailed,

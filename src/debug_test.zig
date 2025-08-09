@@ -1,5 +1,5 @@
 const std = @import("std");
-const zhtml = @import("src/zhtml.zig");
+const zhtml = @import("zhtml.zig");
 
 pub fn main() !void {
     const html =

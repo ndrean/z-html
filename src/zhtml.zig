@@ -44,7 +44,7 @@ pub const getDocumentBodyElement = lxb.getDocumentBodyElement;
 pub const getDocumentBodyNode = lxb.getDocumentBodyNode;
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
-pub const objectToNode = lxb.objectToNode;
+pub const commentToNode = lxb.commentToNode;
 pub const getNodeFirstChildNode = lxb.getNodeFirstChildNode;
 pub const getNodeNextSiblingNode = lxb.getNodeNextSiblingNode;
 pub const getNodeName = lxb.getNodeName;
@@ -54,6 +54,15 @@ pub const removeNode = lxb.removeNode;
 pub const createComment = lxb.createComment;
 pub const destroyComment = lxb.destroyComment;
 pub const getCommentTextContent = lxb.getCommentTextContent;
+
+// DOM Creation and manipulation
+pub const createTextNode = lxb.createTextNode;
+pub const createDocumentFragment = lxb.createDocumentFragment;
+pub const insertNodeBefore = lxb.insertNodeBefore;
+pub const insertNodeAfter = lxb.insertNodeAfter;
+pub const appendChild = lxb.appendChild;
+pub const appendChildren = lxb.appendChildren;
+pub const appendFragment = lxb.appendFragment;
 
 pub const getNodeChildrenElements = lxb.getNodeChildrenElements;
 
@@ -78,6 +87,8 @@ pub const getElementById = collection.getElementById;
 pub const getElementsByAttribute = collection.getElementsByAttribute;
 pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
+pub const getElementsByTagName = collection.getElementsByTagName;
+pub const getElementsByName = collection.getElementsByName;
 
 // DOM manipulation
 pub const destroyNode = lxb.destroyNode;
@@ -120,6 +131,8 @@ pub const walkTreeWithTypes = Type.walkTreeWithTypes;
 pub const findElements = css.findElements;
 
 // Attributes
+
+pub const elementHasAnyAttribute = attributes.elementHasAnyAttribute;
 pub const elementGetNamedAttribute = attributes.elementGetNamedAttribute;
 
 pub const elementHasNamedAttribute = attributes.elementHasNamedAttribute;

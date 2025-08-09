@@ -113,12 +113,22 @@ pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     return result;
 }
 
+extern "c" fn lxb_dom_element_has_attributes(element: *z.DomElement) bool;
+
+pub fn elementHasAnyAttribute(element: *z.DomElement) bool {
+    return lxb_dom_element_has_attributes(element);
+}
+
 /// [attributes] Collect all attributes from an element.
+///
+/// This function already includes an optimization: it uses getElementFirstAttribute()
+/// which returns null for elements without any attributes, providing an early return.
+/// This is equivalent to checking elementHasAnyAttribute() first.
 ///
 /// Caller needs to free the slice
 pub fn elementCollectAttributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]AttributePair {
     var attribute = getElementFirstAttribute(element);
-    if (attribute == null) return &[_]AttributePair{};
+    if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
 
     var attributes = std.ArrayList(AttributePair).init(allocator);
     defer attributes.deinit();
@@ -488,6 +498,37 @@ test "attribute edge cases" {
     // print("✅ Edge cases handled correctly!\n", .{});
 }
 
+test "elementHasNamedAttribute - isolated test" {
+    const html = "<div id='test-div' class='example'>Simple content</div>";
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
+    const div_node = z.getNodeFirstChildNode(body_node).?;
+    const div_element = z.nodeToElement(div_node).?;
+
+    print("\n=== Testing elementHasNamedAttribute in isolation ===\n", .{});
+
+    // Test basic functionality
+    print("Testing 'id' attribute...\n", .{});
+    const has_id = elementHasNamedAttribute(div_element, "id");
+    try testing.expect(has_id);
+    print("✅ Has 'id' attribute: {}\n", .{has_id});
+
+    print("Testing 'class' attribute...\n", .{});
+    const has_class = elementHasNamedAttribute(div_element, "class");
+    try testing.expect(has_class);
+    print("✅ Has 'class' attribute: {}\n", .{has_class});
+
+    print("Testing 'missing' attribute...\n", .{});
+    const has_missing = elementHasNamedAttribute(div_element, "missing");
+    try testing.expect(!has_missing);
+    print("✅ Has 'missing' attribute: {}\n", .{has_missing});
+
+    print("✅ elementHasNamedAttribute isolated test passed!\n", .{});
+}
+
 test "attribute error handling" {
     // you can't see attributes on text nodes (non-element node)
     const allocator = testing.allocator;
@@ -500,15 +541,15 @@ test "attribute error handling" {
     const div_node = z.getNodeFirstChildNode(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
-    // Test setting attribute on non-element node should silently fail
+    // Test setting attribute on non-element node should return null
     const text_node = z.getNodeFirstChildNode(div_node).?;
     const text_element = z.nodeToElement(text_node);
-    try elementSetAttributes(
-        text_element.?,
-        &.{.{ .name = "test", .value = "value" }},
-    );
-    const my_test = elementHasNamedAttribute(text_element.?, "test");
-    try testing.expect(!my_test);
+
+    // With our fix, nodeToElement should return null for text nodes
+    try testing.expect(text_element == null);
+
+    // Since text_element is null, we can't set attributes on it
+    // This test now verifies that nodeToElement correctly returns null for text nodes
 
     // Test getting non-existent attribute returns NULL
     const missing_attr = try elementGetNamedAttribute(

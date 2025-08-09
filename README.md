@@ -12,10 +12,12 @@ We expose a _small_ but significant subset of all available functions.Events are
 - node/element/fragment/document serialization
 - DOM cleaning with HTML aware manipulation:
   - optional comment removal
+  - optional script removal
   - optional empty HTMLElement removal (preserves elements with attributes)
 - CSS selectors using `lexbor`'s "css_parser" engine
 - HTML attributes on an HTMLElement via a "name" or a `DomAttr`.
 - DOM node manipulation
+- Search by attribute with collections.
 
 ## File structure
 
@@ -29,7 +31,7 @@ We expose a _small_ but significant subset of all available functions.Events are
   - _node_types.zig_    # Node type definitions
   - _html_tags.zig_     # HTML tag enumerations
   - _attributes.zig_    # Element attribute operations
-
+  - _collection.zig_    # Search by attribute
   - _serialize.zig_     # innerHTML, serialize nodes/HTMLElements
   - _title.zig_ (TODO)
 
