@@ -1,5 +1,7 @@
+//! Chunks processing
+
 const std = @import("std");
-const zhtml = @import("zhtml.zig");
+const z = @import("zhtml.zig");
 
 pub const HtmlParser = opaque {};
 
@@ -7,21 +9,21 @@ const err = @import("errors.zig").LexborError;
 const testing = std.testing;
 const print = std.debug.print;
 
-extern "c" fn lxb_html_parser_create() *zhtml.HtmlParser;
-extern "c" fn lxb_html_parser_init(*zhtml.HtmlParser) usize;
+extern "c" fn lxb_html_parser_create() *z.HtmlParser;
+extern "c" fn lxb_html_parser_init(*z.HtmlParser) usize;
 extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) void;
-extern "c" fn lxb_html_document_parse_chunk_begin(document: *zhtml.HtmlDocument) usize;
-extern "c" fn lxb_html_document_parse_chunk_end(document: *zhtml.HtmlDocument) usize;
-extern "c" fn lxb_html_document_parse_chunk(document: *zhtml.HtmlDocument, chunk: [*:0]const u8, len: usize) usize;
+extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HtmlDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HtmlDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk(document: *z.HtmlDocument, chunk: [*:0]const u8, len: usize) usize;
 
 pub const ChunkParser = struct {
-    doc: *zhtml.HtmlDocument,
-    parser: *zhtml.HtmlParser,
+    doc: *z.HtmlDocument,
+    parser: *z.HtmlParser,
     allocator: std.mem.Allocator,
     parsing_active: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !ChunkParser {
-        const doc = zhtml.createDocument() catch return err.DocCreateFailed;
+        const doc = z.createDocument() catch return err.DocCreateFailed;
         return .{
             .doc = doc,
             .allocator = allocator,
@@ -34,7 +36,7 @@ pub const ChunkParser = struct {
             _ = lxb_html_document_parse_chunk_end(self.doc);
             lxb_html_parser_destroy(self.parser);
         }
-        zhtml.destroyDocument(self.doc);
+        z.destroyDocument(self.doc);
     }
 
     pub fn beginParsing(self: *ChunkParser) !void {
@@ -46,7 +48,7 @@ pub const ChunkParser = struct {
             return err.ChunkBeginFailed;
         }
         self.parsing_active = true;
-        if (lxb_html_parser_init(self.parser) != zhtml.LXB_STATUS_OK) {
+        if (lxb_html_parser_init(self.parser) != z.LXB_STATUS_OK) {
             return err.ParserInitFailed;
         }
         self.parsing_active = true;
@@ -77,11 +79,11 @@ pub const ChunkParser = struct {
         self.parsing_active = false;
     }
 
-    pub fn getDocument(self: *ChunkParser) *zhtml.HtmlDocument {
+    pub fn getDocument(self: *ChunkParser) *z.HtmlDocument {
         return self.doc;
     }
 
-    pub fn getHtmlDocument(self: *ChunkParser) zhtml.HtmlDocument {
+    pub fn getHtmlDocument(self: *ChunkParser) z.HtmlDocument {
         return .{
             .doc = self.doc,
             // .allocator = self.allocator,
@@ -103,24 +105,24 @@ test "chunks1" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    const body = zhtml.getBodyElement(doc);
-    const body_node = zhtml.elementToNode(body.?);
-    const children = try zhtml.getNodeChildrenElements(
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
+    const children = try z.getNodeChildrenElements(
         allocator,
         body_node,
     );
     defer allocator.free(children);
     try testing.expect(children.len > 0);
     try testing.expectEqualStrings(
-        zhtml.getElementName(children[0]),
+        z.getElementName(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        zhtml.getElementName(children[1]),
+        z.getElementName(children[1]),
         "P",
     );
 
-    const html = try zhtml.serializeTree(
+    const html = try z.serializeTree(
         allocator,
         body_node,
     );
@@ -130,7 +132,7 @@ test "chunks1" {
         "<body><h1>Hello</h1><p>World!</p></body>",
     );
 
-    // zhtml.printDocumentStructure(doc);
+    // z.printDocumentStructure(doc);
 }
 
 test "chunk parsing comprehensive" {
@@ -153,24 +155,24 @@ test "chunk parsing comprehensive" {
     // Verify the parsed structure
     const doc = chunk_parser.getDocument();
 
-    // zhtml.printDocumentStructure(doc);
+    // z.printDocumentStructure(doc);
 
-    const body = zhtml.getBodyElement(doc).?;
-    const body_node = zhtml.elementToNode(body);
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
 
-    const children = try zhtml.getNodeChildrenElements(allocator, body_node);
+    const children = try z.getNodeChildrenElements(allocator, body_node);
     defer allocator.free(children);
 
     try testing.expect(children.len == 3); // h1, p, div
 
     // Check element names
-    try testing.expectEqualStrings(zhtml.getElementName(children[0]), "H1");
-    try testing.expectEqualStrings(zhtml.getElementName(children[1]), "P");
+    try testing.expectEqualStrings(z.getElementName(children[0]), "H1");
+    try testing.expectEqualStrings(z.getElementName(children[1]), "P");
 
-    try testing.expectEqualStrings(zhtml.getElementName(children[2]), "SPAN");
+    try testing.expectEqualStrings(z.getElementName(children[2]), "SPAN");
 
     // Test serialization
-    const html = try zhtml.serializeTree(allocator, body_node);
+    const html = try z.serializeTree(allocator, body_node);
     defer allocator.free(html);
 
     // print("Serialized: {s}\n", .{html});

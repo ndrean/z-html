@@ -20,7 +20,7 @@ We expose a _small_ but significant subset of all available functions.Events are
 ## File structure
 
 - src /
-  - __zhtml.zig__   # main module (re-exports all functionalities)
+  - zhtml.zig   # main module (re-exports all functionalities)
   - _minimal.c_     #`C` wrapper functions
   - _errors.zig_:   # Error types
   - _lexbor.zig_:   # Document parsing, DOM navigation, whitespace, escaping
@@ -34,7 +34,7 @@ We expose a _small_ but significant subset of all available functions.Events are
   - _title.zig_ (TODO)
 
   - _main.zig_ (demo TODO)
-- __build.zig__     # Build configuration
+- build.zig     # Build configuration
 - Makefile.lexbor   # `lexbor` build automation
 - lexbor_src        # `lexbor` source code
   
@@ -55,25 +55,122 @@ It imports all the submodules and run the tests.
 
 ## Quick start
 
-```zig
-const zhtml = @import("zhtml");
+```c
+const z = @import("zhtml.zig");
+const allocator = std.heap.c_allocator;
 
-// Parse HTML
-const fragment = "<p>Hello <strong>World</strong>!</p>"
-const doc = try zhtml.parseFragmentAsDocument(fragment);
-defer zhtml.destroyDocument(doc);
+const doc = try z.parseHtmlString("<p>Hello <strong>world</strong></p>");
+defer z.destryoDocument(doc);
 
-// Find elements with CSS
-const elements = try zhtml.findElements(allocator, doc, "strong");
-defer allocator.free(elements);
-
-// Clean and serialize
-try zhtml.cleanDomTree(allocator, root_node, .{ .remove_comments = true });
-const clean_html = try zhtml.serializeTree(allocator, root_node);
-defer allocator.free(clean_html);
+z.printDocumentStructure(doc);
 ```
 
-Examples in __main.zig__: TODO
+gives you:
+
+```txt
+--- DOCUMENT STRUCTURE ----
+HTML
+  HEAD
+  BODY
+    P
+      #text
+      STRONG
+        #text
+```
+
+## Examples
+
+### Cleaning HTML document
+
+```c
+const z = @import("zhtml");
+const allocator = std.heap.c_allocator;
+const writer = std.io.getStdOut().writer();
+
+
+const fragment = 
+  \\<body><div class=" container test " id="main">
+  \\  
+  \\ <p>   Hello     World   </p>
+  \\  
+  \\  <!-- Remove this comment -->
+  \\  <span data-id="123"></span>
+  \\  <pre>    preserve    this    </pre>
+  \\  
+  \\  <p>  </p>
+  \\
+  \\ <br> <!-- This should be removed -->
+  \\
+  \\ <img src="http://google.com" alt="my-image" data-value=""> 
+  \\
+  \\   <script> const div  = document.querySelector('div'); </script>
+  \\</div>
+  \\. <div data-empty="" title="  spaces  ">Content</div>
+  \\ <article>
+  \\ <h1>Title</h1><p>Para 1</p><p>Para 2</p>
+  \\    <footer>End</footer>
+  \\                   </article></body>
+;
+
+
+const doc = try z.parseHtmlString(fragment);
+defer z.destroyDocument(doc);
+
+try z.cleanDomTree(
+  allocator,
+  body_node.?,
+  .{ .remove_comments = true },
+);
+
+const new_html = try z.serializeTree(
+  allocator,
+  body_node.?,
+);
+defer allocator.free(new_html);
+
+try writer.print("{s}\n", .{new_html});
+z.printDocumentStructure(doc);
+```
+
+```txt
+<body>
+<div class="container test" id="main">
+<p>Hello World</p>
+<span data-id="123"></span>
+<pre>    preserve    this    </pre>
+<p></p><br>
+<img src="http://google.com" alt="my-image" data-value="">
+<script> const div  = document.querySelector('div'); </script>
+</div>
+```
+
+The new document structure is:
+
+- cleaned from unwanted empty `#text` nodes,
+- has preserved and cleaned attributes,
+- left untouched special tags (`<pre>`, `<meta>`...),
+- optionally removes comments,
+- optionally can remove empty nodes if they don't contain any attribute.
+
+```txt
+--- DOCUMENT STRUCTURE ----
+HTML
+  HEAD
+  BODY
+    DIV
+      P
+        #text
+      SPAN
+      PRE
+        #text
+      P
+      BR
+      IMG
+      SCRIPT
+        #text
+```
+
+Examples in _main.zig_: TODO
 
 - Parsing a web document
 - Serialization

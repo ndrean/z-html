@@ -1,19 +1,21 @@
+//! Core functions: Doc creation, parsing, and DOM manipulation
 const std = @import("std");
 
 const Err = @import("errors.zig").LexborError;
-const zhtml = @import("zhtml.zig");
+const z = @import("zhtml.zig");
 // const HtmlTag = @import("tags.zig").HtmlTag;
 
 const testing = std.testing;
 const print = std.debug.print;
+const writer = std.io.getStdOut().writer();
 
 //=============================================================================
 // TYPES AND CONSTANTS
 //=============================================================================
 
 // Lexbor types
-pub const lxb_char_t = u8;
-pub const lxb_status_t = usize;
+// pub const lxb_char_t = u8;
+// pub const lxb_status_t = usize;
 
 // Opaque types
 pub const HtmlDocument = opaque {};
@@ -37,26 +39,32 @@ pub const LXB_TAG_SCRIPT: u32 = 0x29;
 //=============================================================================
 
 extern "c" fn lxb_html_document_create() ?*HtmlDocument;
+extern "c" fn lxb_html_document_destroy(doc: *HtmlDocument) void;
+extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len: usize) usize;
 
-/// Create a new HTML document
+/// [core] Creates and returns a new HTML document.
+///
+/// Caller must free with `destroyDocument`.
 pub fn createDocument() !*HtmlDocument {
     return lxb_html_document_create() orelse Err.DocCreateFailed;
 }
 
-extern "c" fn lxb_html_document_destroy(doc: *HtmlDocument) void;
-
+/// [core] Destroy an HTML document.
+/// Call this function to free the resources associated with the document once created with `parseHtmlString`
 pub fn destroyDocument(doc: *HtmlDocument) void {
     lxb_html_document_destroy(doc);
 }
 
-extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len: usize) usize;
-
-/// Parse HTML string into document and creates a new document
-/// Returns a new document
+/// [core] Parse HTML string into document and creates a new document.
+/// Returns a new document.
+///
+/// Caller must free with `destroyDocument`.
 pub fn parseHtmlString(html: []const u8) !*HtmlDocument {
-    const doc = try createDocument();
+    const doc = createDocument() catch {
+        return Err.DocCreateFailed;
+    };
     const status = lxb_html_document_parse(doc, html.ptr, html.len);
-    if (status != zhtml.LXB_STATUS_OK) return Err.ParseFailed;
+    if (status != z.LXB_STATUS_OK) return Err.ParseFailed;
     return doc;
 }
 
@@ -64,12 +72,17 @@ pub fn parseHtmlString(html: []const u8) !*HtmlDocument {
 // ELEMENT, COMMENT, TEXT CREATION
 // =============================================================================
 
+/// [core] Element tag representation.
+///
+/// This represents an HTML element tag, which can either be a standard tag (from the enum)
+/// or a custom tag (from a string).
+/// Exposes two helper functions: `fromEnum` and `fromString`
 pub const ElementTag = union(enum) {
-    tag: zhtml.HtmlTag,
+    tag: z.HtmlTag,
     custom: []const u8,
 
     /// Helper to create from enum
-    pub fn fromEnum(html_tag: zhtml.HtmlTag) ElementTag {
+    pub fn fromEnum(html_tag: z.HtmlTag) ElementTag {
         return ElementTag{ .tag = html_tag };
     }
 
@@ -79,14 +92,15 @@ pub const ElementTag = union(enum) {
     }
 };
 
-extern "c" fn lxb_html_document_create_element_noi(doc: *HtmlDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
-
-/// [lexbor] Create a DOM element in the document
-/// tags are in an enum
-pub fn createElement(
+extern "c" fn lxb_html_document_create_element_noi(
     doc: *HtmlDocument,
-    tag: ElementTag,
-) !*DomElement {
+    tag_name: [*]const u8,
+    tag_len: usize,
+    reserved_for_opt: ?*anyopaque,
+) ?*DomElement;
+
+/// [core] Create a DOM element in the document using ElementTag
+pub fn createElement(doc: *HtmlDocument, tag: ElementTag) !*DomElement {
     const tag_name = switch (tag) {
         .tag => |enum_tag| enum_tag.toString(),
         .custom => |string_tag| string_tag,
@@ -99,10 +113,10 @@ pub fn createElement(
     ) orelse Err.CreateElementFailed;
 }
 
-/// [lexbor] Create element with attributes in one call
+/// [core] Create DOM element using ElementTag with a slice of attributes in one call
 pub fn createElementWithAttrs(
     doc: *HtmlDocument,
-    tag: zhtml.ElementTag,
+    tag: z.ElementTag,
     attrs: []const struct {
         name: []const u8,
         value: []const u8,
@@ -111,14 +125,31 @@ pub fn createElementWithAttrs(
     const element = try createElement(doc, tag);
 
     for (attrs) |attr| {
-        try zhtml.setAttribute(
+        try z.elementSetAttributes(
             element,
-            attr.name,
-            attr.value,
+            &.{
+                .{ .name = attr.name, .value = attr.value },
+            },
         );
     }
 
     return element;
+}
+
+test "createElementWithAttrs" {
+    const doc = try parseHtmlString("<p></p>");
+    // const parent = try getDocumentBodyElement(doc);
+    const body_node = try getDocumentBodyNode(doc);
+    const span = try createElementWithAttrs(
+        doc,
+        .{ .tag = .span },
+        &.{
+            .{ .name = "data-id", .value = "123" },
+            .{ .name = "phx-click", .value = "handle_click" },
+        },
+    );
+    insertNodeChildNode(body_node, elementToNode(span));
+    //TODO
 }
 
 // extern "c" fn lxb_dom_document_create_text_node(doc: *HtmlDocument, text: [*]const u8, text_len: usize) ?*DomNode;
@@ -133,11 +164,11 @@ pub fn createElementWithAttrs(
 
 //============================================================================
 // Comments
-//============================================================================
 
-extern "c" fn lxb_dom_document_create_comment(lxb_dom_document_t: *HtmlDocument, data: [*]const u8, len: usize) ?*Comment;
+extern "c" fn lxb_dom_document_create_comment(doc: *HtmlDocument, data: [*]const u8, len: usize) ?*Comment;
+extern "c" fn lxb_dom_comment_interface_destroy(doc: *Comment) *Comment;
 
-/// [lexbor] Create a comment node in the document
+/// [core] Create a comment node in the document
 pub fn createComment(
     doc: *HtmlDocument,
     data: []const u8,
@@ -149,14 +180,12 @@ pub fn createComment(
     ) orelse Err.CreateCommentFailed;
 }
 
-extern "c" fn lxb_dom_comment_interface_destroy(lxb_dom_comment_t: *Comment) *Comment;
-
-/// [lexbor] Destroy a comment node in the document
+/// [core] Destroy a comment node in the document
 pub fn destroyComment(comment: *Comment) void {
     _ = lxb_dom_comment_interface_destroy(comment);
 }
 
-/// [lexbor] Get comment text content
+/// [core] Get comment text content
 /// Needs to be freed by caller
 pub fn getCommentTextContent(
     allocator: std.mem.Allocator,
@@ -171,63 +200,102 @@ pub fn getCommentTextContent(
 }
 
 //=============================================================================
+// Root : node - element
+//=============================================================================
 
 extern "c" fn lxb_html_document_body_element_noi(doc: *HtmlDocument) ?*DomElement;
 
-/// [lexbor] Get the document's body element
-pub fn getBodyElement(doc: *HtmlDocument) ?*DomElement {
-    return lxb_html_document_body_element_noi(doc);
+/// [core] Get the document's body element (usually BODY)
+pub fn getDocumentBodyElement(doc: *HtmlDocument) !*DomElement {
+    if (lxb_html_document_body_element_noi(doc)) |element| {
+        return element;
+    } else {
+        return Err.NoBodyElement;
+    }
 }
 
-extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
+/// [core] convience function using `try getDocumentBodyElement`.
+pub fn getDocumentBodyNode(doc: *HtmlDocument) !*DomNode {
+    const body_element = getDocumentBodyElement(doc) catch {
+        return Err.NoBodyElement;
+    };
+    return elementToNode(body_element);
+}
 
-/// [lexbor] Convert any lexbor object to DOM node
+// extern "c" fn lxb_dom_document_element_noi(doc: *z.HtmlDocument) ?*z.DomElement;
+
+// /// [core] Get the document's root element (usually <html>)
+// pub fn getDocumentElement(doc: *HtmlDocument) ?*DomElement {
+//     return lxb_dom_document_element_noi(doc);
+// }
+
+test "check error get body of empty element" {
+    const doc = try createDocument();
+    const body_element = getDocumentBodyElement(doc);
+    try testing.expectError(Err.NoBodyElement, body_element);
+
+    const body_node = getDocumentBodyNode(doc);
+    try testing.expectError(Err.NoBodyElement, body_node);
+}
+
+test "root node element" {
+    const doc = try parseHtmlString("");
+    defer z.destroyDocument(doc);
+    // // try z.printDocumentStructure(doc);
+    const body_doc_node = try getDocumentBodyNode(doc);
+    const body_element = try getDocumentBodyElement(doc);
+
+    try testing.expectEqualStrings("BODY", getElementName(body_element));
+    try testing.expectEqualStrings("BODY", getNodeName(body_doc_node));
+}
+
+// ==============================================================================
+extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
+extern "c" fn lexbor_dom_interface_element_wrapper(node: *DomNode) ?*DomElement;
+extern "c" fn lxb_dom_node_name(node: *DomNode, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_node_remove(node: *DomNode) void;
+extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
+
+/// [core] Convert any lexbor object to DOM node
 pub fn objectToNode(obj: *anyopaque) *DomNode {
     return lexbor_dom_interface_node_wrapper(obj);
 }
 
-extern "c" fn lexbor_dom_interface_element_wrapper(node: *DomNode) ?*DomElement;
-
-/// [lexbor] Convert DOM node to Element (if it is one)
+/// [core] Convert DOM node to Element (if it is one)
 pub fn nodeToElement(node: *DomNode) ?*DomElement {
     return lexbor_dom_interface_element_wrapper(node);
 }
 
-/// [lexbor] Convert DOM Element to Node
+/// [core] Convert DOM Element to Node
 pub fn elementToNode(element: *DomElement) *DomNode {
     return objectToNode(element);
 }
 
-/// [lexbor] Get document as DOM node for navigation
-pub fn getDocumentNode(doc: *HtmlDocument) *DomNode {
-    return objectToNode(doc);
-}
+// /// [core] Get document as DOM node for navigation
+// pub fn getDocumentNode(doc: *HtmlDocument) *DomNode {
+//     return objectToNode(doc);
+// }
 
-extern "c" fn lxb_dom_node_name(node: *DomNode, len: ?*usize) [*:0]const u8;
-
-/// [lexbor] Get node's tag name as Zig string
+/// [core] Get node's tag name as Zig string
 pub fn getNodeName(node: *DomNode) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
 
-/// [lexbor] Get element's tag name as Zig string
+/// [core] Get element's tag name as Zig string
 pub fn getElementName(element: *DomElement) []const u8 {
     const node = elementToNode(element);
     return getNodeName(node);
 }
 
 //=============================================================================
-extern "c" fn lxb_dom_node_remove(node: *DomNode) void;
 
-/// [lexbor] Remove a node from its parent
+/// [core] Remove a node from its parent
 pub fn removeNode(node: *DomNode) void {
     lxb_dom_node_remove(node);
 }
 
-extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
-
-/// [lexbor] Destroy a DOM node
+/// [core] Destroy a DOM node
 pub fn destroyNode(node: *DomNode) void {
     lxb_dom_node_destroy(node);
 }
@@ -253,30 +321,18 @@ test "create element and comment" {
     destroyComment(comment);
 }
 
-test "check error get body of empty element" {
-    const doc = try createDocument();
-    defer destroyDocument(doc);
-    const body_element = getBodyElement(doc) orelse
-        Err.EmptyTextContent;
-
-    const div = try createElement(doc, .{ .custom = "div" });
-    defer destroyNode(elementToNode(div));
-
-    try testing.expectError(Err.EmptyTextContent, body_element);
-}
-
 //=============================================================================
 
 extern "c" fn lxb_html_node_is_void_noi(node: *DomNode) bool;
 
-/// [lexbor] Check if element is void (self-closing like <img>, <br>)
+/// [core] Check if element is void (self-closing like <img>, <br>)
 pub fn isSelfClosingNode(node: *DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
 extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
 
-/// [lexbor] Check if node contains only whitespace
+/// [core] Check if node contains only whitespace
 pub fn isNodeEmpty(node: *DomNode) bool {
     return lxb_dom_node_is_empty(node);
 }
@@ -295,7 +351,7 @@ test "void vs empty element detection" {
     const doc = try parseHtmlString(html);
     defer destroyDocument(doc);
 
-    const body = getBodyElement(doc).?;
+    const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
     const div_node = getNodeFirstChildNode(body_node).?;
 
@@ -331,7 +387,7 @@ test "void vs empty element detection" {
                 // a non-void can be empty or not
                 if (is_empty) {
                     empty_nodes += 1;
-                    if (zhtml.isNodeTextType(child.?)) {
+                    if (z.isNodeTextType(child.?)) {
                         empty_text_nodes_count += 1;
                     } else {
                         empty_non_self_closing_non_text_nodes_count += 1;
@@ -354,33 +410,33 @@ test "void vs empty element detection" {
 
 extern "c" fn lxb_dom_node_parent_noi(node: *DomNode) ?*DomNode;
 
-/// [lexbor] Get the parent node of a given node
+/// [core] Get the parent node of a given node
 pub fn getNodeParentNode(node: *DomNode) ?*DomNode {
     return lxb_dom_node_parent_noi(node);
 }
 
 extern "c" fn lxb_dom_node_first_child_noi(node: *DomNode) ?*DomNode;
 
-/// [lexbor] Get first child of node
+/// [core] Get first child of node
 pub fn getNodeFirstChildNode(node: *DomNode) ?*DomNode {
     return lxb_dom_node_first_child_noi(node);
 }
 
 extern "c" fn lxb_dom_node_next_noi(node: *DomNode) ?*DomNode;
 
-/// [lexbor] Get next sibling of node
+/// [core] Get next sibling of node
 pub fn getNodeNextSiblingNode(node: *DomNode) ?*DomNode {
     return lxb_dom_node_next_noi(node);
 }
 
 extern "c" fn lxb_dom_node_insert_child(parent: *DomNode, child: *DomNode) void;
 
-/// [lexbor] Insert child node into parent - no error handling needed since it returns void
+/// [core] Insert child node into parent - no error handling needed since it returns void
 pub fn insertNodeChildNode(parent: *DomNode, child: *DomNode) void {
     lxb_dom_node_insert_child(parent, child); // No status to check!
 }
 
-/// [lexbor] Get first element child (skip text nodes, comments, etc.)
+/// [core] Get first element child (skip text nodes, comments, etc.)
 pub fn getNodeFirstChildElement(node: *DomNode) ?*DomElement {
     var child = getNodeFirstChildNode(node);
     while (child != null) {
@@ -392,7 +448,7 @@ pub fn getNodeFirstChildElement(node: *DomNode) ?*DomElement {
     return null;
 }
 
-/// [lexbor] Get next element sibling (skip text nodes)
+/// [core] Get next element sibling (skip text nodes)
 pub fn getNodeNextSiblingElement(node: *DomNode) ?*DomElement {
     var sibling = getNodeNextSiblingNode(node);
     while (sibling != null) {
@@ -404,7 +460,7 @@ pub fn getNodeNextSiblingElement(node: *DomNode) ?*DomElement {
     return null;
 }
 
-/// [lexbor]  Helper: Collect only element children
+/// [core]  Helper: Collect only element children
 /// Returns a slice of optional elements (no text nodes) and need to be freed
 pub fn getNodeChildrenElements(
     allocator: std.mem.Allocator,
@@ -415,7 +471,7 @@ pub fn getNodeChildrenElements(
 
     var child = getNodeFirstChildNode(parent_node);
     while (child != null) {
-        if (zhtml.isNodeElementType(child.?)) {
+        if (z.isNodeElementType(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }
@@ -424,28 +480,6 @@ pub fn getNodeChildrenElements(
     }
 
     return elements.toOwnedSlice();
-}
-
-test "navigation & getNodeName" {
-    const fragment = "<div></div><p></p>";
-    const doc = try parseHtmlString(fragment);
-    defer destroyDocument(doc);
-    // printDocumentStructure(doc);
-
-    const doc_node = getDocumentNode(doc);
-    const body_element = getBodyElement(doc);
-
-    try testing.expectEqualStrings(getNodeName(doc_node), "#document");
-    try testing.expectEqualStrings("BODY", getElementName(body_element.?));
-
-    const body_node = elementToNode(body_element.?);
-    try testing.expectEqualStrings(getNodeName(body_node), "BODY");
-
-    const first_child = getNodeFirstChildNode(body_node);
-    try testing.expectEqualStrings(getNodeName(first_child.?), "DIV");
-
-    const next_sibling = getNodeNextSiblingNode(first_child.?);
-    try testing.expectEqualStrings(getNodeName(next_sibling.?), "P");
 }
 
 test "insertChild" {
@@ -480,7 +514,7 @@ pub const TextOptions = struct {
 
 extern "c" fn lxb_dom_node_text_content(node: *DomNode, len: ?*usize) ?[*:0]u8;
 
-/// [lexbor] Get text content as Zig string (copies to Zig-managed memory)
+/// [core] Get text content as Zig string (copies to Zig-managed memory)
 /// Caller must free the returned string
 pub fn getNodeAllTextContent(
     allocator: std.mem.Allocator,
@@ -498,7 +532,7 @@ pub fn getNodeAllTextContent(
     return result;
 }
 
-/// [lexbor] Get text content with option to escape (default behavior is `.escape = false`)
+/// [core] Get text content with option to escape (default behavior is `.escape = false`)
 /// If you need escaping, use `getNodeTextContentOpts` with `escape: true`
 /// Caller must free the returned string
 pub fn getNodeTextContentsOpts(
@@ -519,22 +553,22 @@ pub fn getNodeTextContentsOpts(
 /// Set text content of a node
 extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8, len: usize) u8;
 
-/// [lexbor] Set text content on empty node from Zig string
+/// [core] Set text content on empty node from Zig string
 pub fn setNodeTextContent(node: *DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
         content.ptr,
         content.len,
     );
-    if (status != zhtml.LXB_STATUS_OK) return Err.SetTextContentFailed;
+    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
 }
 
-// extern "c" fn lxb_dom_document_destroy_text(doc: *anyopaque, text: [*]lxb_char_t) void;
+// extern "c" fn lxb_dom_document_destroy_text(doc: *anyopaque, text: [*]usize) void;
 
 /// Get owner document from node
 extern "c" fn lexbor_node_owner_document(node: *DomNode) *HtmlDocument;
 
-/// [lexbor] To test !!!!!!!!!!!
+/// [core] To test !!!!!!!!!!!
 pub fn getNodeOwnerDocument(node: *DomNode) *HtmlDocument {
     return lexbor_node_owner_document(node);
 }
@@ -545,7 +579,7 @@ extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; 
 /// Free lexbor-allocated memory ????
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
 
-/// [lexbor] HTML escape text content for safe output
+/// [core] HTML escape text content for safe output
 pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
@@ -606,8 +640,8 @@ test "gets all text elements from Fragment" {
     const allocator = testing.allocator;
     const doc = try parseHtmlString(fragment);
     defer destroyDocument(doc);
-    const body_element = getBodyElement(doc);
-    const body_node = elementToNode(body_element.?);
+    const body_element = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body_element);
     const text_content = try getNodeTextContentsOpts(allocator, body_node, .{});
     defer allocator.free(text_content);
     try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
@@ -620,7 +654,7 @@ test "text content" {
     const doc = try parseHtmlString(html);
     defer destroyDocument(doc);
 
-    const body = getBodyElement(doc).?;
+    const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = getNodeFirstChildNode(body_node).?;
     const text = try getNodeTextContentsOpts(
@@ -649,8 +683,8 @@ test "getNodeTextContent" {
     const doc = try parseHtmlString(frag);
     defer destroyDocument(doc);
 
-    const body_element = getBodyElement(doc);
-    const body_node = elementToNode(body_element.?);
+    const body_element = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body_element);
 
     const first_child = getNodeFirstChildNode(body_node);
     const second_child = getNodeNextSiblingNode(first_child.?);
@@ -715,8 +749,8 @@ test "getElementChildren from fragment" {
     const doc = try parseHtmlString(frag);
     defer destroyDocument(doc);
 
-    const body_element = getBodyElement(doc);
-    const body_node = elementToNode(body_element.?);
+    const body_element = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body_element);
     try testing.expectEqualStrings("BODY", getNodeName(body_node));
 
     const children1 = try getNodeChildrenElements(allocator, body_node);
@@ -738,7 +772,7 @@ test "getElementChildren from fragment" {
     // printDocumentStructure(doc);
 }
 
-/// [lexbor] Helper: Walk only element children, skipping text nodes
+/// [core] Helper: Walk only element children, skipping text nodes
 pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomElement) void) void {
     var child = getNodeFirstChildNode(parent_node);
     while (child != null) {
@@ -756,8 +790,8 @@ pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomEl
 test "simple empty node" {
     const doc = try parseHtmlString("<p></p>");
     defer destroyDocument(doc);
-    const body = getBodyElement(doc);
-    const body_node = elementToNode(body.?);
+    const body = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body);
     const p = getNodeFirstChildNode(body_node);
     try testing.expect(isNodeEmpty(p.?));
 
@@ -770,8 +804,8 @@ test "node with whitespace like characters IS empty but contains characters" {
     // this is "lxb_empty" too
     const doc = try parseHtmlString("<p> \n</p>");
     defer destroyDocument(doc);
-    const body = getBodyElement(doc);
-    const body_node = elementToNode(body.?);
+    const body = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body);
     const p = getNodeFirstChildNode(body_node);
     try testing.expect(isNodeEmpty(p.?));
 
@@ -785,26 +819,26 @@ test "node with (non empty) inenr text is NOT empty" {
     // node with inner text node
     const doc = try parseHtmlString("<p>Text</p>");
     defer destroyDocument(doc);
-    const body = getBodyElement(doc);
-    const body_node = elementToNode(body.?);
+    const body = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body);
     const p = getNodeFirstChildNode(body_node);
     try testing.expect(!isNodeEmpty(p.?));
 }
 
 test "node with an (empty text content) node is NOT empty" {
-    const doc2 = try parseHtmlString("<p><span><strong></strong></span></p>");
-    defer destroyDocument(doc2);
-    const body2 = getBodyElement(doc2);
-    const body_node2 = elementToNode(body2.?);
-    const p2 = getNodeFirstChildNode(body_node2);
-    try testing.expect(!isNodeEmpty(p2.?));
+    const doc = try parseHtmlString("<p><span><strong></strong></span></p>");
+    defer destroyDocument(doc);
+    const body = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body);
+    const p = getNodeFirstChildNode(body_node);
+    try testing.expect(!isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
-    const text = getNodeAllTextContent(allocator, p2.?);
+    const text = getNodeAllTextContent(allocator, p.?);
     try testing.expectError(Err.EmptyTextContent, text);
 }
 
-/// [lexbor] Check if text content is only whitespace characters
+/// [core] Check if text content is only whitespace characters
 pub fn isWhitepaceOnlyText(text: []const u8) bool {
     if (text.len == 0) return true;
     for (text) |c| {
@@ -832,14 +866,14 @@ test "isWhitespaceOnlyText" {
     try testing.expect(isWhitepaceOnlyText(text4));
 }
 
-// / [lexbor] Check only whitespace only TEXT nodes.
+// / [core] Check only whitespace only TEXT nodes.
 // / If the node is not a text node, it returns false.
 // / If the node is a text node, it checks if its content is only whitespace.
 // pub fn isWhitespaceOnlyTextNode(
 //     // allocator: std.mem.Allocator,
 //     node: *DomNode,
 // ) !bool {
-//     if (!zhtml.isNodeTextType(node)) return Err.NotTextNode;
+//     if (!z.isNodeTextType(node)) return Err.NotTextNode;
 
 //     if (isNodeEmpty(node)) return true;
 //     return false;
@@ -861,8 +895,8 @@ test "isWhitespaceOnlyNode" {
     // one way to create some nodes
     const doc = try parseHtmlString("<p>   </p>");
     defer destroyDocument(doc);
-    const body = getBodyElement(doc);
-    const body_node = elementToNode(body.?);
+    const body = try getDocumentBodyElement(doc);
+    const body_node = elementToNode(body);
     const p = getNodeFirstChildNode(body_node);
 
     try testing.expect(
@@ -872,7 +906,7 @@ test "isWhitespaceOnlyNode" {
     // inner text node is whitespace-only
     const inner_text_node = getNodeFirstChildNode(p.?);
     try testing.expect(
-        zhtml.isNodeTextType(inner_text_node.?),
+        z.isNodeTextType(inner_text_node.?),
     );
 
     try testing.expect(
@@ -892,7 +926,7 @@ test "isWhitespaceOnlyNode" {
     );
 }
 
-/// [lexbor] Check if a node contains only whitespace.
+/// [core] Check if a node contains only whitespace.
 /// However, the node can contain only whitespace text nodes.
 /// The function `getNodeTextContentsOpts` can be used to retrieve all the text content recursively inside.
 pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
@@ -903,12 +937,12 @@ pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
 test "isWhitespaceOnlyElement" {
     const doc = try parseHtmlString("<div>   </div>");
     defer destroyDocument(doc);
-    const body = getBodyElement(doc);
+    const body = try getDocumentBodyElement(doc);
     try testing.expect(
-        !isWhitespaceOnlyElement(body.?),
+        !isWhitespaceOnlyElement(body),
     );
 
-    const body_node = elementToNode(body.?);
+    const body_node = elementToNode(body);
     try testing.expect(
         !isNodeEmpty(body_node),
     );
@@ -945,7 +979,7 @@ pub const DomCleanOptions = struct {
     remove_empty_elements: bool = false, // Remove elements with no content (not just text nodes)
 };
 
-/// [lexbor] Clean DOM tree according to HTML standards + optional extras
+/// [core] Clean DOM tree according to HTML standards + optional extras
 pub fn cleanDomTree(
     allocator: std.mem.Allocator,
     root: *DomNode,
@@ -959,7 +993,7 @@ fn cleanNodeRecursive(
     node: *DomNode,
     options: DomCleanOptions,
 ) !void {
-    const node_type = zhtml.getNodeType(node);
+    const node_type = z.getNodeType(node);
     var node_was_removed = false;
 
     switch (node_type) {
@@ -1025,54 +1059,50 @@ fn cleanElementAttributes(
     allocator: std.mem.Allocator,
     element: *DomElement,
 ) !usize {
-    var attr_list = std.ArrayList(AttributePair).init(allocator);
+    const attr_list = try z.elementCollectAttributes(allocator, element);
     defer {
-        for (attr_list.items) |attr| {
+        for (attr_list) |attr| {
             allocator.free(attr.name);
             allocator.free(attr.value);
         }
-        attr_list.deinit();
+        allocator.free(attr_list);
     }
+    const size = attr_list.len;
 
-    const size = try collectElementAttributes(allocator, element, &attr_list);
     if (size == 0) return 0;
 
     // Remove all existing attributes
-    for (attr_list.items) |attr| {
-        try zhtml.removeNamedAttributeFromElement(element, attr.name);
+    for (attr_list) |attr| {
+        try z.elementRemoveNamedAttribute(element, attr.name);
     }
 
     // Re-add with normalized whitespace
-    for (attr_list.items) |attr| {
-        const clean_name = std.mem.trim(u8, attr.name, &std.ascii.whitespace);
-        const clean_value = std.mem.trim(u8, attr.value, &std.ascii.whitespace);
+    for (attr_list) |attr| {
+        const clean_name = std.mem.trim(
+            u8,
+            attr.name,
+            &std.ascii.whitespace,
+        );
+        const clean_value = std.mem.trim(
+            u8,
+            attr.value,
+            &std.ascii.whitespace,
+        );
 
         // Skip empty attribute names (malformed HTML)
         if (clean_name.len > 0) {
-            try zhtml.setNamedAttributeValueToElement(element, clean_name, clean_value);
+            try z.elementSetAttributes(
+                element,
+                &.{
+                    .{
+                        .name = clean_name,
+                        .value = clean_value,
+                    },
+                },
+            );
         }
     }
-    return attr_list.items.len;
-}
-
-/// Collect all attributes from an element
-fn collectElementAttributes(
-    allocator: std.mem.Allocator,
-    element: *zhtml.DomElement,
-    attr_list: *std.ArrayList(AttributePair),
-) !usize {
-    var attr = zhtml.getElementFirstAttribute(element);
-    if (attr == null) return 0; // No attributes to collect
-
-    while (attr != null) {
-        const name_copy = try zhtml.getAttributeName(allocator, attr.?);
-        const value_copy = try zhtml.getAttributeValue(allocator, attr.?);
-
-        try attr_list.append(.{ .name = name_copy, .value = value_copy });
-
-        attr = zhtml.getElementNextAttribute(attr.?);
-    }
-    return attr_list.items.len;
+    return attr_list.len;
 }
 
 fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *DomNode) !bool {
@@ -1097,7 +1127,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *DomNode) !boo
 
 extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 
-/// [lexbor] set or replace text data on a text node
+/// [core] set or replace text data on a text node
 /// If the inner text node is empty, it will be created.
 pub fn setOrReplaceNodeTextData(
     allocator: std.mem.Allocator,
@@ -1121,7 +1151,7 @@ pub fn setOrReplaceNodeTextData(
             0, // Start at beginning
             current_text.len,
         );
-        if (status != zhtml.LXB_STATUS_OK) return Err.SetTextContentFailed;
+        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
     }
 }
 
@@ -1236,12 +1266,12 @@ test "complete DOM cleaning with proper node removal" {
     const doc = try parseHtmlString(messy_html);
     defer destroyDocument(doc);
 
-    const body = getBodyElement(doc).?;
+    const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
 
-    print("\n=== Complete DOM Cleaning Test ===\n", .{});
+    // print("\n=== Complete DOM Cleaning Test ===\n", .{});
 
-    const before = try zhtml.serializeTree(allocator, body_node);
+    const before = try z.serializeTree(allocator, body_node);
     defer allocator.free(before);
 
     try cleanDomTree(
@@ -1253,9 +1283,9 @@ test "complete DOM cleaning with proper node removal" {
         },
     );
 
-    const after = try zhtml.serializeTree(allocator, body_node);
+    const after = try z.serializeTree(allocator, body_node);
     defer allocator.free(after);
-    print("\n\nAfter cleaning:=============\n{s}\n\n", .{after});
+    // print("\n\nAfter cleaning:=============\n{s}\n\n", .{after});
 
     // Verify results
     try testing.expect(std.mem.indexOf(u8, after, "<!--") == null); // Comments removed
@@ -1266,5 +1296,5 @@ test "complete DOM cleaning with proper node removal" {
 
     // printDocumentStructure(doc);
 
-    print("✅ Complete DOM cleaning works perfectly!\n", .{});
+    // print("✅ Complete DOM cleaning works perfectly!\n", .{});
 }

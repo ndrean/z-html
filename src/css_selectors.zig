@@ -1,5 +1,6 @@
+//! CSS Selectors
 const std = @import("std");
-const zhtml = @import("zhtml.zig");
+const z = @import("zhtml.zig");
 
 const err = @import("errors.zig").LexborError;
 
@@ -21,24 +22,20 @@ pub const CssSelectorSpecificity = opaque {};
 
 // CSS Parser functions
 extern "c" fn lxb_css_parser_create() ?*CssParser;
-
 extern "c" fn lxb_css_parser_init(parser: *CssParser, memory: ?*anyopaque) usize;
-
 extern "c" fn lxb_css_parser_destroy(parser: *CssParser, destroy_self: bool) ?*CssParser;
 
 // CSS Selectors engine functions
 extern "c" fn lxb_selectors_create() ?*CssSelectors;
-
 extern "c" fn lxb_selectors_init(selectors: *CssSelectors) usize;
-
 extern "c" fn lxb_selectors_destroy(selectors: *CssSelectors, destroy_self: bool) ?*CssSelectors;
 
 // Parse selectors
 extern "c" fn lxb_css_selectors_parse(parser: *CssParser, selectors: [*]const u8, length: usize) ?*CssSelectorList;
 
 // Find nodes matching selectors
-extern "c" fn lxb_selectors_find(selectors: *CssSelectors, root: *zhtml.DomNode, list: *CssSelectorList, callback: *const fn (
-    node: *zhtml.DomNode,
+extern "c" fn lxb_selectors_find(selectors: *CssSelectors, root: *z.DomNode, list: *CssSelectorList, callback: *const fn (
+    node: *z.DomNode,
     spec: *CssSelectorSpecificity,
     ctx: ?*anyopaque,
 ) callconv(.C) usize, ctx: ?*anyopaque) usize;
@@ -58,7 +55,7 @@ pub const CssSelectorEngine = struct {
     pub fn init(allocator: std.mem.Allocator) !Self {
         const parser = lxb_css_parser_create() orelse return err.CssParserCreateFailed;
 
-        if (lxb_css_parser_init(parser, null) != zhtml.LXB_STATUS_OK) {
+        if (lxb_css_parser_init(parser, null) != z.LXB_STATUS_OK) {
             _ = lxb_css_parser_destroy(parser, true);
             return err.CssParserInitFailed;
         }
@@ -68,7 +65,7 @@ pub const CssSelectorEngine = struct {
             return err.CssSelectorsCreateFailed;
         };
 
-        if (lxb_selectors_init(selectors) != zhtml.LXB_STATUS_OK) {
+        if (lxb_selectors_init(selectors) != z.LXB_STATUS_OK) {
             _ = lxb_selectors_destroy(selectors, true);
             _ = lxb_css_parser_destroy(parser, true);
             return err.CssSelectorsInitFailed;
@@ -92,7 +89,7 @@ pub const CssSelectorEngine = struct {
     }
 
     /// [selectors] Parse CSS selector string and find matching nodes
-    pub fn find(self: *Self, root_node: *zhtml.DomNode, selector: []const u8) ![]*zhtml.DomNode {
+    pub fn find(self: *Self, root_node: *z.DomNode, selector: []const u8) ![]*z.DomNode {
         if (!self.initialized) return err.CssEngineNotInitialized;
 
         // Parse the selector
@@ -104,7 +101,7 @@ pub const CssSelectorEngine = struct {
         defer context.deinit();
 
         const status = lxb_selectors_find(self.selectors, root_node, selector_list, findCallback, &context);
-        if (status != zhtml.LXB_STATUS_OK) {
+        if (status != z.LXB_STATUS_OK) {
             return err.CssSelectorFindFailed;
         }
 
@@ -114,9 +111,9 @@ pub const CssSelectorEngine = struct {
     /// [selectors] Find first matching node
     pub fn findFirst(
         self: *Self,
-        root_node: *zhtml.DomNode,
+        root_node: *z.DomNode,
         selector: []const u8,
-    ) !?*zhtml.DomNode {
+    ) !?*z.DomNode {
         const results = try self.find(
             root_node,
             selector,
@@ -129,7 +126,7 @@ pub const CssSelectorEngine = struct {
     /// [selectors] Check if any nodes match the selector
     pub fn matches(
         self: *Self,
-        root_node: *zhtml.DomNode,
+        root_node: *z.DomNode,
         selector: []const u8,
     ) !bool {
         const results = try self.find(
@@ -147,12 +144,12 @@ pub const CssSelectorEngine = struct {
 //=============================================================================
 
 const FindContext = struct {
-    results: std.ArrayList(*zhtml.DomNode),
+    results: std.ArrayList(*z.DomNode),
     allocator: std.mem.Allocator,
 
     fn init(allocator: std.mem.Allocator) FindContext {
         return FindContext{
-            .results = std.ArrayList(*zhtml.DomNode).init(allocator),
+            .results = std.ArrayList(*z.DomNode).init(allocator),
             .allocator = allocator,
         };
     }
@@ -164,7 +161,7 @@ const FindContext = struct {
 
 /// Callback function for lxb_selectors_find
 fn findCallback(
-    node: *zhtml.DomNode,
+    node: *z.DomNode,
     spec: *CssSelectorSpecificity,
     ctx: ?*anyopaque,
 ) callconv(.C) usize {
@@ -173,7 +170,7 @@ fn findCallback(
     const context: *FindContext = @ptrCast(@alignCast(ctx.?));
     context.results.append(node) catch return 1; // Return error status on allocation failure
 
-    return zhtml.LXB_STATUS_OK;
+    return z.LXB_STATUS_OK;
 }
 
 //=============================================================================
@@ -183,24 +180,24 @@ fn findCallback(
 /// [selectors] High-level function: Find elements by CSS selector in a document
 pub fn findElements(
     allocator: std.mem.Allocator,
-    doc: *zhtml.HtmlDocument,
+    doc: *z.HtmlDocument,
     selector: []const u8,
-) ![]*zhtml.DomElement {
+) ![]*z.DomElement {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
-    const body = zhtml.getBodyElement(doc) orelse return &[_]*zhtml.DomElement{};
-    const body_node = zhtml.elementToNode(body);
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
 
     const nodes = try css_engine.find(body_node, selector);
     defer allocator.free(nodes);
 
     // Convert nodes to elements
-    var elements = std.ArrayList(*zhtml.DomElement).init(allocator);
+    var elements = std.ArrayList(*z.DomElement).init(allocator);
     defer elements.deinit();
 
     for (nodes) |node| {
-        if (zhtml.nodeToElement(node)) |element| {
+        if (z.nodeToElement(node)) |element| {
             try elements.append(element);
         }
     }
@@ -213,8 +210,8 @@ test "CSS selector basic functionality" {
 
     // Create HTML document
     const html = "<div><p class='highlight'>Hello</p><p id='my-id'>World</p><span class='highlight'>Test</span></div>";
-    const doc = try zhtml.parseHtmlString(html);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
 
     // Test class selector
     const class_elements = try findElements(allocator, doc, ".highlight");
@@ -230,7 +227,7 @@ test "CSS selector basic functionality" {
     // print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
     try testing.expect(id_elements.len == 1);
 
-    const element_name = zhtml.getNodeName(zhtml.elementToNode(id_elements[0]));
+    const element_name = z.getNodeName(z.elementToNode(id_elements[0]));
     // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
 }
@@ -239,11 +236,11 @@ test "CSS selector engine reuse" {
     const allocator = testing.allocator;
 
     const html = "<article><h1>Title</h1><p>Para 1</p><p>Para 2</p><footer>End</footer></article>";
-    const doc = try zhtml.parseHtmlString(html);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
 
-    const body = zhtml.getBodyElement(doc).?;
-    const body_node = zhtml.elementToNode(body);
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
 
     // Create engine once, use multiple times
     var css_engine = try CssSelectorEngine.init(allocator);
@@ -272,11 +269,11 @@ test "challenging CSS selectors - lexbor example" {
 
     // Exact HTML from lexbor example
     const html = "<div><p class='x z'> </p><p id='y'>abc</p></div>";
-    const doc = try zhtml.parseHtmlString(html);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
 
-    const body = zhtml.getBodyElement(doc).?;
-    const body_node = zhtml.elementToNode(body);
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
 
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
@@ -305,12 +302,12 @@ test "challenging CSS selectors - lexbor example" {
 
     // Verify the results
     // for (first_results, 0..) |node, i| {
-    //     const node_name = zhtml.getNodeName(node);
+    //     const node_name = z.getNodeName(node);
     //     print("First result {d}: {s}\n", .{ i, node_name });
     // }
 
     // for (second_results, 0..) |node, i| {
-    //     const node_name = zhtml.getNodeName(node);
+    //     const node_name = z.getNodeName(node);
     //     print("Second result {d}: {s}\n", .{ i, node_name });
     // }
 }
@@ -358,11 +355,11 @@ test "CSS selector edge cases" {
         _ = i;
         // print("\nTest case {}: {s}\n", .{ i + 1, test_case.description });
 
-        const doc = try zhtml.parseHtmlString(test_case.html);
-        defer zhtml.destroyDocument(doc);
+        const doc = try z.parseHtmlString(test_case.html);
+        defer z.destroyDocument(doc);
 
-        const body = zhtml.getBodyElement(doc).?;
-        const body_node = zhtml.elementToNode(body);
+        const body = try z.getDocumentBodyElement(doc);
+        const body_node = z.elementToNode(body);
 
         const results = try css_engine.find(body_node, test_case.selector);
         defer allocator.free(results);

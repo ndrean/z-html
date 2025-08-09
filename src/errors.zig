@@ -1,3 +1,4 @@
+//! List of errors
 pub const LexborError = error{
     DocCreateFailed,
     ParseFailed,

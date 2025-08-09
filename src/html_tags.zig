@@ -1,6 +1,6 @@
 // compile time safety check
 const std = @import("std");
-const zhtml = @import("zhtml.zig");
+const z = @import("zhtml.zig");
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -72,15 +72,15 @@ pub const HtmlTag = enum {
 test "HtmlTag edge cases" {
     // const allocator = testing.allocator;
 
-    const doc = try zhtml.createDocument();
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
 
     // Test all enum variants work
-    const tags = [_]zhtml.HtmlTag{ .div, .p, .span, .a, .img, .br, .h1, .h2 };
+    const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br, .h1, .h2 };
 
     for (tags) |tag| {
-        const element = try zhtml.createElement(doc, .{ .tag = tag });
-        const node_name = zhtml.getNodeName(zhtml.elementToNode(element));
+        const element = try z.createElement(doc, .{ .tag = tag });
+        const node_name = z.getNodeName(z.elementToNode(element));
         const expected_name = tag.toString();
 
         // print("Created: {s} -> DOM name: {s}\n", .{ expected_name, node_name });
@@ -95,29 +95,29 @@ test "HtmlTag edge cases" {
 test "mixing enum and string creation" {
     // const allocator = testing.allocator;
 
-    const doc = try zhtml.createDocument();
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
 
     // Type-safe enum creation
-    const div = try zhtml.createElement(
+    const div = try z.createElement(
         doc,
         .{ .tag = .div },
     );
 
     // Flexible string creation (for custom elements)
-    const custom = try zhtml.createElement(
+    const custom = try z.createElement(
         doc,
         .{ .custom = "my-custom-element" },
     );
-    const web_component = try zhtml.createElement(
+    const web_component = try z.createElement(
         doc,
         .{ .custom = "x-widget" },
     );
 
     // Verify they work
-    try testing.expectEqualStrings("DIV", zhtml.getNodeName(zhtml.elementToNode(div)));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", zhtml.getNodeName(zhtml.elementToNode(custom)));
-    try testing.expectEqualStrings("X-WIDGET", zhtml.getNodeName(zhtml.elementToNode(web_component)));
+    try testing.expectEqualStrings("DIV", z.getNodeName(z.elementToNode(div)));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.getNodeName(z.elementToNode(custom)));
+    try testing.expectEqualStrings("X-WIDGET", z.getNodeName(z.elementToNode(web_component)));
 
     // print("✅ Both enum and string creation work!\n", .{});
 }

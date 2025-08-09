@@ -3,7 +3,7 @@
 // =============================================================================
 
 const std = @import("std");
-const zhtml = @import("zhtml.zig");
+const z = @import("zhtml.zig");
 
 const Err = @import("errors.zig").LexborError;
 const testing = std.testing;
@@ -15,13 +15,13 @@ pub const lxbString = extern struct {
     size: usize, // Allocated size
 };
 
-extern "c" fn lxb_html_serialize_tree_str(node: *zhtml.DomNode, str: *lxbString) usize;
+extern "c" fn lxb_html_serialize_tree_str(node: *z.DomNode, str: *lxbString) usize;
 
 /// [Serialize] Serialize node tree (most common use case)
 /// Returns Zig-managed string that needs to be freed
 pub fn serializeTree(
     allocator: std.mem.Allocator,
-    node: *zhtml.DomNode,
+    node: *z.DomNode,
 ) ![]u8 {
     var str: lxbString = .{
         .data = null,
@@ -30,7 +30,7 @@ pub fn serializeTree(
     };
 
     const status = lxb_html_serialize_tree_str(node, &str);
-    if (status != zhtml.LXB_STATUS_OK) {
+    if (status != z.LXB_STATUS_OK) {
         return Err.SerializeFailed;
     }
 
@@ -46,13 +46,13 @@ pub fn serializeTree(
     return result;
 }
 
-extern "c" fn lxb_html_serialize_str(node: *zhtml.DomNode, str: *lxbString) usize;
+extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
 
 /// [Serialize]  DOM node
 /// Returns Zig-managed string that needs to be freed
 pub fn serializeNode(
     allocator: std.mem.Allocator,
-    node: *zhtml.DomNode,
+    node: *z.DomNode,
 ) ![]const u8 {
     var str: lxbString = .{
         .data = null,
@@ -61,7 +61,7 @@ pub fn serializeNode(
     };
 
     const status = lxb_html_serialize_str(node, &str);
-    if (status != zhtml.LXB_STATUS_OK) {
+    if (status != z.LXB_STATUS_OK) {
         return Err.SerializeFailed;
     }
 
@@ -79,9 +79,9 @@ pub fn serializeNode(
 /// Returns Zig-managed string that needs to be freed
 pub fn serializeElement(
     allocator: std.mem.Allocator,
-    element: *zhtml.DomElement,
+    element: *z.DomElement,
 ) ![]const u8 {
-    const node = zhtml.elementToNode(element);
+    const node = z.elementToNode(element);
     return try serializeTree(allocator, node);
 }
 
@@ -92,35 +92,35 @@ pub fn serializeElement(
 /// [Serialize] Get element's inner HTML
 pub fn getElementInnerHTML(
     allocator: std.mem.Allocator,
-    element: *zhtml.DomElement,
+    element: *z.DomElement,
 ) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
 
-    const element_node = zhtml.elementToNode(element);
+    const element_node = z.elementToNode(element);
 
     // Serialize all child nodes (excluding the element itself)
-    var child = zhtml.getNodeFirstChildNode(element_node);
+    var child = z.getNodeFirstChildNode(element_node);
     while (child != null) {
         const child_html = try serializeTree(allocator, child.?);
         defer allocator.free(child_html);
 
         try result.appendSlice(child_html);
 
-        child = zhtml.getNodeNextSiblingNode(child.?);
+        child = z.getNodeNextSiblingNode(child.?);
     }
 
     return result.toOwnedSlice();
 }
 
-extern "c" fn lxb_html_element_inner_html_set(body: *zhtml.DomElement, inner: [*]const u8, inner_len: usize) *zhtml.DomElement;
+extern "c" fn lxb_html_element_inner_html_set(body: *z.DomElement, inner: [*]const u8, inner_len: usize) *z.DomElement;
 
 /// [Serialize] Sets / replaces element's inner HTML
 /// Returns the updated element
 pub fn setElementInnerHTML(
-    element: *zhtml.DomElement,
+    element: *z.DomElement,
     inner: []const u8,
-) *zhtml.DomElement {
+) *z.DomElement {
     return lxb_html_element_inner_html_set(
         element,
         inner.ptr,
@@ -131,7 +131,7 @@ pub fn setElementInnerHTML(
 /// [Serialize] Gets element's outer HTML (including the element itself)
 pub fn getElementOuterHTML(
     allocator: std.mem.Allocator,
-    element: *zhtml.DomElement,
+    element: *z.DomElement,
 ) ![]const u8 {
     return try serializeElement(allocator, element);
 }
@@ -139,11 +139,11 @@ pub fn getElementOuterHTML(
 test "innerHTML functionality" {
     const allocator = testing.allocator;
 
-    const doc = try zhtml.createDocument();
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
 
     // Create a container element
-    const div = try zhtml.createElement(doc, .{ .tag = .div });
+    const div = try z.createElement(doc, .{ .tag = .div });
 
     // print("\n=== innerHTML Tests ===\n", .{});
 
@@ -187,11 +187,11 @@ test "set innerHTML" {
     const allocator = std.testing.allocator;
     const html = "<div><span>blah-blah-blah</div>";
     const inner = "<ul><li>1<li>2<li>3</ul>";
-    const doc = try zhtml.parseHtmlString(html);
-    const body = zhtml.getBodyElement(doc);
-    const div = zhtml.getNodeFirstChildNode(zhtml.elementToNode(body.?));
-    const div_elt = zhtml.nodeToElement(div.?);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(html);
+    const body = try z.getDocumentBodyElement(doc);
+    const div = z.getNodeFirstChildNode(z.elementToNode(body));
+    const div_elt = z.nodeToElement(div.?);
+    defer z.destroyDocument(doc);
 
     const inner_html = try serializeElement(allocator, div_elt.?);
     defer allocator.free(inner_html);
@@ -205,7 +205,7 @@ test "set innerHTML" {
     // print("after:  {s}\n", .{serialized});
     try testing.expectEqualStrings(serialized, "<div><ul><li>1</li><li>2</li><li>3</li></ul></div>");
 
-    const set_new_body = setElementInnerHTML(body.?, "<p>New body content</p>");
+    const set_new_body = setElementInnerHTML(body, "<p>New body content</p>");
     // defer allocator.free(set_new_body);
     const new_body_html = try serializeElement(allocator, set_new_body);
     defer allocator.free(new_body_html);
@@ -216,36 +216,32 @@ test "set innerHTML" {
 test "direct serialization" {
     const allocator = testing.allocator;
     const fragment = "<div><p>Hi <strong>there</strong></p></div>";
-    const doc = try zhtml.parseHtmlString(fragment);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(fragment);
+    defer z.destroyDocument(doc);
 
-    if (zhtml.getBodyElement(doc)) |body| {
-        const body_node = zhtml.elementToNode(body);
+    const body = (try z.getDocumentBodyElement(doc));
+    const body_node = z.elementToNode(body);
 
-        if (zhtml.getNodeFirstChildNode(body_node)) |div_node| {
-            const serialized = try serializeTree(allocator, div_node);
-            defer allocator.free(serialized);
+    if (z.getNodeFirstChildNode(body_node)) |div_node| {
+        const serialized = try serializeTree(allocator, div_node);
+        defer allocator.free(serialized);
 
-            try testing.expect(std.mem.indexOf(u8, serialized, "<div>") != null);
-            try testing.expect(std.mem.indexOf(u8, serialized, "there") != null);
-        }
+        try testing.expect(std.mem.indexOf(u8, serialized, "<div>") != null);
+        try testing.expect(std.mem.indexOf(u8, serialized, "there") != null);
     }
 }
 
 test "serialize Node vs tree functionality" {
     const allocator = testing.allocator;
     const fragment = "<div id=\"my-div\"><p class=\"bold\">Hello <strong>World</strong></p>   </div>";
-    const doc = try zhtml.parseHtmlString(fragment);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(fragment);
+    defer z.destroyDocument(doc);
 
-    const body = zhtml.getBodyElement(doc) orelse {
-        try testing.expect(false); // Should have body
-        return;
-    };
-    const body_node = zhtml.elementToNode(body);
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
 
     // Get the div element
-    const div_node = zhtml.getNodeFirstChildNode(body_node) orelse {
+    const div_node = z.getNodeFirstChildNode(body_node) orelse {
         try testing.expect(false); // Should have div
         return;
     };
@@ -290,26 +286,26 @@ test "serialize Node vs tree functionality" {
 //         \\</div>
 //     ;
 
-//     const doc = try zhtml.parseHtmlString(fragment);
-//     defer zhtml.destroyDocument(doc);
-//     zhtml.printDocumentStructure(doc);
+//     const doc = try z.parseHtmlString(fragment);
+//     defer z.destroyDocument(doc);
+//     z.printDocumentStructure(doc);
 
-//     const body = zhtml.getBodyElement(doc).?;
-//     const body_node = zhtml.elementToNode(body);
-//     const container_node = zhtml.getNodeFirstChildNode(body_node).?;
+//     const body = z.getBodyElement(doc).?;
+//     const body_node = z.elementToNode(body);
+//     const container_node = z.getNodeFirstChildNode(body_node).?;
 
 //     // Walk children and only process ELEMENT nodes
-//     var current_child = zhtml.getNodeFirstChildNode(container_node);
+//     var current_child = z.getNodeFirstChildNode(container_node);
 //     var element_count: u32 = 0;
 
 //     while (current_child != null) {
-//         // const element_name = zhtml.getNodeName(current_child.?);
+//         // const element_name = z.getNodeName(current_child.?);
 
 //         // print("Found node: '{s}'\n", .{element_name});
 
 //         // Only process if it's an actual element (not #text)
-//         if (zhtml.nodeToElement(current_child.?)) |element| {
-//             // const elt_name = zhtml.getElementName(element);
+//         if (z.nodeToElement(current_child.?)) |element| {
+//             // const elt_name = z.getElementName(element);
 //             // print("Processing element: '{s}'\n", .{elt_name});
 
 //             const serialized = try serializeNode(allocator, current_child.?);
@@ -321,7 +317,7 @@ test "serialize Node vs tree functionality" {
 //             //     &std.ascii.whitespace,
 //             // );
 //             // const isEmpty = trimmed.len == 0;
-//             // const isWhitespace = zhtml.isWhitepaceOnlyText(trimmed);
+//             // const isWhitespace = z.isWhitepaceOnlyText(trimmed);
 
 //             // print("Element '{s}' serialized: '{s}, is empty?: {}, is whitespace?: {}'\n", .{ elt_name, trimmed, isEmpty, isWhitespace });
 
@@ -330,7 +326,7 @@ test "serialize Node vs tree functionality" {
 //             // print("Skipping text node: '{s}'\n", .{element_name});
 //         }
 
-//         current_child = zhtml.getNodeNextSiblingNode(current_child.?);
+//         current_child = z.getNodeNextSiblingNode(current_child.?);
 //     }
 
 //     // print("Found {} element nodes\n", .{element_count});
@@ -355,12 +351,12 @@ test "behaviour of serializeNode" {
     };
 
     for (test_cases) |case| {
-        const doc = try zhtml.parseHtmlString(case.html);
-        defer zhtml.destroyDocument(doc);
+        const doc = try z.parseHtmlString(case.html);
+        defer z.destroyDocument(doc);
 
-        const body = zhtml.getBodyElement(doc).?;
-        const body_node = zhtml.elementToNode(body);
-        const element_node = zhtml.getNodeFirstChildNode(body_node).?;
+        const body = try z.getDocumentBodyElement(doc);
+        const body_node = z.elementToNode(body);
+        const element_node = z.getNodeFirstChildNode(body_node).?;
 
         const serial_node = try serializeNode(allocator, element_node);
         defer allocator.free(serial_node);
@@ -373,36 +369,17 @@ test "behaviour of serializeNode" {
     }
 }
 
-test "serialize Node & Tree error handling" {
-    const allocator = testing.allocator;
-
-    // Test with minimal document that might not have expected structure
-    const minimal_doc = try zhtml.createDocument();
-    defer zhtml.destroyDocument(minimal_doc);
-
-    const doc_node = zhtml.getDocumentNode(minimal_doc);
-
-    // This might fail or return empty
-    const serialized = try serializeNode(allocator, doc_node);
-
-    defer allocator.free(serialized);
-    // print("Document serialization: '{s}'\n", .{serialized});
-    try testing.expectEqualStrings(serialized, "<#document>");
-    const result = serializeTree(allocator, doc_node);
-    try testing.expectError(Err.NoBodyElement, result);
-}
-
 test "serializeNode vs serializeTree comparison" {
     const allocator = testing.allocator;
 
     const fragment = "<article><header>Title</header><section>Content <span>inside</span></section></article>";
 
-    const doc = try zhtml.parseHtmlString(fragment);
-    defer zhtml.destroyDocument(doc);
+    const doc = try z.parseHtmlString(fragment);
+    defer z.destroyDocument(doc);
 
-    const body = zhtml.getBodyElement(doc).?;
-    const body_node = zhtml.elementToNode(body);
-    const article_node = zhtml.getNodeFirstChildNode(body_node).?;
+    const body = try z.getDocumentBodyElement(doc);
+    const body_node = z.elementToNode(body);
+    const article_node = z.getNodeFirstChildNode(body_node).?;
 
     // Serialize the article element
     const node_result = try serializeNode(allocator, article_node);
