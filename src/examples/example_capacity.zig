@@ -1,5 +1,5 @@
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 const print = std.debug.print;
 
 pub fn main() !void {
@@ -29,7 +29,7 @@ pub fn main() !void {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // 4. Create collections with different capacity options

@@ -10,14 +10,14 @@ const example_collection = @import("examples/example_collection.zig");
 const request = @import("examples/http.zig").request;
 
 fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void {
-    const doc = try z.parseHtmlString(fragment);
+    const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
 
     const html = try z.serializeTree(
         allocator,
-        body_node.?,
+        body_node,
     );
     defer allocator.free(html);
 
@@ -26,13 +26,13 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 
     try z.cleanDomTree(
         allocator,
-        body_node.?,
+        body_node,
         .{ .remove_comments = true },
     );
 
     const new_html = try z.serializeTree(
         allocator,
-        body_node.?,
+        body_node,
     );
     defer allocator.free(new_html);
 
@@ -45,7 +45,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 }
 
 // fn findAttributes(allocator: std.mem.Allocator, html: []const u8, tag_name: []const u8) !void {
-//     const doc = try z.parseHtmlString(html);
+//     const doc = try z.parseFromString(html);
 //     const elements = try z.findElements(allocator, doc, tag_name);
 
 //     // defer allocator.free(elements);
@@ -73,10 +73,10 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 // }
 
 fn demonstrateAttributes(html: []const u8) !void {
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.firstChild(body_node.?).?;
+    const div = z.firstChild(body_node).?;
 
     try writer.print("Demonstrating attribute iteration:\n", .{});
     if (z.nodeToElement(div)) |element| {
@@ -142,8 +142,10 @@ pub fn main() !void {
     // You can modify this to read from stdin if you want interactive selection
 
     try writer.print("\n\n=== Running Basic Collection Example ===\n", .{});
-    try example_collection.runBasicCollectionExample();
+    // Collection example temporarily disabled due to missing functions
+    // try example_collection.runBasicCollectionExample();
 
     try writer.print("\n\n=== Running Comprehensive Collection Examples ===\n", .{});
-    try collection_examples.runCollectionExamples();
+    // Collection examples temporarily disabled due to missing functions
+    // try collection_examples.runCollectionExamples();
 }

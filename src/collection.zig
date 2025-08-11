@@ -244,7 +244,6 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
 
     // Traverse only element children (skip text nodes, comments, etc.)
     var child_element = z.firstElementChild(element);
-
     while (child_element) |child| {
         if (!collectElementsByTagName(child, collection, tag_name)) {
             return false;
@@ -447,7 +446,7 @@ pub fn debugPrint(collection: *z.DomCollection) void {
 
 test "collection basic operations" {
     // Create a test document
-    const doc = try z.parseHtmlString("<div><p id='test'>Hello</p><span>World</span></div>");
+    const doc = try z.parseFromString("<div><p id='test'>Hello</p><span>World</span></div>");
     defer z.destroyDocument(doc);
 
     // Create collection
@@ -467,7 +466,7 @@ test "collection basic operations" {
 test "collection with CSS selector results" {
     const allocator = testing.allocator;
 
-    const doc = try z.parseHtmlString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
+    const doc = try z.parseFromString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
     defer z.destroyDocument(doc);
 
     // Use CSS selector to populate collection
@@ -481,7 +480,7 @@ test "collection with CSS selector results" {
 test "collection iterator" {
     const allocator = testing.allocator;
 
-    const doc = try z.parseHtmlString("<div><p>1</p><p>2</p><p>3</p></div>");
+    const doc = try z.parseFromString("<div><p>1</p><p>2</p><p>3</p></div>");
     defer z.destroyDocument(doc);
 
     const elements = try z.findElements(allocator, doc, "p");
@@ -511,7 +510,7 @@ test "collection iterator" {
 //         \\</html>
 //     ;
 
-//     const doc = try z.parseHtmlString(html);
+//     const doc = try z.parseFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test finding existing elements
@@ -538,7 +537,7 @@ test "getElementsByAttribute functionality" {
         \\</div>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test finding by class
@@ -564,7 +563,7 @@ test "getElementsByAttributePair comprehensive tests" {
         \\</form>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test 1: Find by type attribute
@@ -635,7 +634,7 @@ test "comprehensive iterator tests" {
         \\</ul>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const items = try getElementsByAttributePair(
@@ -743,7 +742,7 @@ test "collection utility functions" {
         \\</div>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const buttons = try getElementsByAttributePair(
@@ -878,7 +877,7 @@ test "performance comparison: Lexbor native vs custom Zig traversal" {
         \\</div>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // print("\n=== Performance Comparison: Lexbor Native vs Custom Zig Traversal ===\n", .{});
@@ -936,7 +935,7 @@ test "elementHasAnyAttribute performance demonstration" {
         \\</div>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -997,7 +996,7 @@ test "getElementsByAttributeName performance optimization" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test that getElementsByAttributeName still works correctly with the optimization
@@ -1037,7 +1036,7 @@ test "getElementsByAttributeName functionality" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
     // try z.printDocumentStructure(doc);
 
@@ -1162,7 +1161,7 @@ test "getElementsByTagName functionality" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test 1: Find all paragraphs (note: Lexbor returns uppercase tag names)
@@ -1223,7 +1222,7 @@ test "getElementsByName functionality" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test 1: Find elements with name="gender" (radio buttons)
@@ -1271,7 +1270,7 @@ test "configurable default capacity" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test 1: Check initial default capacity
@@ -1335,7 +1334,7 @@ test "configurable default capacity usage example" {
         \\</html>
     ;
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // 4. Create collections with different capacity options

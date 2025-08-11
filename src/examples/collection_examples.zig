@@ -23,13 +23,13 @@ pub fn runCollectionExamples() !void {
     ;
 
     // Parse the HTML
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     std.debug.print("=== getElementById Examples ===\n", .{});
 
     // Example 1: Find specific elements by ID
-    if (z.getElementById(doc, "login-form")) |form| {
+    if (try z.getElementById(doc, "login-form")) |form| {
         std.debug.print("✓ Found login form: {*}\n", .{form});
     }
 

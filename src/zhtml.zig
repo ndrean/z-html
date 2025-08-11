@@ -1,14 +1,15 @@
-//! Z-HTML: Zig wrapper of the C library  lexbor, HTML parsing and manipulation library
+//! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
 // Re-export all modules
 const lxb = @import("lexbor.zig");
 const chunks = @import("chunks.zig");
 const css = @import("css_selectors.zig");
-const attributes = @import("elements_attributes.zig");
+const attrs = @import("elements_attributes.zig");
 const serialize = @import("serialize.zig");
 const collection = @import("collection.zig");
 const tag = @import("html_tags.zig");
 const Type = @import("node_types.zig");
+const tree = @import("dom_tree.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -16,10 +17,12 @@ pub const HtmlDocument = lxb.HtmlDocument;
 pub const DomNode = lxb.DomNode;
 pub const DomElement = lxb.DomElement;
 pub const DomCollection = lxb.DomCollection;
-pub const DomAttr = attributes.DomAttr;
+pub const DomAttr = attrs.DomAttr;
 pub const HtmlTag = tag.HtmlTag;
 pub const ElementTag = tag.ElementTag;
-pub const AttributePair = attributes.AttributePair;
+pub const AttributePair = attrs.AttributePair;
+pub const Comment: type = lxb.Comment;
+pub const HtmlTree = tree.HtmlTree;
 
 pub const LXB_STATUS_OK: usize = 0;
 // pub const lxb_char_t = u8;
@@ -37,7 +40,7 @@ pub const parseTag = tag.parseTag;
 // Core
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
-pub const parseHtmlString = lxb.parseHtmlString;
+pub const parseFromString = lxb.parseFromString;
 pub const createElement = lxb.createElement;
 
 // DOM access and navigation
@@ -53,16 +56,16 @@ pub const parentNode = lxb.parentNode;
 pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
 pub const parentElement = lxb.parentElement;
+
+// Node and Element name functions (both safe and unsafe versions)
 pub const getNodeName = lxb.getNodeName;
 pub const getElementName = lxb.getElementName;
-pub const removeNode = lxb.removeNode;
-
-pub const createComment = lxb.createComment;
-pub const destroyComment = lxb.destroyComment;
-pub const getCommentTextContent = lxb.getCommentTextContent;
+pub const getNodeNameOwned = lxb.getNodeNameOwned;
+pub const getElementNameOwned = lxb.getElementNameOwned;
 
 // DOM Creation and manipulation
 pub const createTextNode = lxb.createTextNode;
+pub const createComment = lxb.createComment;
 pub const createDocumentFragment = lxb.createDocumentFragment;
 // pub const insertNodeBefore = lxb.insertNodeBefore;
 // pub const insertNodeAfter = lxb.insertNodeAfter;
@@ -73,6 +76,31 @@ pub const appendFragment = lxb.appendFragment;
 // JavaScript DOM conventions for children access
 pub const childNodes = lxb.childNodes;
 pub const children = lxb.children;
+
+// DOM Traversal utilities
+pub const forEachChildNode = lxb.forEachChildNode;
+pub const forEachChildElement = lxb.forEachChildElement;
+pub const collectChildNodes = lxb.collectChildNodes;
+pub const collectChildElements = lxb.collectChildElements;
+pub const NodeCallback = lxb.NodeCallback;
+pub const ElementCallback = lxb.ElementCallback;
+
+// DOM Matcher utilities
+pub const matchesTagName = lxb.matchesTagName;
+pub const matchesAttribute = lxb.matchesAttribute;
+
+// DOM Tree representation utilities (aliased to avoid conflicts)
+pub const dom_tree = @import("dom_tree.zig");
+pub const DomTreeNode = dom_tree.HtmlNode;
+pub const DomTreeArray = dom_tree.HtmlTree;
+pub const domNodeToTree = dom_tree.domNodeToTree;
+pub const documentToTree = dom_tree.documentToTree;
+pub const fullDocumentToTree = dom_tree.fullDocumentToTree;
+pub const nodeToHtml = dom_tree.nodeToHtml;
+pub const treeToHtml = dom_tree.treeToHtml;
+pub const roundTripConversion = dom_tree.roundTripConversion;
+pub const freeDomTreeArray = dom_tree.freeHtmlTree;
+pub const freeDomTreeNode = dom_tree.freeHtmlNode;
 
 // Collection management
 pub const createCollection = collection.createCollection;
@@ -97,7 +125,6 @@ pub const getDefaultCapacity = collection.getDefaultCapacity;
 pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
 // Element search functions
-
 pub const getElementById = collection.getElementById;
 pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 pub const getElementsByClassName = collection.getElementsByClassName;
@@ -106,9 +133,17 @@ pub const getElementsByTagName = collection.getElementsByTagName;
 pub const getElementsByName = collection.getElementsByName;
 
 // DOM manipulation
+pub const removeNode = lxb.removeNode;
+pub const destroyComment = lxb.destroyComment;
 pub const destroyNode = lxb.destroyNode;
+
+// Reflexion
+pub const documentRoot = lxb.documentRoot;
 pub const isNodeEmpty = lxb.isNodeEmpty;
 pub const isSelfClosingNode = lxb.isSelfClosingNode;
+pub const isWhitepaceOnlyText = lxb.isWhitespaceOnlyText;
+pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
+pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 
 // Serialization
 pub const serializeTree = serialize.serializeTree;
@@ -117,19 +152,15 @@ pub const serializeElement = serialize.serializeElement;
 pub const cleanDomTree = lxb.cleanDomTree;
 
 // InnerHTML manipulation
-pub const getElementInnerHTML = serialize.getElementInnerHTML;
-pub const setElementInnerHTML = serialize.setElementInnerHTML;
+pub const innerHTML = serialize.innerHtml;
+pub const setInnerHTML = serialize.setInnerHtml;
 pub const getElementHTMLAsString = serialize.serializeElement;
 
 // Text content
+pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getNodeTextContentsOpts = lxb.getNodeTextContentsOpts;
 pub const setOrReplaceNodeTextData = lxb.setOrReplaceNodeTextData;
 pub const setNodeTextContent = lxb.setNodeTextContent;
-// pub const getTextContentEscaped = lxb.getTextContentEscaped;
-
-pub const isWhitepaceOnlyText = lxb.isWhitepaceOnlyText;
-pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
-pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 
 // NodeTypes
 pub const NodeType = Type.NodeType;
@@ -147,33 +178,33 @@ pub const findElements = css.findElements;
 
 // Attributes
 
-pub const elementHasAnyAttribute = attributes.elementHasAnyAttribute;
-pub const elementGetNamedAttribute = attributes.elementGetNamedAttribute;
+pub const elementHasAnyAttribute = attrs.elementHasAnyAttribute;
+pub const elementGetNamedAttribute = attrs.elementGetNamedAttribute;
 
 // JavaScript DOM conventions for attributes
-pub const getAttribute = attributes.elementGetNamedAttributeValue;
-pub const setAttribute = attributes.elementSetAttributes;
-pub const hasAttribute = attributes.elementHasNamedAttribute;
-pub const removeAttribute = attributes.elementRemoveNamedAttribute;
+pub const getAttribute = attrs.elementGetNamedAttributeValue;
+pub const setAttribute = attrs.elementSetAttributes;
+pub const hasAttribute = attrs.elementHasNamedAttribute;
+pub const removeAttribute = attrs.elementRemoveNamedAttribute;
 
 pub const getAttributeName =
-    attributes.getAttributeName;
+    attrs.getAttributeName;
 
 pub const getAttributeValue =
-    attributes.getAttributeValue;
+    attrs.getAttributeValue;
 
 pub const getElementFirstAttribute =
-    attributes.getElementFirstAttribute;
+    attrs.getElementFirstAttribute;
 
 pub const getElementNextAttribute =
-    attributes.getElementNextAttribute;
+    attrs.getElementNextAttribute;
 
-pub const getElementClass =
-    attributes.getElementClass;
+pub const classList =
+    attrs.classList;
 
-pub const getElementId = attributes.getElementId;
+pub const elementId = attrs.elementId;
 
-pub const elementCollectAttributes = attributes.elementCollectAttributes;
+pub const attributes = attrs.attributes;
 
 //-------------------------------------------------------------------------------------
 // HIGH-LEVEL CONVENIENCE FUNCTIONS

@@ -1,5 +1,5 @@
 const std = @import("std");
-const zhtml = @import("zhtml.zig");
+const zhtml = @import("../zhtml.zig");
 
 pub fn main() !void {
     const html =
@@ -8,7 +8,7 @@ pub fn main() !void {
         \\</div>
     ;
 
-    const doc = try zhtml.parseHtmlString(html);
+    const doc = try zhtml.parseFromString(html);
     defer zhtml.destroyDocument(doc);
 
     std.debug.print("Document parsed successfully\n", .{});

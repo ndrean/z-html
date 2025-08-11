@@ -20,6 +20,16 @@ pub const AttributePair = struct {
 
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_get_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value_len: *usize) ?[*]const u8;
+extern "c" fn lxb_dom_element_has_attributes(element: *z.DomElement) bool;
+extern "c" fn lxb_dom_element_remove_attribute(element: *z.DomElement, qualified_name: [*]const u8, qn_len: usize) ?*anyopaque;
+extern "c" fn lxb_dom_element_first_attribute_noi(element: *z.DomElement) ?*DomAttr;
+extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
+extern "c" fn lxb_dom_element_id_noi(element: *z.DomElement, len: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize) bool;
+extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
+extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
+extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
 /// [attributes] Get attribute value
 ///
@@ -47,7 +57,6 @@ pub fn elementGetNamedAttribute(
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize) bool;
 
 /// [attributes] Check if element has attribute
 pub fn elementHasNamedAttribute(element: *z.DomElement, name: []const u8) bool {
@@ -59,11 +68,10 @@ pub fn elementHasNamedAttribute(element: *z.DomElement, name: []const u8) bool {
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
 
 /// [attributes] Set many attributes name/value on element
-pub fn elementSetAttributes(element: *z.DomElement, attributes: []const AttributePair) !void {
-    for (attributes) |attr| {
+pub fn elementSetAttributes(element: *z.DomElement, attrs: []const AttributePair) !void {
+    for (attrs) |attr| {
         const result = lxb_dom_element_set_attribute(
             element,
             attr.name.ptr,
@@ -88,7 +96,6 @@ pub fn elementGetNamedAttributeValue(element: *z.DomElement, name: []const u8) ?
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 
 /// Get attribute name as owned string
 ///
@@ -106,7 +113,6 @@ pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
 /// [attributes] Get attribute value as owned string
 ///
@@ -123,8 +129,6 @@ pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     return result;
 }
 
-extern "c" fn lxb_dom_element_has_attributes(element: *z.DomElement) bool;
-
 pub fn elementHasAnyAttribute(element: *z.DomElement) bool {
     return lxb_dom_element_has_attributes(element);
 }
@@ -136,18 +140,18 @@ pub fn elementHasAnyAttribute(element: *z.DomElement) bool {
 /// This is equivalent to checking elementHasAnyAttribute() first.
 ///
 /// Caller needs to free the slice
-pub fn elementCollectAttributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]AttributePair {
+pub fn attributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]AttributePair {
     var attribute = getElementFirstAttribute(element);
     if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
 
-    var attributes = std.ArrayList(AttributePair).init(allocator);
-    defer attributes.deinit();
+    var attrs = std.ArrayList(AttributePair).init(allocator);
+    defer attrs.deinit();
 
     while (attribute != null) {
         const name_copy = try getAttributeName(allocator, attribute.?);
         const value_copy = try getAttributeValue(allocator, attribute.?);
 
-        try attributes.append(
+        try attrs.append(
             AttributePair{
                 .name = name_copy,
                 .value = value_copy,
@@ -157,11 +161,10 @@ pub fn elementCollectAttributes(allocator: std.mem.Allocator, element: *z.DomEle
         attribute = getElementNextAttribute(attribute.?);
     }
 
-    return attributes.toOwnedSlice();
+    return attrs.toOwnedSlice();
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_remove_attribute(element: *z.DomElement, qualified_name: [*]const u8, qn_len: usize) ?*anyopaque;
 
 /// Remove attribute from element
 ///
@@ -176,7 +179,6 @@ pub fn elementRemoveNamedAttribute(element: *z.DomElement, name: []const u8) !vo
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_first_attribute_noi(element: *z.DomElement) ?*DomAttr;
 
 /// [attributes] Get first attribute of an HTMLElement
 pub fn getElementFirstAttribute(element: *z.DomElement) ?*DomAttr {
@@ -184,7 +186,6 @@ pub fn getElementFirstAttribute(element: *z.DomElement) ?*DomAttr {
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
 
 /// Get next attribute in the list gives an attribute
 pub fn getElementNextAttribute(attr: *DomAttr) ?*DomAttr {
@@ -192,12 +193,11 @@ pub fn getElementNextAttribute(attr: *DomAttr) ?*DomAttr {
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_id_noi(element: *z.DomElement, len: *usize) [*]const u8;
 
 /// Get element ID as owned string
 ///
 /// Caller needs to free the slice
-pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn elementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
         element,
@@ -210,12 +210,11 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 }
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]const u8;
 
 /// [attributes] Get optional element class as owned string
 ///
 /// Caller needs to free the slice if not null
-pub fn getElementClass(allocator: std.mem.Allocator, element: *z.DomElement) !?[]const u8 {
+pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement) !?[]u8 {
     var class_len: usize = 0;
     const class_ptr = lxb_dom_element_class_noi(
         element,
@@ -240,19 +239,19 @@ test "element / attribute  name & value" {
     const allocator = testing.allocator;
 
     const html = "<div class='test' id='my-id' data-value='123' title='tooltip' hidden>Content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
     const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
     // Get ID attribute from an element
-    const id = try z.getElementId(allocator, div_elt);
+    const id = try elementId(allocator, div_elt);
     defer allocator.free(id);
     try testing.expectEqualStrings(id, "my-id");
 
     // Get class attribute from an element
-    const class = try z.getElementClass(allocator, div_elt);
+    const class = try z.classList(allocator, div_elt);
     defer allocator.free(class.?);
     try testing.expectEqualStrings(class.?, "test");
 
@@ -270,25 +269,25 @@ test "collect  attributes" {
     const allocator = testing.allocator;
 
     const html = "<div class='test' id='my-id' data-value='123' title='tooltip' hidden>Content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
     const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
-    const attributes = try elementCollectAttributes(allocator, div_elt);
+    const attrs = try attributes(allocator, div_elt);
     defer {
-        for (attributes) |attr| {
+        for (attrs) |attr| {
             allocator.free(attr.name);
             allocator.free(attr.value);
         }
-        allocator.free(attributes);
+        allocator.free(attrs);
     }
 
     const expected_names = [_][]const u8{ "class", "id", "data-value", "title", "hidden" };
     const expected_values = [_][]const u8{ "test", "my-id", "123", "tooltip", "" };
 
-    for (attributes, 0..) |attr_pair, i| {
+    for (attrs, 0..) |attr_pair, i| {
         _ = i; // Unused index
         // print("Attribute {}: {s} = {s}\n", .{ i, attr_pair.name, attr_pair.value });
 
@@ -309,7 +308,7 @@ test "named attribute operations" {
     const allocator = testing.allocator;
 
     const html = "<div class='container test' id='main-div' data-value='123' title='tooltip'>Content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -351,7 +350,7 @@ test "attribute modification" {
     const allocator = testing.allocator;
 
     const html = "<p>Original content</p>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
@@ -407,7 +406,7 @@ test "attribute iteration" {
     const allocator = testing.allocator;
 
     const html = "<div class='test' id='main' data-value='123' title='tooltip' hidden>Content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
@@ -443,7 +442,7 @@ test "ID and CLASS attribute getters" {
     const allocator = testing.allocator;
 
     const html = "<section class='main-section' id='content'>Section content</section>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
@@ -451,12 +450,12 @@ test "ID and CLASS attribute getters" {
     const section_element = z.nodeToElement(section_node.?).?;
 
     // Test ID getter
-    const id = try getElementId(allocator, section_element);
+    const id = try elementId(allocator, section_element);
     defer allocator.free(id);
     try testing.expectEqualStrings("content", id);
 
     // Test class getter
-    const class = try getElementClass(allocator, section_element);
+    const class = try classList(allocator, section_element);
     defer allocator.free(class.?);
     try testing.expectEqualStrings("main-section", class.?);
 
@@ -467,7 +466,7 @@ test "attribute edge cases" {
     const allocator = testing.allocator;
 
     const html = "<div data-empty='' title='  spaces  '>Content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -517,7 +516,7 @@ test "attribute edge cases" {
 
 test "elementHasNamedAttribute - isolated test" {
     const html = "<div id='test-div' class='example'>Simple content</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -551,7 +550,7 @@ test "attribute error handling" {
     const allocator = testing.allocator;
 
     const html = "<div>Test</div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);

@@ -55,7 +55,6 @@ pub const ChunkParser = struct {
     }
 
     pub fn processChunk(self: *ChunkParser, html_chunk: []const u8) !void {
-        // print("chunk: {s}\n", .{html_chunk});
         if (!self.parsing_active) {
             return err.ChunkProcessFailed;
         }
@@ -63,7 +62,11 @@ pub const ChunkParser = struct {
         const html_ptr = try self.allocator.dupeZ(u8, html_chunk);
         defer self.allocator.free(html_ptr);
 
-        if (lxb_html_document_parse_chunk(self.doc, html_ptr, html_chunk.len) != 0) {
+        if (lxb_html_document_parse_chunk(
+            self.doc,
+            html_ptr,
+            html_chunk.len,
+        ) != 0) {
             return err.ChunkProcessFailed;
         }
     }
@@ -84,10 +87,7 @@ pub const ChunkParser = struct {
     }
 
     pub fn getHtmlDocument(self: *ChunkParser) z.HtmlDocument {
-        return .{
-            .doc = self.doc,
-            // .allocator = self.allocator,
-        };
+        return .{ .doc = self.doc };
     }
 };
 
@@ -95,13 +95,16 @@ test "chunks1" {
     const allocator = testing.allocator;
     var chunk_parser = try ChunkParser.init(allocator);
     defer chunk_parser.deinit();
+
     try chunk_parser.beginParsing();
-    try chunk_parser.processChunk("<html><head><title>");
-    try chunk_parser.processChunk("My Page</");
-    try chunk_parser.processChunk("title></head><body>");
-    try chunk_parser.processChunk("<h1>Hello</h1>");
-    try chunk_parser.processChunk("<p>World!</p>");
-    try chunk_parser.processChunk("</body></html>");
+
+    try chunk_parser.processChunk("<html><head><title");
+    try chunk_parser.processChunk(">My Page</");
+    try chunk_parser.processChunk("title></head>");
+    try chunk_parser.processChunk("<body><h1>Hello</h1>");
+    try chunk_parser.processChunk("<p>World!<");
+    try chunk_parser.processChunk("/p></body></html>");
+
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
@@ -111,6 +114,7 @@ test "chunks1" {
         body,
     );
     defer allocator.free(children);
+
     try testing.expect(children.len > 0);
     try testing.expectEqualStrings(
         z.getElementName(children[0]),
@@ -126,6 +130,7 @@ test "chunks1" {
         z.elementToNode(body),
     );
     defer allocator.free(html);
+
     try testing.expectEqualStrings(
         html,
         "<body><h1>Hello</h1><p>World!</p></body>",
@@ -143,7 +148,15 @@ test "chunk parsing comprehensive" {
     try chunk_parser.beginParsing();
 
     // Parse HTML in chunks (simulating streaming)
-    const chunks = [_][]const u8{ "<html><head><title", ">My Page<", "/title></head><body>", "<h1>Hello", "</h1><p>World!</p>", "<span>Nested</span></", "div></body></html>" };
+    const chunks = [_][]const u8{
+        "<html><head><title",
+        ">My Page<",
+        "/title></head><body>",
+        "<h1>Hello",
+        "</h1><p>World!</p>",
+        "<span>Nested</span></",
+        "div></body></html>",
+    };
 
     for (chunks) |chunk| {
         try chunk_parser.processChunk(chunk);
@@ -151,38 +164,54 @@ test "chunk parsing comprehensive" {
 
     try chunk_parser.endParsing();
 
-    // Verify the parsed structure
     const doc = chunk_parser.getDocument();
-
-    // z.printDocumentStructure(doc);
-
     const body = try z.getDocumentBodyElement(doc);
 
-    const children = try z.children(allocator, body);
+    const children = try z.children(
+        allocator,
+        body,
+    );
     defer allocator.free(children);
 
     try testing.expect(children.len == 3); // h1, p, div
 
     // Check element names
-    try testing.expectEqualStrings(z.getElementName(children[0]), "H1");
-    try testing.expectEqualStrings(z.getElementName(children[1]), "P");
+    try testing.expectEqualStrings(
+        z.getElementName(children[0]),
+        "H1",
+    );
+    try testing.expectEqualStrings(
+        z.getElementName(children[1]),
+        "P",
+    );
 
-    try testing.expectEqualStrings(z.getElementName(children[2]), "SPAN");
+    try testing.expectEqualStrings(
+        z.getElementName(children[2]),
+        "SPAN",
+    );
 
     // Test serialization
-    const html = try z.serializeTree(allocator, z.elementToNode(body));
+    const html = try z.serializeTree(
+        allocator,
+        z.elementToNode(body),
+    );
     defer allocator.free(html);
 
-    // print("Serialized: {s}\n", .{html});
     try testing.expectEqualStrings(
         html,
         "<body><h1>Hello</h1><p>World!</p><span>Nested</span></body>",
     );
 
     // Should contain all elements
-    try testing.expect(std.mem.indexOf(u8, html, "<h1>Hello</h1>") != null);
-    try testing.expect(std.mem.indexOf(u8, html, "<p>World!</p>") != null);
-    try testing.expect(std.mem.indexOf(u8, html, "<span>Nested</span>") != null);
+    try testing.expect(
+        std.mem.indexOf(u8, html, "<h1>Hello</h1>") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, html, "<p>World!</p>") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, html, "<span>Nested</span>") != null,
+    );
 }
 
 test "chunk parsing error handling" {

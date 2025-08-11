@@ -4,8 +4,8 @@
 
 const std = @import("std");
 const z = @import("zhtml.zig");
-
 const Err = @import("errors.zig").LexborError;
+
 const testing = std.testing;
 const print = std.debug.print;
 
@@ -16,14 +16,13 @@ pub const lxbString = extern struct {
 };
 
 extern "c" fn lxb_html_serialize_tree_str(node: *z.DomNode, str: *lxbString) usize;
+extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
+extern "c" fn lxb_html_element_inner_html_set(body: *z.DomElement, inner: [*]const u8, inner_len: usize) *z.DomElement;
 
-/// [Serialize] Serialize node tree (most common use case)
+/// [Serialize] Serialize node tree (most common use case).
 ///
-/// Caller needs to free the returned string
-pub fn serializeTree(
-    allocator: std.mem.Allocator,
-    node: *z.DomNode,
-) ![]u8 {
+/// Caller needs to free the returned slice.
+pub fn serializeTree(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var str: lxbString = .{
         .data = null,
         .length = 0,
@@ -39,23 +38,18 @@ pub fn serializeTree(
         return Err.NoBodyElement;
     }
 
-    // Copy to Zig-managed memory
+    // to Zig-managed memory
     const result = try allocator.alloc(u8, str.length);
     @memcpy(result, str.data.?[0..str.length]);
 
-    // Note: We don't free str.data - lexbor manages it internally
+    // Note: We don't free str.data - lexbor manages it internally?
     return result;
 }
 
-extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
-
 /// [Serialize] DOM node
 ///
-/// Caller needs to free the returned string
-pub fn serializeNode(
-    allocator: std.mem.Allocator,
-    node: *z.DomNode,
-) ![]const u8 {
+/// Caller needs to free the returned slice.
+pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var str: lxbString = .{
         .data = null,
         .length = 0,
@@ -79,11 +73,8 @@ pub fn serializeNode(
 
 /// [Serialize] HTMLElement
 ///
-/// Caller needs to free the returned string
-pub fn serializeElement(
-    allocator: std.mem.Allocator,
-    element: *z.DomElement,
-) ![]const u8 {
+/// Caller needs to free the returned slice.
+pub fn serializeElement(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     const node = z.elementToNode(element);
     return try serializeTree(allocator, node);
 }
@@ -94,11 +85,8 @@ pub fn serializeElement(
 
 /// [Serialize] Get element's inner HTML
 ///
-/// Caller needs to free the returned string
-pub fn getElementInnerHTML(
-    allocator: std.mem.Allocator,
-    element: *z.DomElement,
-) ![]u8 {
+/// Caller needs to free the returned slice
+pub fn innerHtml(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
 
@@ -118,14 +106,10 @@ pub fn getElementInnerHTML(
     return result.toOwnedSlice();
 }
 
-extern "c" fn lxb_html_element_inner_html_set(body: *z.DomElement, inner: [*]const u8, inner_len: usize) *z.DomElement;
-
-/// [Serialize] Sets / replaces element's inner HTML
+/// [Serialize] Sets / replaces element's inner HTML.
+///
 /// Returns the updated element
-pub fn setElementInnerHTML(
-    element: *z.DomElement,
-    inner: []const u8,
-) *z.DomElement {
+pub fn setInnerHtml(element: *z.DomElement, inner: []const u8) *z.DomElement {
     return lxb_html_element_inner_html_set(
         element,
         inner.ptr,
@@ -135,11 +119,8 @@ pub fn setElementInnerHTML(
 
 /// [Serialize] Gets element's outer HTML (including the element itself)
 ///
-/// Caller needs to free the returned string
-pub fn getElementOuterHTML(
-    allocator: std.mem.Allocator,
-    element: *z.DomElement,
-) ![]const u8 {
+/// Caller needs to free the returned slice
+pub fn getElementOuterHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     return try serializeElement(allocator, element);
 }
 
@@ -150,80 +131,106 @@ test "innerHTML functionality" {
     defer z.destroyDocument(doc);
 
     // Create a container element
-    const div = try z.createElement(doc, "div", &.{});
+    const div = try z.createElement(
+        doc,
+        "div",
+        &.{},
+    );
 
-    // print("\n=== innerHTML Tests ===\n", .{});
-
-    // Test 1: Set simple inner HTML
-    _ = setElementInnerHTML(div, "<p>Hello World</p>");
-
-    const inner1 = try getElementInnerHTML(allocator, div);
+    // test 1 --------------
+    _ = setInnerHtml(div, "<p>Hello World</p>");
+    const inner1 = try innerHtml(allocator, div);
     defer allocator.free(inner1);
-    // print("Inner HTML 1: {s}\n", .{inner1});
-    try testing.expect(std.mem.indexOf(u8, inner1, "<p>Hello World</p>") != null);
 
-    // Test 2: Set complex inner HTML
+    try testing.expect(
+        std.mem.indexOf(u8, inner1, "<p>Hello World</p>") != null,
+    );
+
     const complex_html =
         \\<h1>Title</h1>
         \\<p class="intro">Introduction paragraph</p>
         \\<ul>
+        \\
         \\  <li>Item 1</li>
         \\  <li>Item 2</li>
         \\</ul>
     ;
 
-    _ = setElementInnerHTML(div, complex_html);
+    // test 2 --------------
+    _ = setInnerHtml(div, complex_html);
 
-    const inner2 = try getElementInnerHTML(allocator, div);
+    const inner2 = try innerHtml(allocator, div);
     defer allocator.free(inner2);
-    // print("Inner HTML 2: {s}\n", .{inner2});
-    try testing.expect(std.mem.indexOf(u8, inner2, "<h1>Title</h1>") != null);
-    try testing.expect(std.mem.indexOf(u8, inner2, "<ul>") != null);
 
-    // Test 3: Get outer HTML (includes the div itself)
+    try testing.expect(
+        std.mem.indexOf(u8, inner2, "<h1>Title") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, inner2, "<ul>") != null,
+    );
+    // removed old inner HTML
+    try testing.expect(
+        std.mem.indexOf(u8, inner2, "<p>Hello World</p>") == null,
+    );
+
+    // Test 3: Get outer HTML (includes the div itself) --------------
     const outer = try getElementOuterHTML(allocator, div);
     defer allocator.free(outer);
-    // print("Outer HTML: {s}\n", .{outer});
-    try testing.expect(std.mem.indexOf(u8, outer, "<div>") != null);
-    try testing.expect(std.mem.indexOf(u8, outer, "</div>") != null);
 
-    // print("✅ innerHTML tests passed!\n", .{});
+    try testing.expect(
+        std.mem.indexOf(u8, outer, "<div>") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, outer, "</div>") != null,
+    );
+
+    // const txt = try serializeElement(allocator, div);
+    // defer allocator.free(txt);
 }
 
 test "set innerHTML" {
     const allocator = std.testing.allocator;
     const html = "<div><span>blah-blah-blah</div>";
     const inner = "<ul><li>1<li>2<li>3</ul>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     const body = try z.getDocumentBodyElement(doc);
-    const div = z.firstChild(z.elementToNode(body));
-    const div_elt = z.nodeToElement(div.?);
+    const div_elt = z.firstElementChild(body);
     defer z.destroyDocument(doc);
 
     const inner_html = try serializeElement(allocator, div_elt.?);
     defer allocator.free(inner_html);
-    // print("inner: {s}\n", .{inner_html});
-    try testing.expectEqualStrings(inner_html, "<div><span>blah-blah-blah</span></div>");
 
-    const element = setElementInnerHTML(div_elt.?, inner);
+    try testing.expectEqualStrings(
+        inner_html,
+        "<div><span>blah-blah-blah</span></div>",
+    );
 
+    const element = setInnerHtml(div_elt.?, inner);
     const serialized = try serializeElement(allocator, element);
     defer allocator.free(serialized);
-    // print("after:  {s}\n", .{serialized});
-    try testing.expectEqualStrings(serialized, "<div><ul><li>1</li><li>2</li><li>3</li></ul></div>");
 
-    const set_new_body = setElementInnerHTML(body, "<p>New body content</p>");
-    // defer allocator.free(set_new_body);
+    try testing.expectEqualStrings(
+        serialized,
+        "<div><ul><li>1</li><li>2</li><li>3</li></ul></div>",
+    );
+
+    const set_new_body = setInnerHtml(
+        body,
+        "<p>New body content</p>",
+    );
     const new_body_html = try serializeElement(allocator, set_new_body);
     defer allocator.free(new_body_html);
-    // print("new body: {s}\n", .{new_body_html});
-    try testing.expectEqualStrings(new_body_html, "<body><p>New body content</p></body>");
+
+    try testing.expectEqualStrings(
+        new_body_html,
+        "<body><p>New body content</p></body>",
+    );
 }
 
 test "direct serialization" {
     const allocator = testing.allocator;
     const fragment = "<div><p>Hi <strong>there</strong></p></div>";
-    const doc = try z.parseHtmlString(fragment);
+    const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
@@ -232,15 +239,19 @@ test "direct serialization" {
         const serialized = try serializeTree(allocator, div_node);
         defer allocator.free(serialized);
 
-        try testing.expect(std.mem.indexOf(u8, serialized, "<div>") != null);
-        try testing.expect(std.mem.indexOf(u8, serialized, "there") != null);
+        try testing.expect(
+            std.mem.indexOf(u8, serialized, "<div>") != null,
+        );
+        try testing.expect(
+            std.mem.indexOf(u8, serialized, "there") != null,
+        );
     }
 }
 
 test "serialize Node vs tree functionality" {
     const allocator = testing.allocator;
     const fragment = "<div id=\"my-div\"><p class=\"bold\">Hello <strong>World</strong></p>   </div>";
-    const doc = try z.parseHtmlString(fragment);
+    const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -261,20 +272,33 @@ test "serialize Node vs tree functionality" {
         div_node,
     );
     defer allocator.free(tree_html);
-    // print("{s}\n", .{node_html});
-    // print("{s}\n", .{tree_html});
 
     // Both should contain the div tag
-    try testing.expect(std.mem.indexOf(u8, node_html, "div") != null);
-    try testing.expect(std.mem.indexOf(u8, tree_html, "div") != null);
+    try testing.expect(
+        std.mem.indexOf(u8, node_html, "div") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, tree_html, "div") != null,
+    );
 
     // Node_html contains only "<div id='my-div'>"
-    try testing.expect(std.mem.indexOf(u8, node_html, "<p>") == null);
-    try testing.expectEqualStrings("<div id=\"my-div\">", node_html);
+    try testing.expect(
+        std.mem.indexOf(u8, node_html, "<p>") == null,
+    );
+    try testing.expectEqualStrings(
+        "<div id=\"my-div\">",
+        node_html,
+    );
     // Tree should definitely contain all content
-    try testing.expect(std.mem.indexOf(u8, tree_html, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, tree_html, "<strong>World</strong>") != null);
-    try testing.expect(std.mem.indexOf(u8, tree_html, "class=\"bold\"") != null);
+    try testing.expect(
+        std.mem.indexOf(u8, tree_html, "Hello") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, tree_html, "<strong>World</strong>") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, tree_html, "class=\"bold\"") != null,
+    );
 }
 
 // test "serializeNode on elements only" {
@@ -292,7 +316,7 @@ test "serialize Node vs tree functionality" {
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseHtmlString(fragment);
+//     const doc = try z.parseFromString(fragment);
 //     defer z.destroyDocument(doc);
 //     z.printDocumentStructure(doc);
 
@@ -349,15 +373,35 @@ test "behaviour of serializeNode" {
         serialized_tree: []const u8,
     }{
         // self-closing tags
-        .{ .html = "<br/>", .serialized_node = "<br>", .serialized_tree = "<br>" },
-        .{ .html = "<img src=\"my-image\"/>", .serialized_node = "<img src=\"my-image\">", .serialized_tree = "<img src=\"my-image\">" },
-        .{ .html = "<p><span></span></p>", .serialized_node = "<p>", .serialized_tree = "<p><span></span></p>" },
-        .{ .html = "<p></p>", .serialized_node = "<p>", .serialized_tree = "<p></p>" },
-        .{ .html = "<div data-id=\"myid\" class=\"test\">Simple text</div>", .serialized_node = "<div data-id=\"myid\" class=\"test\">", .serialized_tree = "<div data-id=\"myid\" class=\"test\">Simple text</div>" },
+        .{
+            .html = "<br/>",
+            .serialized_node = "<br>",
+            .serialized_tree = "<br>",
+        },
+        .{
+            .html = "<img src=\"my-image\"/>",
+            .serialized_node = "<img src=\"my-image\">",
+            .serialized_tree = "<img src=\"my-image\">",
+        },
+        .{
+            .html = "<p><span></span></p>",
+            .serialized_node = "<p>",
+            .serialized_tree = "<p><span></span></p>",
+        },
+        .{
+            .html = "<p></p>",
+            .serialized_node = "<p>",
+            .serialized_tree = "<p></p>",
+        },
+        .{
+            .html = "<div data-id=\"myid\" class=\"test\">Simple text</div>",
+            .serialized_node = "<div data-id=\"myid\" class=\"test\">",
+            .serialized_tree = "<div data-id=\"myid\" class=\"test\">Simple text</div>",
+        },
     };
 
     for (test_cases) |case| {
-        const doc = try z.parseHtmlString(case.html);
+        const doc = try z.parseFromString(case.html);
         defer z.destroyDocument(doc);
 
         const body = try z.getDocumentBodyElement(doc);
@@ -380,7 +424,7 @@ test "serializeNode vs serializeTree comparison" {
 
     const fragment = "<article><header>Title</header><section>Content <span>inside</span></section></article>";
 
-    const doc = try z.parseHtmlString(fragment);
+    const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);

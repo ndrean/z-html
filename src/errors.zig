@@ -33,4 +33,5 @@ pub const LexborError = error{
     SetAttributeValueFailed,
     NotTextNode,
     CssSelectorMatchFailed,
+    InvalidNodeType,
 };

@@ -38,13 +38,13 @@ pub fn runBasicCollectionExample() !void {
     ;
 
     // Parse the HTML
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     print("=== getElementById Examples ===\n", .{});
 
     // Example 1: Find element by ID
-    if (z.getElementById(doc, "title")) |title_element| {
+    if (try z.getElementById(doc, "title")) |title_element| {
         print("✓ Found title element: {*}\n", .{title_element});
     } else {
         print("✗ Title element not found\n", .{});
@@ -59,7 +59,7 @@ pub fn runBasicCollectionExample() !void {
     }
 
     // Example 3: Try to find non-existent element
-    if (z.getElementById(doc, "nonexistent")) |_| {
+    if (try z.getElementById(doc, "nonexistent")) |_| {
         print("✗ This should not happen\n", .{});
     } else {
         print("✓ Correctly returned null for non-existent ID\n", .{});
@@ -82,7 +82,7 @@ pub fn runBasicCollectionExample() !void {
     }
 
     // Example 5: Get document element
-    if (z.getDocumentElement(doc)) |root_element| {
+    if (try z.getDocumentElement(doc)) |root_element| {
         print("✓ Found document root element: {*}\n", .{root_element});
     } else {
         print("✗ Could not get document root element\n", .{});

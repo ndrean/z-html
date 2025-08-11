@@ -341,7 +341,7 @@ test "CSS selector basic functionality" {
 
     // Create HTML document
     const html = "<div><p class='highlight'>Hello</p><p id='my-id'>World</p><span class='highlight'>Test</span></div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     // Test class selector
@@ -367,7 +367,7 @@ test "CSS selector engine reuse" {
     const allocator = testing.allocator;
 
     const html = "<article><h1>Title</h1><p>Para 1</p><p>Para 2</p><footer>End</footer></article>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -400,7 +400,7 @@ test "challenging CSS selectors - lexbor example" {
 
     // Exact HTML from lexbor example
     const html = "<div><p class='x z'> </p><p id='y'>abc</p></div>";
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
@@ -486,7 +486,7 @@ test "CSS selector edge cases" {
         _ = i;
         // print("\nTest case {}: {s}\n", .{ i + 1, test_case.description });
 
-        const doc = try z.parseHtmlString(test_case.html);
+        const doc = try z.parseFromString(test_case.html);
         defer z.destroyDocument(doc);
 
         const body = try z.getDocumentBodyElement(doc);
@@ -507,7 +507,7 @@ test "debug what classes lexbor sees" {
     const html =
         "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const collection = z.createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
@@ -516,7 +516,7 @@ test "debug what classes lexbor sees" {
     const body_node = try z.getDocumentBodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const container_div_element = z.nodeToElement(container_div);
-    const class = try z.getElementClass(
+    const class = try z.classList(
         allocator,
         container_div_element.?,
     );
@@ -577,7 +577,7 @@ test "CSS selector matchNode vs find vs matches" {
     const html =
         "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
@@ -653,7 +653,7 @@ test "query vs filter behavior" {
 
     const html = "<div class='container'><div class='box'>Content</div><p class='text'>Para</p><p>Para2</p></div>";
 
-    const doc = try z.parseHtmlString(html);
+    const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);

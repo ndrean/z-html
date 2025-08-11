@@ -61,7 +61,7 @@ It imports all the submodules and run the tests.
 const z = @import("zhtml.zig");
 const allocator = std.heap.c_allocator;
 
-const doc = try z.parseHtmlString("<p>Hello <strong>world</strong></p>");
+const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
 defer z.destryoDocument(doc);
 
 z.printDocumentStructure(doc);
@@ -115,7 +115,7 @@ const fragment =
 ;
 
 
-const doc = try z.parseHtmlString(fragment);
+const doc = try z.parseFromString(fragment);
 defer z.destroyDocument(doc);
 
 try z.cleanDomTree(
