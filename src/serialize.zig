@@ -105,14 +105,14 @@ pub fn getElementInnerHTML(
     const element_node = z.elementToNode(element);
 
     // Serialize all child nodes (excluding the element itself)
-    var child = z.getNodeFirstChild(element_node);
+    var child = z.firstChild(element_node);
     while (child != null) {
         const child_html = try serializeTree(allocator, child.?);
         defer allocator.free(child_html);
 
         try result.appendSlice(child_html);
 
-        child = z.getNodeNextSibling(child.?);
+        child = z.nextSibling(child.?);
     }
 
     return result.toOwnedSlice();
@@ -150,7 +150,7 @@ test "innerHTML functionality" {
     defer z.destroyDocument(doc);
 
     // Create a container element
-    const div = try z.createElement(doc, .{ .tag = .div });
+    const div = try z.createElement(doc, "div", &.{});
 
     // print("\n=== innerHTML Tests ===\n", .{});
 
@@ -196,7 +196,7 @@ test "set innerHTML" {
     const inner = "<ul><li>1<li>2<li>3</ul>";
     const doc = try z.parseHtmlString(html);
     const body = try z.getDocumentBodyElement(doc);
-    const div = z.getNodeFirstChild(z.elementToNode(body));
+    const div = z.firstChild(z.elementToNode(body));
     const div_elt = z.nodeToElement(div.?);
     defer z.destroyDocument(doc);
 
@@ -226,10 +226,9 @@ test "direct serialization" {
     const doc = try z.parseHtmlString(fragment);
     defer z.destroyDocument(doc);
 
-    const body = (try z.getDocumentBodyElement(doc));
-    const body_node = z.elementToNode(body);
+    const body_node = try z.getDocumentBodyNode(doc);
 
-    if (z.getNodeFirstChild(body_node)) |div_node| {
+    if (z.firstChild(body_node)) |div_node| {
         const serialized = try serializeTree(allocator, div_node);
         defer allocator.free(serialized);
 
@@ -248,7 +247,7 @@ test "serialize Node vs tree functionality" {
     const body_node = z.elementToNode(body);
 
     // Get the div element
-    const div_node = z.getNodeFirstChild(body_node) orelse {
+    const div_node = z.firstChild(body_node) orelse {
         try testing.expect(false); // Should have div
         return;
     };
@@ -299,10 +298,10 @@ test "serialize Node vs tree functionality" {
 
 //     const body = z.getBodyElement(doc).?;
 //     const body_node = z.elementToNode(body);
-//     const container_node = z.getNodeFirstChild(body_node).?;
+//     const container_node = z.firstChild(body_node).?;
 
 //     // Walk children and only process ELEMENT nodes
-//     var current_child = z.getNodeFirstChild(container_node);
+//     var current_child = z.firstChild(container_node);
 //     var element_count: u32 = 0;
 
 //     while (current_child != null) {
@@ -363,7 +362,7 @@ test "behaviour of serializeNode" {
 
         const body = try z.getDocumentBodyElement(doc);
         const body_node = z.elementToNode(body);
-        const element_node = z.getNodeFirstChild(body_node).?;
+        const element_node = z.firstChild(body_node).?;
 
         const serial_node = try serializeNode(allocator, element_node);
         defer allocator.free(serial_node);
@@ -386,7 +385,7 @@ test "serializeNode vs serializeTree comparison" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const article_node = z.getNodeFirstChild(body_node).?;
+    const article_node = z.firstChild(body_node).?;
 
     // Serialize the article element
     const node_result = try serializeNode(allocator, article_node);

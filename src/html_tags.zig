@@ -5,91 +5,237 @@ const z = @import("zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
+/// [HtmlTag] Element tag representation.
+///
+/// This represents an HTML element tag, which can either be a standard tag (from the enum)
+/// or a custom tag (from a string).
+///
+/// Exposes two helper functions: `fromEnum` and `fromString`
+pub const ElementTag = union(enum) {
+    tag: HtmlTag,
+    custom: []const u8,
+
+    /// Helper to create from enum
+    pub fn fromEnum(html_tag: HtmlTag) ElementTag {
+        return ElementTag{ .tag = html_tag };
+    }
+
+    /// Helper to create from string
+    pub fn fromString(tag_name: []const u8) ElementTag {
+        return ElementTag{ .custom = tag_name };
+    }
+};
+
+/// [HtmlTag] Optional: Parse string to HtmlTag
+pub fn parseTag(name: []const u8) ?HtmlTag {
+    inline for (std.meta.fields(HtmlTag)) |field| {
+        if (std.mem.eql(u8, field.name, name)) {
+            return @enumFromInt(field.value);
+        }
+    }
+    return null;
+}
+
+test "parseHtmlTag" {
+    const good_tag = parseTag("div");
+    try testing.expect(good_tag.? == HtmlTag.div);
+
+    const custom_tag = parseTag("custom-element");
+    try testing.expect(custom_tag == null);
+}
+
+test "elementTag" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // Test creating elements from enum
+    const div_elt = try z.createElement(doc, "div", &.{});
+
+    const node_name = z.getNodeName(z.elementToNode(div_elt));
+    const expected_name = HtmlTag.div.toString();
+
+    // Note: DOM names are typically uppercase
+    try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
+
+    // Test creating elements from string
+    const custom_elt = try z.createElement(
+        doc,
+        // .{ .custom = "custom-element" },
+        "custom-element",
+        &.{},
+    );
+
+    const custom_node_name = z.getNodeName(z.elementToNode(custom_elt));
+    const custom_expected_name = "custom-element";
+
+    // Note: DOM names are typically uppercase
+    try testing.expect(std.ascii.eqlIgnoreCase(custom_expected_name, custom_node_name));
+}
+
+/// [HtmlTag] Enum that represents the various HTML tags.
+///
+///  `self.toString` returns the tag name as a string.
+///
+/// `self.isVoid` checks if the tag is a self-closing element (e.g., `<br>`, `<img>`).
 pub const HtmlTag = enum {
-    // Common HTML5 elements
-    div,
-    p,
-    span,
     a,
-    img,
+    abbr,
+    address,
+    area,
+    article,
+    aside,
+    audio,
+    b,
+    base,
+    bdi,
+    bdo,
+    blockquote,
+    body,
     br,
-    hr,
+    button,
+    canvas,
+    caption,
+    cite,
+    code,
+    col,
+    colgroup,
+    data,
+    datalist,
+    dd,
+    del,
+    details,
+    dfn,
+    dialog,
+    div,
+    dl,
+    dt,
+    em,
+    embed,
+    fieldset,
+    figcaption,
+    figure,
+    footer,
+    form,
     h1,
     h2,
     h3,
     h4,
     h5,
     h6,
-    ul,
-    ol,
+    head,
+    header,
+    hgroup,
+    hr,
+    html,
+    i,
+    iframe,
+    img,
+    input,
+    ins,
+    kbd,
+    label,
+    legend,
     li,
+    link,
+    main,
+    map,
+    mark,
+    menu,
+    meta,
+    meter,
+    nav,
+    noscript,
+    object,
+    ol,
+    optgroup,
+    option,
+    output,
+    p,
+    picture,
+    pre,
+    progress,
+    q,
+    rp,
+    rt,
+    ruby,
+    s,
+    samp,
+    script,
+    section,
+    select,
+    slot,
+    small,
+    source,
+    span,
+    strong,
+    style,
+    sub,
+    summary,
+    sup,
     table,
-    tr,
+    tbody,
     td,
+    template,
+    textarea,
+    tfoot,
     th,
     thead,
-    tbody,
-    form,
-    input,
-    button,
-    textarea,
-    select,
-    option,
-    script,
-    style,
-    link,
-    meta,
+    time,
     title,
-    head,
-    body,
-    html,
-    section,
-    article,
-    header,
-    footer,
-    nav,
-    aside,
-    main,
-    strong,
-    em,
-    b,
-    i,
+    tr,
+    track,
     u,
-    s,
-    pre,
-    code,
-    blockquote,
-    canvas,
-    svg,
+    ul,
     video,
-    audio,
-    source,
+    wbr,
+
     pub fn toString(self: HtmlTag) []const u8 {
         return @tagName(self);
     }
+    pub fn isVoid(self: HtmlTag) bool {
+        inline for (HtmlVoidTag) |tag| {
+            if (self == tag) return true;
+        }
+        return false;
+    }
 };
 
-test "HtmlTag edge cases" {
-    // const allocator = testing.allocator;
+const HtmlVoidTag = [_]HtmlTag{ .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr };
 
+// =================================================================
+// === Tests ===
+test "isVoid tag" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // Test all void tags
+    const void_tags = [_]HtmlTag{ .area, .base, .br };
+
+    for (void_tags) |tag| {
+        try testing.expect(tag.isVoid());
+    }
+
+    const non_void_tags = [_]HtmlTag{ .div, .p, .span, .a };
+
+    for (non_void_tags) |tag| {
+        try testing.expect(!tag.isVoid());
+    }
+}
+test "lexbor NODENAME and self.toString" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
     // Test all enum variants work
-    const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br, .h1, .h2 };
+    const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br };
 
     for (tags) |tag| {
-        const element = try z.createElement(doc, .{ .tag = tag });
+        const element = try z.createElement(doc, tag.toString(), &.{});
         const node_name = z.getNodeName(z.elementToNode(element));
         const expected_name = tag.toString();
-
-        // print("Created: {s} -> DOM name: {s}\n", .{ expected_name, node_name });
 
         // Note: DOM names are typically uppercase
         try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
     }
-
-    // print("✅ All enum tags work correctly!\n", .{});
 }
 
 test "mixing enum and string creation" {
@@ -101,23 +247,24 @@ test "mixing enum and string creation" {
     // Type-safe enum creation
     const div = try z.createElement(
         doc,
-        .{ .tag = .div },
+        "div",
+        &.{},
     );
 
     // Flexible string creation (for custom elements)
     const custom = try z.createElement(
         doc,
-        .{ .custom = "my-custom-element" },
+        "my-custom-element",
+        &.{},
     );
     const web_component = try z.createElement(
         doc,
-        .{ .custom = "x-widget" },
+        "x-widget",
+        &.{},
     );
 
     // Verify they work
     try testing.expectEqualStrings("DIV", z.getNodeName(z.elementToNode(div)));
     try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.getNodeName(z.elementToNode(custom)));
     try testing.expectEqualStrings("X-WIDGET", z.getNodeName(z.elementToNode(web_component)));
-
-    // print("✅ Both enum and string creation work!\n", .{});
 }

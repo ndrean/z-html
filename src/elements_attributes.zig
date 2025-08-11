@@ -212,7 +212,7 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 // ----------------------------------------------------------
 extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]const u8;
 
-/// [attributes] Get element class as owned string
+/// [attributes] Get optional element class as owned string
 ///
 /// Caller needs to free the slice if not null
 pub fn getElementClass(allocator: std.mem.Allocator, element: *z.DomElement) !?[]const u8 {
@@ -243,7 +243,7 @@ test "element / attribute  name & value" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.getNodeFirstChild(body_node).?;
+    const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
     // Get ID attribute from an element
@@ -273,7 +273,7 @@ test "collect  attributes" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.getNodeFirstChild(body_node).?;
+    const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
     const attributes = try elementCollectAttributes(allocator, div_elt);
@@ -314,14 +314,14 @@ test "named attribute operations" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChild(body_node).?;
+    const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // Test hasAttribute
-    try testing.expect(elementHasNamedAttribute(div_element, "class"));
-    try testing.expect(elementHasNamedAttribute(div_element, "id"));
-    try testing.expect(elementHasNamedAttribute(div_element, "data-value"));
-    try testing.expect(!elementHasNamedAttribute(div_element, "nonexistent"));
+    try testing.expect(z.hasAttribute(div_element, "class"));
+    try testing.expect(z.hasAttribute(div_element, "id"));
+    try testing.expect(z.hasAttribute(div_element, "data-value"));
+    try testing.expect(!z.hasAttribute(div_element, "nonexistent"));
 
     // Test getAttribute (owned memory)
     if (try elementGetNamedAttribute(allocator, div_element, "class")) |class_value| {
@@ -335,7 +335,7 @@ test "named attribute operations" {
     }
 
     // Test borrowed attribute value
-    if (elementGetNamedAttributeValue(div_element, "data-value")) |data_value| {
+    if (z.getAttribute(div_element, "data-value")) |data_value| {
         try testing.expectEqualStrings("123", data_value);
         // print("Data (borrowed): '{s}'\n", .{data_value});
     }
@@ -355,29 +355,29 @@ test "attribute modification" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const p_node = z.getNodeFirstChild(body_node).?;
+    const p_node = z.firstChild(body_node).?;
     const p_element = z.nodeToElement(p_node).?;
 
-    try elementSetAttributes(
+    try z.setAttribute(
         p_element,
         &.{
-            .{ .name = "class", .value = "highlight important" },
-            .{ .name = "id", .value = "new-paragraph" },
-            .{ .name = "data-test", .value = "test-value" },
+            .{ .name = "id", .value = "my-paragraph" },
+            .{ .name = "class", .value = "content" },
+            .{ .name = "data-test", .value = "example" },
         },
     );
 
-    try testing.expect(elementHasNamedAttribute(p_element, "id"));
-    try testing.expect(elementHasNamedAttribute(p_element, "class"));
-    try testing.expect(elementHasNamedAttribute(p_element, "data-test"));
+    try testing.expect(z.hasAttribute(p_element, "id"));
+    try testing.expect(z.hasAttribute(p_element, "class"));
+    try testing.expect(z.hasAttribute(p_element, "data-test"));
 
     if (try elementGetNamedAttribute(allocator, p_element, "id")) |id| {
         defer allocator.free(id);
-        try testing.expectEqualStrings("new-paragraph", id);
+        try testing.expectEqualStrings("my-paragraph", id);
     }
 
     // Modify existing attribute
-    try elementSetAttributes(
+    try z.setAttribute(
         p_element,
         &.{
             .{ .name = "id", .value = "modified-paragraph" },
@@ -393,12 +393,12 @@ test "attribute modification" {
     }
 
     // Remove attribute
-    try elementRemoveNamedAttribute(p_element, "class");
-    try testing.expect(!elementHasNamedAttribute(p_element, "class"));
+    try z.removeAttribute(p_element, "class");
+    try testing.expect(!z.hasAttribute(p_element, "class"));
 
     // Verify other attributes still exist
-    try testing.expect(elementHasNamedAttribute(p_element, "id"));
-    try testing.expect(elementHasNamedAttribute(p_element, "data-test"));
+    try testing.expect(z.hasAttribute(p_element, "id"));
+    try testing.expect(z.hasAttribute(p_element, "data-test"));
 
     // print("✅ Attribute modification works\n", .{});
 }
@@ -411,7 +411,7 @@ test "attribute iteration" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const div_node = z.getNodeFirstChild(body_node);
+    const div_node = z.firstChild(body_node);
     const div_element = z.nodeToElement(div_node.?).?;
 
     // Manual check of expected attributes
@@ -419,14 +419,14 @@ test "attribute iteration" {
     var found_count: usize = 0;
 
     for (expected_attrs) |attr_name| {
-        if (elementHasNamedAttribute(div_element, attr_name)) {
+        if (z.hasAttribute(div_element, attr_name)) {
             found_count += 1;
 
             if (try elementGetNamedAttribute(allocator, div_element, attr_name)) |value| {
                 defer allocator.free(value);
                 try testing.expectEqualStrings(
                     value,
-                    elementGetNamedAttributeValue(
+                    z.getAttribute(
                         div_element,
                         attr_name,
                     ).?,
@@ -447,7 +447,7 @@ test "ID and CLASS attribute getters" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const section_node = z.getNodeFirstChild(body_node);
+    const section_node = z.firstChild(body_node);
     const section_element = z.nodeToElement(section_node.?).?;
 
     // Test ID getter
@@ -472,7 +472,7 @@ test "attribute edge cases" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChild(body_node).?;
+    const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // print("\n=== Attribute Edge Cases ===\n", .{});
@@ -500,7 +500,7 @@ test "attribute edge cases" {
     }
 
     // Test setting empty value
-    try elementSetAttributes(div_element, &.{.{ .name = "new-empty", .value = "" }});
+    try z.setAttribute(div_element, &.{.{ .name = "new-empty", .value = "" }});
     try testing.expect(elementHasNamedAttribute(div_element, "new-empty"));
 
     if (try elementGetNamedAttribute(
@@ -522,7 +522,7 @@ test "elementHasNamedAttribute - isolated test" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChild(body_node).?;
+    const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // print("\n=== Testing elementHasNamedAttribute in isolation ===\n", .{});
@@ -555,11 +555,11 @@ test "attribute error handling" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const div_node = z.getNodeFirstChild(body_node).?;
+    const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // Test setting attribute on non-element node should return null
-    const text_node = z.getNodeFirstChild(div_node).?;
+    const text_node = z.firstChild(div_node).?;
     const text_element = z.nodeToElement(text_node);
 
     // With our fix, nodeToElement should return null for text nodes

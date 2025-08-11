@@ -18,7 +18,7 @@ pub const DomElement = lxb.DomElement;
 pub const DomCollection = lxb.DomCollection;
 pub const DomAttr = attributes.DomAttr;
 pub const HtmlTag = tag.HtmlTag;
-pub const ElementTag = lxb.ElementTag;
+pub const ElementTag = tag.ElementTag;
 pub const AttributePair = attributes.AttributePair;
 
 pub const LXB_STATUS_OK: usize = 0;
@@ -32,6 +32,7 @@ pub const CssSelectorEngine = css.CssSelectorEngine;
 pub const ChunkParser = chunks.ChunkParser;
 pub const HtmlParser = chunks.HtmlParser;
 
+pub const parseTag = tag.parseTag;
 //----------------------------------------------------------------------------
 // Core
 pub const createDocument = lxb.createDocument;
@@ -40,13 +41,18 @@ pub const parseHtmlString = lxb.parseHtmlString;
 pub const createElement = lxb.createElement;
 
 // DOM access and navigation
+pub const ownerDocument = lxb.ownerDocument;
 pub const getDocumentBodyElement = lxb.getDocumentBodyElement;
 pub const getDocumentBodyNode = lxb.getDocumentBodyNode;
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
-pub const getNodeFirstChild = lxb.getNodeFirstChild;
-pub const getNodeNextSibling = lxb.getNodeNextSibling;
+pub const firstChild = lxb.firstChild;
+pub const nextSibling = lxb.nextSibling;
+pub const parentNode = lxb.parentNode;
+pub const firstElementChild = lxb.firstElementChild;
+pub const nextElementSibling = lxb.nextElementSibling;
+pub const parentElement = lxb.parentElement;
 pub const getNodeName = lxb.getNodeName;
 pub const getElementName = lxb.getElementName;
 pub const removeNode = lxb.removeNode;
@@ -58,13 +64,15 @@ pub const getCommentTextContent = lxb.getCommentTextContent;
 // DOM Creation and manipulation
 pub const createTextNode = lxb.createTextNode;
 pub const createDocumentFragment = lxb.createDocumentFragment;
-pub const insertNodeBefore = lxb.insertNodeBefore;
-pub const insertNodeAfter = lxb.insertNodeAfter;
+// pub const insertNodeBefore = lxb.insertNodeBefore;
+// pub const insertNodeAfter = lxb.insertNodeAfter;
 pub const appendChild = lxb.appendChild;
 pub const appendChildren = lxb.appendChildren;
 pub const appendFragment = lxb.appendFragment;
 
-pub const getNodeChildrenElements = lxb.getNodeChildrenElements;
+// JavaScript DOM conventions for children access
+pub const childNodes = lxb.childNodes;
+pub const children = lxb.children;
 
 // Collection management
 pub const createCollection = collection.createCollection;
@@ -142,22 +150,17 @@ pub const findElements = css.findElements;
 pub const elementHasAnyAttribute = attributes.elementHasAnyAttribute;
 pub const elementGetNamedAttribute = attributes.elementGetNamedAttribute;
 
-pub const elementHasNamedAttribute = attributes.elementHasNamedAttribute;
-
-pub const elementSetAttributes =
-    attributes.elementSetAttributes;
-
-pub const elementGetNamedAttributeValue =
-    attributes.elementGetNamedAttributeValue;
+// JavaScript DOM conventions for attributes
+pub const getAttribute = attributes.elementGetNamedAttributeValue;
+pub const setAttribute = attributes.elementSetAttributes;
+pub const hasAttribute = attributes.elementHasNamedAttribute;
+pub const removeAttribute = attributes.elementRemoveNamedAttribute;
 
 pub const getAttributeName =
     attributes.getAttributeName;
 
 pub const getAttributeValue =
     attributes.getAttributeValue;
-
-pub const elementRemoveNamedAttribute =
-    attributes.elementRemoveNamedAttribute;
 
 pub const getElementFirstAttribute =
     attributes.getElementFirstAttribute;
@@ -237,7 +240,7 @@ pub const elementCollectAttributes = attributes.elementCollectAttributes;
 
 /// [lexbor] Debug: Walk and print DOM tree
 pub fn walkTree(node: *DomNode, depth: u32) void {
-    var child = getNodeFirstChild(node);
+    var child = firstChild(node);
     while (child != null) {
         const name = getNodeName(child.?);
         const indent = switch (@min(depth, 10)) {
@@ -252,7 +255,7 @@ pub fn walkTree(node: *DomNode, depth: u32) void {
         print("{s}{s}\n", .{ indent, name });
 
         walkTree(child.?, depth + 1);
-        child = getNodeNextSibling(child.?);
+        child = nextSibling(child.?);
     }
 }
 
@@ -271,14 +274,14 @@ pub fn getElementChildrenWithTypes(
     var elements = std.ArrayList(*DomElement).init(allocator);
     defer elements.deinit();
 
-    var child = getNodeFirstChild(parent_node);
+    var child = firstChild(parent_node);
     while (child != null) {
         if (isNodeElementType(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }
         }
-        child = getNodeNextSibling(child.?);
+        child = nextSibling(child.?);
     }
 
     return elements.toOwnedSlice();

@@ -106,10 +106,9 @@ test "chunks1" {
 
     const doc = chunk_parser.getDocument();
     const body = try z.getDocumentBodyElement(doc);
-    const body_node = z.elementToNode(body);
-    const children = try z.getNodeChildrenElements(
+    const children = try z.children(
         allocator,
-        body_node,
+        body,
     );
     defer allocator.free(children);
     try testing.expect(children.len > 0);
@@ -124,7 +123,7 @@ test "chunks1" {
 
     const html = try z.serializeTree(
         allocator,
-        body_node,
+        z.elementToNode(body),
     );
     defer allocator.free(html);
     try testing.expectEqualStrings(
@@ -158,9 +157,8 @@ test "chunk parsing comprehensive" {
     // z.printDocumentStructure(doc);
 
     const body = try z.getDocumentBodyElement(doc);
-    const body_node = z.elementToNode(body);
 
-    const children = try z.getNodeChildrenElements(allocator, body_node);
+    const children = try z.children(allocator, body);
     defer allocator.free(children);
 
     try testing.expect(children.len == 3); // h1, p, div
@@ -172,7 +170,7 @@ test "chunk parsing comprehensive" {
     try testing.expectEqualStrings(z.getElementName(children[2]), "SPAN");
 
     // Test serialization
-    const html = try z.serializeTree(allocator, body_node);
+    const html = try z.serializeTree(allocator, z.elementToNode(body));
     defer allocator.free(html);
 
     // print("Serialized: {s}\n", .{html});

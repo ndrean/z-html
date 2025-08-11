@@ -242,17 +242,14 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
         if (status != 0) return false;
     }
 
-    // Traverse children
-    const element_node = z.elementToNode(element);
-    var child_node = z.getNodeFirstChild(element_node);
+    // Traverse only element children (skip text nodes, comments, etc.)
+    var child_element = z.firstElementChild(element);
 
-    while (child_node) |node| {
-        if (z.nodeToElement(node)) |child_element| {
-            if (!collectElementsByTagName(child_element, collection, tag_name)) {
-                return false;
-            }
+    while (child_element) |child| {
+        if (!collectElementsByTagName(child, collection, tag_name)) {
+            return false;
         }
-        child_node = z.getNodeNextSibling(node);
+        child_element = z.nextElementSibling(child);
     }
 
     return true;
@@ -395,23 +392,19 @@ pub fn getElementsByAttributeName(
 /// [collection] Helper function to recursively collect elements with a specific attribute _name_
 fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollection, attr_name: []const u8) bool {
     // Check if current element has the target attribute
-    if (z.elementHasNamedAttribute(element, attr_name)) {
+    if (z.hasAttribute(element, attr_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
         if (status != 0) return false;
     }
 
-    // Traverse children by converting element to node and iterating through child nodes
-    const element_node = z.elementToNode(element);
-    var child_node = z.getNodeFirstChild(element_node);
+    // Traverse only element children (skip text nodes, comments, etc.)
+    var child_element = z.firstElementChild(element);
 
-    while (child_node) |node| {
-        // Convert node to element if it's an element node (eg not #text node)
-        if (z.nodeToElement(node)) |child_element| {
-            if (!collectElementsWithAttribute(child_element, collection, attr_name)) {
-                return false;
-            }
+    while (child_element) |child| {
+        if (!collectElementsWithAttribute(child, collection, attr_name)) {
+            return false;
         }
-        child_node = z.getNodeNextSibling(node);
+        child_element = z.nextElementSibling(child);
     }
 
     return true;
@@ -460,7 +453,6 @@ test "collection basic operations" {
     // Create collection
     const collection = createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
     defer destroyCollection(collection);
-    debugPrint(collection);
 
     // Initially empty
     try testing.expect(isCollectionEmpty(collection));
@@ -948,11 +940,11 @@ test "elementHasAnyAttribute performance demonstration" {
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
-    const first_child = z.getNodeFirstChild(z.elementToNode(body)) orelse return error.NoChild;
+    const first_child = z.firstChild(z.elementToNode(body)) orelse return error.NoChild;
     const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
 
     // Demonstrate that elementHasAnyAttribute correctly identifies elements with/without attributes
-    var child_node = z.getNodeFirstChild(z.elementToNode(div_element));
+    var child_node = z.firstChild(z.elementToNode(div_element));
     var elements_with_attrs: usize = 0;
     var elements_without_attrs: usize = 0;
 
@@ -964,7 +956,7 @@ test "elementHasAnyAttribute performance demonstration" {
                 elements_without_attrs += 1;
             }
         }
-        child_node = z.getNodeNextSibling(node);
+        child_node = z.nextSibling(node);
     }
 
     try testing.expectEqual(@as(usize, 1), elements_with_attrs);
@@ -981,9 +973,9 @@ test "elementHasAnyAttribute performance demonstration" {
     try testing.expectEqual(@as(usize, 1), getCollectionLength(id_elements));
 
     const found_element = getCollectionElementAt(id_elements, 0).?;
-    try testing.expect(z.elementHasNamedAttribute(found_element, "id"));
+    try testing.expect(z.hasAttribute(found_element, "id"));
 
-    const id_value = z.elementGetNamedAttributeValue(found_element, "id").?;
+    const id_value = z.getAttribute(found_element, "id").?;
     try testing.expect(std.mem.eql(u8, id_value, "with-attr"));
 }
 
@@ -1023,7 +1015,7 @@ test "getElementsByAttributeName performance optimization" {
     // but elements with attributes were still processed correctly
     for (0..count) |i| {
         const element = getCollectionElementAt(id_elements, i).?;
-        try testing.expect(z.elementHasNamedAttribute(element, "id"));
+        try testing.expect(z.hasAttribute(element, "id"));
         try testing.expect(z.elementHasAnyAttribute(element)); // Should have at least some attribute
     }
 }
@@ -1066,7 +1058,7 @@ test "getElementsByAttributeName functionality" {
         var found_count: usize = 0;
         while (iter.next()) |element| {
             // Element is guaranteed to be non-null from iterator
-            try testing.expect(z.elementHasNamedAttribute(element, "id"));
+            try testing.expect(z.hasAttribute(element, "id"));
             found_count += 1;
         }
         try testing.expectEqual(count, found_count);
@@ -1088,7 +1080,7 @@ test "getElementsByAttributeName functionality" {
         // Verify all found elements have the class attribute
         for (0..count) |i| {
             const element = getCollectionElementAt(class_elements, i).?;
-            try testing.expect(z.elementHasNamedAttribute(element, "class"));
+            try testing.expect(z.hasAttribute(element, "class"));
         }
     }
 
@@ -1244,7 +1236,7 @@ test "getElementsByName functionality" {
         // Verify all found elements have the correct name attribute
         for (0..getCollectionLength(gender_inputs)) |i| {
             const element = getCollectionElementAt(gender_inputs, i).?;
-            const name_value = z.elementGetNamedAttributeValue(element, "name").?;
+            const name_value = z.getAttribute(element, "name").?;
             try testing.expect(std.mem.eql(u8, name_value, "gender"));
         }
     }

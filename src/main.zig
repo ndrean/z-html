@@ -76,7 +76,7 @@ fn demonstrateAttributes(html: []const u8) !void {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.getNodeFirstChildNode(body_node.?).?;
+    const div = z.firstChild(body_node.?).?;
 
     try writer.print("Demonstrating attribute iteration:\n", .{});
     if (z.nodeToElement(div)) |element| {

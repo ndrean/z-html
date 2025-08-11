@@ -58,9 +58,9 @@ pub fn main() !void {
     const fragment = try z.createDocumentFragment(doc);
 
     // Create some new elements to add to the fragment
-    const new_div1 = try z.createElement(doc, .{ .tag = .div });
-    const new_div2 = try z.createElement(doc, .{ .tag = .div });
-    const new_div3 = try z.createElement(doc, .{ .tag = .div });
+    const new_div1 = try z.createElement(doc, "div", &.{});
+    const new_div2 = try z.createElement(doc, "div", &.{});
+    const new_div3 = try z.createElement(doc, "div", &.{});
 
     // Add text content to the divs
     const text1 = try z.createTextNode(doc, "Fragment child 1");
