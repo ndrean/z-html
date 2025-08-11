@@ -76,7 +76,7 @@ pub fn isNodeDocumentType(node: *z.DomNode) bool {
 
 /// [node_types] Debug:  Walk the DOM tree and print node types with indentation:
 pub fn walkTreeWithTypes(node: *z.DomNode, depth: u32) void {
-    var child = z.getNodeFirstChildNode(node);
+    var child = z.getNodeFirstChild(node);
     while (child != null) {
         // const name = z.getNodeName(child.?);
         const node_type = z.getNodeType(child.?);
@@ -95,7 +95,7 @@ pub fn walkTreeWithTypes(node: *z.DomNode, depth: u32) void {
             walkTreeWithTypes(child.?, depth + 1);
         }
 
-        child = z.getNodeFirstChildNode(child.?);
+        child = z.getNodeFirstChild(child.?);
     }
 }
 
@@ -119,7 +119,7 @@ test "node type detection using getNodeName" {
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
 
-    var child = z.getNodeFirstChildNode(body_node);
+    var child = z.getNodeFirstChild(body_node);
     while (child != null) {
         // const node_name = z.getNodeName(child.?);
         // const node_type = z.getNodeType(child.?);
@@ -130,7 +130,7 @@ test "node type detection using getNodeName" {
         // // Test helper functions
         // print("  isElement: {}, isText: {}, isComment: {}\n", .{ isNodeElementType(child.?), isNodeTextType(child.?), isNodeCommentType(child.?) });
 
-        child = z.getNodeFirstChildNode(child.?);
+        child = z.getNodeFirstChild(child.?);
     }
 
     // print("\n-- TREE WITH TYPES --\n", .{});

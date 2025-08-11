@@ -34,13 +34,76 @@ extern "c" fn lxb_dom_elements_by_attr(
 ) usize;
 
 //=============================================================================
+// CONFIGURATION FUNCTIONS
+//=============================================================================
+
+/// [config] Set the global default collection capacity
+/// This affects all future collections created with `.default` capacity
+pub fn setDefaultCapacity(capacity: u8) void {
+    default_collection_capacity = capacity;
+}
+
+/// [config] Get the current global default collection capacity
+pub fn getDefaultCapacity() u8 {
+    return default_collection_capacity;
+}
+
+/// [config] Reset the default capacity to the original value (10)
+pub fn resetDefaultCapacity() void {
+    default_collection_capacity = 10;
+}
+
+//=============================================================================
 // HIGH-LEVEL COLLECTION FUNCTIONS
 //=============================================================================
 
+/// [collection] Global default collection capacity (can be modified at runtime)
+pub var default_collection_capacity: u8 = 10;
+
+/// [collection] Capacity options for collections
+/// You use `.single` for single element collections,
+/// `.default` for the default capacity, and
+/// `.custom` for a user-defined capacity.
+///
+/// For the custom capacity `N`, pass the desired value as follows:
+/// ```
+/// .{.custom = .{.value = N }}
+/// ```
+pub const CapacityOpt = union(enum) {
+    single,
+    default,
+    custom: struct { value: u8 },
+    pub fn getValue(self: CapacityOpt) u8 {
+        return switch (self) {
+            .single => 1,
+            .default => default_collection_capacity,
+            .custom => |c| c.value,
+        };
+    }
+};
+
 /// [collection] Create a new collection with initial capacity
-pub fn createCollection(doc: *z.HtmlDocument, initial_size: usize) ?*z.DomCollection {
+///
+/// You normally don't use this function directly.
+///
+/// It is used by `getElementsByAttributeName` where you might need to modify
+/// the collection's capacity.
+///
+/// ## Example of setting capacity
+///
+/// `createSingleElementCollection`uses `.single`
+///
+/// `createDefaultCollection` uses `.default`
+///
+/// To set a custom capacity, use:
+///
+/// ```
+/// .{.custom = .{.value = N }}
+/// ```
+pub fn createCollection(doc: *z.HtmlDocument, capacity: CapacityOpt) ?*z.DomCollection {
     const collection = lxb_dom_collection_create(doc) orelse return null;
-    const status = lxb_dom_collection_init(collection, initial_size);
+
+    const status = lxb_dom_collection_init(collection, capacity.getValue());
     if (status != 0) {
         _ = lxb_dom_collection_destroy(collection, true);
         return null;
@@ -48,14 +111,14 @@ pub fn createCollection(doc: *z.HtmlDocument, initial_size: usize) ?*z.DomCollec
     return collection;
 }
 
-/// [collection] Create a collection with default size (good for most use cases)
+/// [collection] Create a collection with default size `.default = 10` (good for most use cases)
 pub fn createDefaultCollection(doc: *z.HtmlDocument) ?*z.DomCollection {
-    return createCollection(doc, 10);
+    return createCollection(doc, .default);
 }
 
 ///[collection]  Create a collection optimized for single element search (like `getElementById`)
 pub fn createSingleElementCollection(doc: *z.HtmlDocument) ?*z.DomCollection {
-    return createCollection(doc, 1);
+    return createCollection(doc, .single);
 }
 
 /// [collection] Destroy a collection and free its memory
@@ -153,7 +216,7 @@ pub fn iterator(collection: *z.DomCollection) CollectionIterator {
 /// [collection] Find all elements with a specific tag name (like JavaScript's getElementsByTagName).
 ///
 /// This is implemented using DOM traversal since the native lexbor function may not be available.
-/// Returns a DomCollection containing all elements with the specified tag name.
+/// Returns a DomCollection with a limitation of size `.default` containing all elements with the specified tag name.
 /// Examples: "div", "p", "span", "img", etc.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
@@ -181,7 +244,7 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
 
     // Traverse children
     const element_node = z.elementToNode(element);
-    var child_node = z.getNodeFirstChildNode(element_node);
+    var child_node = z.getNodeFirstChild(element_node);
 
     while (child_node) |node| {
         if (z.nodeToElement(node)) |child_element| {
@@ -189,7 +252,7 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
                 return false;
             }
         }
-        child_node = z.getNodeNextSiblingNode(node);
+        child_node = z.getNodeNextSibling(node);
     }
 
     return true;
@@ -198,11 +261,11 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
 /// [collection] Find all elements with a specific name attribute (like JavaScript's getElementsByName).
 ///
 /// This is commonly used for form elements that share the same name.
-/// This is implemented as a wrapper around getElementsByAttribute for the name attribute.
+/// This is implemented as a wrapper around getElementsByAttributePair for the name attribute.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
 pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollection {
-    return getElementsByAttribute(
+    return getElementsByAttributePair(
         doc,
         .{ .name = "name", .value = name },
         false, // case sensitive
@@ -213,7 +276,7 @@ pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollect
 ///
 /// Returns the first element with the matching ID, or null if not found.
 ///
-/// If you want to detect multiple IDs, use `getElementsByAttribute`.
+/// If you want to detect multiple IDs, use `getElementsByAttributePair`.
 pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
     const root = try z.getDocumentBodyElement(doc);
 
@@ -242,16 +305,13 @@ pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
 ///
 /// For example, can be used for multiples IDs detection.
 ///
-/// It returns a `DomCollection`.
+/// It takes an additional `case_insensitive` parameter to control the matching behavior. It defaults to `false`.
+/// It returns a `DomCollection` with a limitation of size .default`.
 ///
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
 ///
 /// Caller is responsible for freeing the return collection with `destroyCollection`
-pub fn getElementsByAttribute(
-    doc: *z.HtmlDocument,
-    attr: z.AttributePair,
-    case_insensitive: bool,
-) !?*z.DomCollection {
+pub fn getElementsByAttributePair(doc: *z.HtmlDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
     const root = try z.getDocumentBodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return null;
     const name = attr.name;
@@ -277,13 +337,13 @@ pub fn getElementsByAttribute(
 
 /// [collection] Find all elements with a specific class name
 ///
-/// It returns a DomCollection.
+/// It returns a DomCollection with size limitation of `.default`.
 ///
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
 pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z.DomCollection {
-    return getElementsByAttribute(
+    return getElementsByAttributePair(
         doc,
         .{
             .name = "class",
@@ -297,27 +357,32 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 ///
 /// This searches for any element that has the __named attribute__.
 ///
+/// It takes an initial capacity for the collection size.
+/// You can use:
+///
+/// - `.single`, eg used in `getElementById`
+/// - `.default` eg used in `getElementsByClassName`
+/// - `.{.custom = .{ .value = 50 },}`
 ///
 /// It returns a DomCollection
 ///
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
 ///
 /// Caller is responsible for freeing the collection
-// pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8) !?*z.DomCollection {
-//     const root = try z.getDocumentBodyElement(doc);
-//     const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
-
-//     // Traverse the DOM tree and collect elements with the specified attribute
-//     if (collectElementsWithAttribute(root, collection, attr_name)) {
-//         return collection;
-//     } else {
-//         destroyCollection(collection);
-//         return null;
-//     }
-// }
-pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, initial_capacity: usize) !?*z.DomCollection {
+///
+/// ## Example
+/// ```
+/// const elements = try getElementsByAttributeName(doc, "data-id", .{.custom = .{ .value = 100 },});
+/// defer destroyCollection(elements);
+/// ```
+///
+pub fn getElementsByAttributeName(
+    doc: *z.HtmlDocument,
+    attr_name: []const u8,
+    capacity: CapacityOpt,
+) !?*z.DomCollection {
     const root = try z.getDocumentBodyElement(doc);
-    const collection = createCollection(doc, initial_capacity) orelse return Err.CollectionFailed;
+    const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
     if (collectElementsWithAttribute(root, collection, attr_name)) {
         return collection;
@@ -329,63 +394,37 @@ pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, i
 
 /// [collection] Helper function to recursively collect elements with a specific attribute _name_
 fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollection, attr_name: []const u8) bool {
-    // Early return if element has no attributes at all - performance optimization
-    if (!z.elementHasAnyAttribute(element)) {
-        // Still need to traverse children, so continue below
-    } else if (z.elementHasNamedAttribute(element, attr_name)) {
+    // Check if current element has the target attribute
+    if (z.elementHasNamedAttribute(element, attr_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
         if (status != 0) return false;
     }
 
     // Traverse children by converting element to node and iterating through child nodes
     const element_node = z.elementToNode(element);
-    var child_node = z.getNodeFirstChildNode(element_node);
+    var child_node = z.getNodeFirstChild(element_node);
 
     while (child_node) |node| {
-        // Convert node to element if it's an element node
+        // Convert node to element if it's an element node (eg not #text node)
         if (z.nodeToElement(node)) |child_element| {
             if (!collectElementsWithAttribute(child_element, collection, attr_name)) {
                 return false;
             }
         }
-        child_node = z.getNodeNextSiblingNode(node);
+        child_node = z.getNodeNextSibling(node);
     }
 
     return true;
 }
-// fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollection, attr_name: []const u8) bool {
-//     // Check if current element has the attribute
-//     if (z.elementHasNamedAttribute(element, attr_name)) {
-//         const status = lxb_dom_collection_append_noi(collection, element);
-//         if (status != 0) return false;
-//     }
-
-//     // Traverse children by converting element to node and iterating through child nodes
-//     const element_node = z.elementToNode(element);
-//     var child_node = z.getNodeFirstChildNode(element_node);
-
-//     while (child_node) |node| {
-//         // Convert node to element if it's an element node
-//         if (z.nodeToElement(node)) |child_element| {
-//             if (!collectElementsWithAttribute(child_element, collection, attr_name)) {
-//                 return false;
-//             }
-//         }
-//         child_node = z.getNodeNextSiblingNode(node);
-//     }
-
-//     return true;
-// }
-
-// Remove the placeholder helper functions as we're now using the real implementation
 
 //=============================================================================
 // UTILITY FUNCTIONS
 //=============================================================================
 
 /// [collection] Convert collection to Zig slice (allocates memory)
-/// Caller is responsible for freeing the returned slice
-pub fn toSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*z.DomElement {
+///
+/// Caller needs to free the returned slice
+pub fn collectionToSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*z.DomElement {
     const len = getCollectionLength(collection);
     if (len == 0) return &[_]?*z.DomElement{};
 
@@ -399,7 +438,7 @@ pub fn toSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*
 /// [collection] Debug: Print collection info for debugging
 pub fn debugPrint(collection: *z.DomCollection) void {
     const len = getCollectionLength(collection);
-    print("Collection: {} elements\n", .{len});
+    print("Debug print Collection: {} elements\n", .{len});
 
     var iter = iterator(collection);
     var i: usize = 0;
@@ -522,7 +561,7 @@ test "getElementsByAttribute functionality" {
     try testing.expect(second != null);
 }
 
-test "getElementsByAttribute comprehensive tests" {
+test "getElementsByAttributePair comprehensive tests" {
     const html =
         \\<form>
         \\  <input type="text" name="username" required>
@@ -538,7 +577,7 @@ test "getElementsByAttribute comprehensive tests" {
 
     // Test 1: Find by type attribute
     {
-        const text_inputs = try getElementsByAttribute(
+        const text_inputs = try getElementsByAttributePair(
             doc,
             .{ .name = "type", .value = "text" },
             false,
@@ -549,7 +588,7 @@ test "getElementsByAttribute comprehensive tests" {
 
     // Test 2: Find by required attribute (this will find elements with required="")
     {
-        const required_fields = try getElementsByAttribute(
+        const required_fields = try getElementsByAttributePair(
             doc,
             .{ .name = "required", .value = "" },
             false,
@@ -561,7 +600,7 @@ test "getElementsByAttribute comprehensive tests" {
 
     // Test 3: Find by name attribute
     {
-        const username_field = try getElementsByAttribute(
+        const username_field = try getElementsByAttributePair(
             doc,
             .{ .name = "name", .value = "username" },
             false,
@@ -572,7 +611,7 @@ test "getElementsByAttribute comprehensive tests" {
 
     // Test 4: Case insensitive search
     {
-        const submit_inputs = try getElementsByAttribute(
+        const submit_inputs = try getElementsByAttributePair(
             doc,
             .{ .name = "type", .value = "SUBMIT" },
             true,
@@ -583,7 +622,7 @@ test "getElementsByAttribute comprehensive tests" {
 
     // Test 5: Non-existent attribute value
     {
-        const nonexistent = try getElementsByAttribute(
+        const nonexistent = try getElementsByAttributePair(
             doc,
             .{ .name = "type", .value = "nonexistent" },
             false,
@@ -607,7 +646,7 @@ test "comprehensive iterator tests" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
 
-    const items = try getElementsByAttribute(
+    const items = try getElementsByAttributePair(
         doc,
         .{ .name = "class", .value = "item" },
         false,
@@ -670,7 +709,7 @@ test "comprehensive iterator tests" {
 
     // Test 4: Iterator on empty collection
     {
-        const empty_collection = try getElementsByAttribute(
+        const empty_collection = try getElementsByAttributePair(
             doc,
             .{ .name = "class", .value = "nonexistent" },
             false,
@@ -715,7 +754,7 @@ test "collection utility functions" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
 
-    const buttons = try getElementsByAttribute(
+    const buttons = try getElementsByAttributePair(
         doc,
         .{ .name = "type", .value = "button" },
         false,
@@ -740,147 +779,157 @@ test "collection utility functions" {
     try testing.expect(out_of_bounds == null);
 }
 
-test "performance comparison: getElementById vs getElementsByAttribute" {
+test "performance comparison: Lexbor native vs custom Zig traversal" {
     const html =
         \\<div>
-        \\  <div id="other1">Other 1</div>
-        \\  <div id="other2">Other 2</div>
-        \\  <div id="other3">Other 3</div>
-        \\  <div id="other4">Other 4</div>
-        \\  <div id="other5">Other 5</div>
-        \\  <div id="other6">Other 6</div>
-        \\  <div id="other7">Other 7</div>
-        \\  <div id="other8">Other 8</div>
-        \\  <div id="other9">Other 9</div>
-        \\  <div id="other10">Other 10</div>
-        \\  <div id="other11">Other 11</div>
-        \\  <div id="other12">Other 12</div>
-        \\  <div id="other13">Other 13</div>
-        \\  <div id="other14">Other 14</div>
-        \\  <div id="other15">Other 15</div>
-        \\  <div id="other16">Other 16</div>
-        \\  <div id="other17">Other 17</div>
-        \\  <div id="other18">Other 18</div>
-        \\  <div id="other19">Other 19</div>
-        \\  <div id="other20">Other 20</div>
-        \\  <div id="other21">Other 21</div>
-        \\  <div id="other22">Other 22</div>
-        \\  <div id="other23">Other 23</div>
-        \\  <div id="other24">Other 24</div>
-        \\  <div id="other25">Other 25</div>
-        \\  <div id="other26">Other 26</div>
-        \\  <div id="other27">Other 27</div>
-        \\  <div id="other28">Other 28</div>
-        \\  <div id="other29">Other 29</div>
-        \\  <div id="other30">Other 30</div>
-        \\  <div id="other31">Other 31</div>
-        \\  <div id="other32">Other 32</div>
-        \\  <div id="other33">Other 33</div>
-        \\  <div id="other34">Other 34</div>
-        \\  <div id="other35">Other 35</div>
-        \\  <div id="other36">Other 36</div>
-        \\  <div id="other37">Other 37</div>
-        \\  <div id="other38">Other 38</div>
-        \\  <div id="other39">Other 39</div>
-        \\  <div id="other40">Other 40</div>
-        \\  <div id="other41">Other 41</div>
-        \\  <div id="other42">Other 42</div>
-        \\  <div id="other43">Other 43</div>
-        \\  <div id="other44">Other 44</div>
-        \\  <div id="other45">Other 45</div>
-        \\  <div id="other46">Other 46</div>
-        \\  <div id="other47">Other 47</div>
-        \\  <div id="other48">Other 48</div>
-        \\  <div id="other49">Other 49</div>
-        \\  <div id="other50">Other 50</div>
-        \\  <div id="other51">Other 51</div>
-        \\  <div id="other52">Other 52</div>
-        \\  <div id="other53">Other 53</div>
-        \\  <div id="other54">Other 54</div>
-        \\  <div id="other55">Other 55</div>
-        \\  <div id="other56">Other 56</div>
-        \\  <div id="other57">Other 57</div>
-        \\  <div id="other58">Other 58</div>
-        \\  <div id="other59">Other 59</div>
-        \\  <div id="other60">Other 60</div>
-        \\  <div id="other61">Other 61</div>
-        \\  <div id="other62">Other 62</div>
-        \\  <div id="other63">Other 63</div>
-        \\  <div id="other64">Other 64</div>
-        \\  <div id="other65">Other 65</div>
-        \\  <div id="other66">Other 66</div>
-        \\  <div id="other67">Other 67</div>
-        \\  <div id="other68">Other 68</div>
-        \\  <div id="other69">Other 69</div>
-        \\  <div id="other70">Other 70</div>
-        \\  <div id="other71">Other 71</div>
-        \\  <div id="other72">Other 72</div>
-        \\  <div id="other73">Other 73</div>
-        \\  <div id="other74">Other 74</div>
-        \\  <div id="other75">Other 75</div>
-        \\  <div id="other76">Other 76</div>
-        \\  <div id="other77">Other 77</div>
-        \\  <div id="other78">Other 78</div>
-        \\  <div id="other79">Other 79</div>
-        \\  <div id="other80">Other 80</div>
-        \\  <div id="other81">Other 81</div>
-        \\  <div id="other82">Other 82</div>
-        \\  <div id="other83">Other 83</div>
-        \\  <div id="other84">Other 84</div>
-        \\  <div id="other85">Other 85</div>
-        \\  <div id="other86">Other 86</div>
-        \\  <div id="other87">Other 87</div>
-        \\  <div id="other88">Other 88</div>
-        \\  <div id="other89">Other 89</div>
-        \\  <div id="other90">Other 90</div>
-        \\  <div id="other91">Other 91</div>
-        \\  <div id="other92">Other 92</div>
-        \\  <div id="other93">Other 93</div>
-        \\  <div id="other94">Other 94</div>
-        \\  <div id="other95">Other 95</div>
-        \\  <div id="other96">Other 96</div>
-        \\  <div id="other97">Other 97</div>
-        \\  <div id="other98">Other 98</div>
-        \\  <div id="other99">Other 99</div>
-        \\  <div id="other100">Other 100</div>
-        \\  <div id="target">Target Element</div>
+        \\  <div id="other1" data-test="value1">Other 1</div>
+        \\  <div id="other2" data-test="value2">Other 2</div>
+        \\  <div id="other3" data-test="value3">Other 3</div>
+        \\  <div id="other4" data-test="value4">Other 4</div>
+        \\  <div id="other5" data-test="value5">Other 5</div>
+        \\  <div id="other6" data-test="value6">Other 6</div>
+        \\  <div id="other7" data-test="value7">Other 7</div>
+        \\  <div id="other8" data-test="value8">Other 8</div>
+        \\  <div id="other9" data-test="value9">Other 9</div>
+        \\  <div id="other10" data-test="value10">Other 10</div>
+        \\  <div id="other11" data-test="value11">Other 11</div>
+        \\  <div id="other12" data-test="value12">Other 12</div>
+        \\  <div id="other13" data-test="value13">Other 13</div>
+        \\  <div id="other14" data-test="value14">Other 14</div>
+        \\  <div id="other15" data-test="value15">Other 15</div>
+        \\  <div id="other16" data-test="value16">Other 16</div>
+        \\  <div id="other17" data-test="value17">Other 17</div>
+        \\  <div id="other18" data-test="value18">Other 18</div>
+        \\  <div id="other19" data-test="value19">Other 19</div>
+        \\  <div id="other20" data-test="value20">Other 20</div>
+        \\  <div id="other21" data-test="value21">Other 21</div>
+        \\  <div id="other22" data-test="value22">Other 22</div>
+        \\  <div id="other23" data-test="value23">Other 23</div>
+        \\  <div id="other24" data-test="value24">Other 24</div>
+        \\  <div id="other25" data-test="value25">Other 25</div>
+        \\  <div id="other26" data-test="value26">Other 26</div>
+        \\  <div id="other27" data-test="value27">Other 27</div>
+        \\  <div id="other28" data-test="value28">Other 28</div>
+        \\  <div id="other29" data-test="value29">Other 29</div>
+        \\  <div id="other30" data-test="value30">Other 30</div>
+        \\  <div id="other31" data-test="value31">Other 31</div>
+        \\  <div id="other32" data-test="value32">Other 32</div>
+        \\  <div id="other33" data-test="value33">Other 33</div>
+        \\  <div id="other34" data-test="value34">Other 34</div>
+        \\  <div id="other35" data-test="value35">Other 35</div>
+        \\  <div id="other36" data-test="value36">Other 36</div>
+        \\  <div id="other37" data-test="value37">Other 37</div>
+        \\  <div id="other38" data-test="value38">Other 38</div>
+        \\  <div id="other39" data-test="value39">Other 39</div>
+        \\  <div id="other40" data-test="value40">Other 40</div>
+        \\  <div id="other41" data-test="value41">Other 41</div>
+        \\  <div id="other42" data-test="value42">Other 42</div>
+        \\  <div id="other43" data-test="value43">Other 43</div>
+        \\  <div id="other44" data-test="value44">Other 44</div>
+        \\  <div id="other45" data-test="value45">Other 45</div>
+        \\  <div id="other46" data-test="value46">Other 46</div>
+        \\  <div id="other47" data-test="value47">Other 47</div>
+        \\  <div id="other48" data-test="value48">Other 48</div>
+        \\  <div id="other49" data-test="value49">Other 49</div>
+        \\  <div id="other50" data-test="value50">Other 50</div>
+        \\  <div id="other51" data-test="value51">Other 51</div>
+        \\  <div id="other52" data-test="value52">Other 52</div>
+        \\  <div id="other53" data-test="value53">Other 53</div>
+        \\  <div id="other54" data-test="value54">Other 54</div>
+        \\  <div id="other55" data-test="value55">Other 55</div>
+        \\  <div id="other56" data-test="value56">Other 56</div>
+        \\  <div id="other57" data-test="value57">Other 57</div>
+        \\  <div id="other58" data-test="value58">Other 58</div>
+        \\  <div id="other59" data-test="value59">Other 59</div>
+        \\  <div id="other60" data-test="value60">Other 60</div>
+        \\  <div id="other61" data-test="value61">Other 61</div>
+        \\  <div id="other62" data-test="value62">Other 62</div>
+        \\  <div id="other63" data-test="value63">Other 63</div>
+        \\  <div id="other64" data-test="value64">Other 64</div>
+        \\  <div id="other65" data-test="value65">Other 65</div>
+        \\  <div id="other66" data-test="value66">Other 66</div>
+        \\  <div id="other67" data-test="value67">Other 67</div>
+        \\  <div id="other68" data-test="value68">Other 68</div>
+        \\  <div id="other69" data-test="value69">Other 69</div>
+        \\  <div id="other70" data-test="value70">Other 70</div>
+        \\  <div id="other71" data-test="value71">Other 71</div>
+        \\  <div id="other72" data-test="value72">Other 72</div>
+        \\  <div id="other73" data-test="value73">Other 73</div>
+        \\  <div id="other74" data-test="value74">Other 74</div>
+        \\  <div id="other75" data-test="value75">Other 75</div>
+        \\  <div id="other76" data-test="value76">Other 76</div>
+        \\  <div id="other77" data-test="value77">Other 77</div>
+        \\  <div id="other78" data-test="value78">Other 78</div>
+        \\  <div id="other79" data-test="value79">Other 79</div>
+        \\  <div id="other80" data-test="value80">Other 80</div>
+        \\  <div id="other81" data-test="value81">Other 81</div>
+        \\  <div id="other82" data-test="value82">Other 82</div>
+        \\  <div id="other83" data-test="value83">Other 83</div>
+        \\  <div id="other84" data-test="value84">Other 84</div>
+        \\  <div id="other85" data-test="value85">Other 85</div>
+        \\  <div id="other86" data-test="value86">Other 86</div>
+        \\  <div id="other87" data-test="value87">Other 87</div>
+        \\  <div id="other88" data-test="value88">Other 88</div>
+        \\  <div id="other89" data-test="value89">Other 89</div>
+        \\  <div id="other90" data-test="value90">Other 90</div>
+        \\  <div id="other91" data-test="value91">Other 91</div>
+        \\  <div id="other92" data-test="value92">Other 92</div>
+        \\  <div id="other93" data-test="value93">Other 93</div>
+        \\  <div id="other94" data-test="value94">Other 94</div>
+        \\  <div id="other95" data-test="value95">Other 95</div>
+        \\  <div id="other96" data-test="value96">Other 96</div>
+        \\  <div id="other97" data-test="value97">Other 97</div>
+        \\  <div id="other98" data-test="value98">Other 98</div>
+        \\  <div id="other99" data-test="value99">Other 99</div>
+        \\  <div id="other100" data-test="value100">Other 100</div>
+        \\  <div id="target" data-test="target-value">Target Element</div>
         \\</div>
     ;
 
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
 
-    // Method 1: getElementById (optimized)
-    const start1 = try Instant.now();
-    const element1 = try getElementById(doc, "target");
-    try testing.expect(element1 != null);
-    const end1 = try Instant.now();
-    const elapsed1: f64 = @floatFromInt(end1.since(start1));
-    print("Time elapsed is: {d:.4}ms\n", .{
-        elapsed1 / std.time.ns_per_ms,
-    });
+    // print("\n=== Performance Comparison: Lexbor Native vs Custom Zig Traversal ===\n", .{});
 
-    // Method 2: getElementsByAttribute for id (general purpose)
-    const start2 = try Instant.now();
-    const collection = try getElementsByAttribute(
+    // Method 1: Lexbor native - getElementsByAttributePair (name + value match)
+    const start1 = try Instant.now();
+    const collection1 = try getElementsByAttributePair(
         doc,
-        .{ .name = "id", .value = "target" },
+        .{ .name = "data-test", .value = "target-value" },
         false,
     ) orelse return error.CollectionFailed;
-    defer destroyCollection(collection);
+    defer destroyCollection(collection1);
+    const end1 = try Instant.now();
+    const elapsed1: f64 = @floatFromInt(end1.since(start1));
 
-    try testing.expectEqual(@as(usize, 1), getCollectionLength(collection));
+    try testing.expectEqual(@as(usize, 1), getCollectionLength(collection1));
+    const element1 = getCollectionFirstElement(collection1);
+    try testing.expect(element1 != null);
+
+    _ = elapsed1;
+    // print("Lexbor native (name+value): {d:.3}ms - Found {} elements\n", .{ elapsed1 / std.time.ns_per_ms, getCollectionLength(collection1) });
+
+    // Method 2: Custom Zig traversal - getElementsByAttributeName (name only)
+    const start2 = try Instant.now();
+    const collection2 = try getElementsByAttributeName(
+        doc,
+        "data-test",
+        .default,
+    ) orelse return error.CollectionFailed;
+    defer destroyCollection(collection2);
     const end2 = try Instant.now();
     const elapsed2: f64 = @floatFromInt(end2.since(start2));
-    print("Time elapsed is: {d:.4}ms\n", .{
-        elapsed2 / std.time.ns_per_ms,
-    });
+    _ = elapsed2; // Use elapsed2 to avoid unused variable warning
 
-    const element2 = getCollectionFirstElement(collection);
-    try testing.expect(element2 != null);
+    // print("Custom Zig traversal (name only): {d:.3}ms - Found {} elements\n", .{ elapsed2 / std.time.ns_per_ms, getCollectionLength(collection2) });
 
-    // Both methods should find the same element
-    try testing.expect(element1 == element2);
+    // The custom traversal should find ALL elements with data-test attribute (101 elements)
+    // The native should find only the one with the specific value (1 element)
+    try testing.expect(getCollectionLength(collection2) > getCollectionLength(collection1));
+    try testing.expectEqual(@as(usize, 101), getCollectionLength(collection2)); // All divs have data-test
+
+    // print("Performance ratio: {d:.2}x (native is faster)\n", .{elapsed2 / elapsed1});
+    // print("Note: Different search criteria - native finds specific value, custom finds any attribute name\n", .{});
 }
 
 test "elementHasAnyAttribute performance demonstration" {
@@ -899,11 +948,11 @@ test "elementHasAnyAttribute performance demonstration" {
     defer z.destroyDocument(doc);
 
     const body = try z.getDocumentBodyElement(doc);
-    const first_child = z.getNodeFirstChildNode(z.elementToNode(body)) orelse return error.NoChild;
+    const first_child = z.getNodeFirstChild(z.elementToNode(body)) orelse return error.NoChild;
     const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
 
     // Demonstrate that elementHasAnyAttribute correctly identifies elements with/without attributes
-    var child_node = z.getNodeFirstChildNode(z.elementToNode(div_element));
+    var child_node = z.getNodeFirstChild(z.elementToNode(div_element));
     var elements_with_attrs: usize = 0;
     var elements_without_attrs: usize = 0;
 
@@ -915,14 +964,18 @@ test "elementHasAnyAttribute performance demonstration" {
                 elements_without_attrs += 1;
             }
         }
-        child_node = z.getNodeNextSiblingNode(node);
+        child_node = z.getNodeNextSibling(node);
     }
 
     try testing.expectEqual(@as(usize, 1), elements_with_attrs);
     try testing.expectEqual(@as(usize, 5), elements_without_attrs);
 
     // Test that getElementsByAttributeName correctly finds only the element with the id attribute
-    const id_elements = try getElementsByAttributeName(doc, "id", 5) orelse return error.CollectionFailed;
+    const id_elements = try getElementsByAttributeName(
+        doc,
+        "id",
+        .default,
+    ) orelse return error.CollectionFailed;
     defer destroyCollection(id_elements);
 
     try testing.expectEqual(@as(usize, 1), getCollectionLength(id_elements));
@@ -956,7 +1009,11 @@ test "getElementsByAttributeName performance optimization" {
     defer z.destroyDocument(doc);
 
     // Test that getElementsByAttributeName still works correctly with the optimization
-    const id_elements = try getElementsByAttributeName(doc, "id", 10) orelse return error.CollectionFailed;
+    const id_elements = try getElementsByAttributeName(
+        doc,
+        "id",
+        .default,
+    ) orelse return error.CollectionFailed;
     defer destroyCollection(id_elements);
 
     const count = getCollectionLength(id_elements);
@@ -994,7 +1051,11 @@ test "getElementsByAttributeName functionality" {
 
     // Test 1: Find all elements with 'id' attribute: count is 5
     {
-        const id_elements = try getElementsByAttributeName(doc, "id", 10) orelse return error.CollectionFailed;
+        const id_elements = try getElementsByAttributeName(
+            doc,
+            "id",
+            .default,
+        ) orelse return error.CollectionFailed;
         defer destroyCollection(id_elements);
 
         const count = getCollectionLength(id_elements);
@@ -1013,7 +1074,12 @@ test "getElementsByAttributeName functionality" {
 
     // Test 2: Find all elements with 'class' attribute: count is 3
     {
-        const class_elements = try getElementsByAttributeName(doc, "class", 5) orelse return error.CollectionFailed;
+        const class_elements = try getElementsByAttributeName(
+            doc,
+            "class",
+            .default,
+        ) orelse return error.CollectionFailed;
+
         defer destroyCollection(class_elements);
 
         const count = getCollectionLength(class_elements);
@@ -1028,7 +1094,12 @@ test "getElementsByAttributeName functionality" {
 
     // Test 3: Find all elements with 'type' attribute: count is 3
     {
-        const type_elements = try getElementsByAttributeName(doc, "type", 5) orelse return error.CollectionFailed;
+        const type_elements = try getElementsByAttributeName(
+            doc,
+            "type",
+            .{ .custom = .{ .value = 5 } },
+        ) orelse return error.CollectionFailed;
+
         defer destroyCollection(type_elements);
 
         const count = getCollectionLength(type_elements);
@@ -1037,7 +1108,12 @@ test "getElementsByAttributeName functionality" {
 
     // Test 4: Find all elements with 'name' attribute: count is 2
     {
-        const name_elements = try getElementsByAttributeName(doc, "name", 3) orelse return error.CollectionFailed;
+        const name_elements = try getElementsByAttributeName(
+            doc,
+            "name",
+            .{ .custom = .{ .value = 3 } },
+        ) orelse return error.CollectionFailed;
+
         defer destroyCollection(name_elements);
 
         const count = getCollectionLength(name_elements);
@@ -1046,20 +1122,25 @@ test "getElementsByAttributeName functionality" {
 
     // Test 5: Find elements with non-existent attribute: count is 0
     {
-        const nonexistent = try getElementsByAttributeName(doc, "nonexistent", 1) orelse return error.CollectionFailed;
+        const nonexistent = try getElementsByAttributeName(doc, "nonexistent", .single) orelse return error.CollectionFailed;
         defer destroyCollection(nonexistent);
 
         try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
         try testing.expect(isCollectionEmpty(nonexistent));
     }
 
-    // Test 6: Compare getElementsByAttributeName vs getElementsByAttribute
+    // Test 6: Compare getElementsByAttributeName vs getElementsByAttributePair
     {
         // Find all elements with any 'id' attribute: id="container"
-        const all_with_id = try getElementsByAttributeName(doc, "id", 10) orelse return error.CollectionFailed;
+        const all_with_id = try getElementsByAttributeName(
+            doc,
+            "id",
+            .default,
+        ) orelse return error.CollectionFailed;
+
         defer destroyCollection(all_with_id);
 
-        const specific_id = try getElementsByAttribute(
+        const specific_id = try getElementsByAttributePair(
             doc,
             .{ .name = "id", .value = "container" },
             false,
@@ -1183,4 +1264,131 @@ test "getElementsByName functionality" {
 
         try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
     }
+}
+
+test "configurable default capacity" {
+    const html =
+        \\<html>
+        \\  <body>
+        \\    <div id="container">
+        \\      <p>First paragraph</p>
+        \\      <p>Second paragraph</p>
+        \\      <span>A span</span>
+        \\    </div>
+        \\  </body>
+        \\</html>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    // Test 1: Check initial default capacity
+    try testing.expectEqual(@as(u8, 10), getDefaultCapacity());
+
+    // Test 2: Change default capacity
+    setDefaultCapacity(25);
+    try testing.expectEqual(@as(u8, 25), getDefaultCapacity());
+
+    // Test 3: Verify that CapacityOpt.default now uses new value
+    const capacity_opt: CapacityOpt = .default;
+    try testing.expectEqual(@as(u8, 25), capacity_opt.getValue());
+
+    // Test 4: Create a collection with the new default and verify it works
+    const collection = createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
+    defer destroyCollection(collection);
+
+    // The collection should work normally regardless of capacity
+    try testing.expect(isCollectionEmpty(collection));
+
+    // Test 5: Reset to original value
+    resetDefaultCapacity();
+    try testing.expectEqual(@as(u8, 10), getDefaultCapacity());
+
+    // Test 6: Verify that custom capacity is unaffected by default changes
+    setDefaultCapacity(50);
+    const custom_capacity: CapacityOpt = .{ .custom = .{ .value = 5 } };
+    try testing.expectEqual(@as(u8, 5), custom_capacity.getValue());
+
+    // Test 7: Verify single capacity is unaffected
+    const single_capacity: CapacityOpt = .single;
+    try testing.expectEqual(@as(u8, 1), single_capacity.getValue());
+
+    // Clean up
+    resetDefaultCapacity();
+}
+
+test "configurable default capacity usage example" {
+    // print("\n=== Configurable Default Collection Capacity Demo ===\n", .{});
+
+    // 1. Check initial default capacity
+    // print("Initial default capacity: {}\n", .{getDefaultCapacity()});
+    try testing.expectEqual(@as(u8, 10), getDefaultCapacity());
+
+    // 2. Change the default capacity for all future collections
+    // print("Setting default capacity to 50...\n", .{});
+    setDefaultCapacity(50);
+    // print("New default capacity: {}\n", .{getDefaultCapacity()});
+    try testing.expectEqual(@as(u8, 50), getDefaultCapacity());
+
+    // 3. Parse some HTML and test collection creation
+    const html =
+        \\<html>
+        \\  <body>
+        \\    <div class="container">
+        \\      <p>First paragraph</p>
+        \\      <p>Second paragraph</p>
+        \\      <span>A span element</span>
+        \\    </div>
+        \\  </body>
+        \\</html>
+    ;
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    // 4. Create collections with different capacity options
+    // print("\n=== Collection Creation Examples ===\n", .{});
+
+    // Default collection now uses capacity 50
+    // print("Creating collection with .default capacity (should be 50)...\n", .{});
+    if (createDefaultCollection(doc)) |default_collection| {
+        defer destroyCollection(default_collection);
+        // print("✅ Default collection created successfully\n", .{});
+    }
+
+    // Single element collection (always capacity 1)
+    // print("Creating collection with .single capacity (always 1)...\n", .{});
+    if (createSingleElementCollection(doc)) |single_collection| {
+        defer destroyCollection(single_collection);
+        // print("✅ Single element collection created successfully\n", .{});
+    }
+
+    // Custom capacity collection (explicit capacity)
+    // print("Creating collection with custom capacity of 100...\n", .{});
+    if (createCollection(doc, .{ .custom = .{ .value = 100 } })) |custom_collection| {
+        defer destroyCollection(custom_collection);
+        // print("✅ Custom capacity collection created successfully\n", .{});
+    }
+
+    // 5. Test with getElementsByAttributeName (uses configurable default)
+    // print("\n=== Testing with Search Functions ===\n", .{});
+    if (try getElementsByAttributeName(doc, "class", .default)) |class_elements| {
+        defer destroyCollection(class_elements);
+        // print("Found {} elements with 'class' attribute using default capacity ({})\n", .{ getCollectionLength(class_elements), getDefaultCapacity() });
+    }
+
+    // 6. Reset to original default
+    // print("\nResetting to original default capacity (10)...\n", .{});
+    resetDefaultCapacity();
+    // print("Reset complete. Current default capacity: {}\n", .{getDefaultCapacity()});
+    try testing.expectEqual(@as(u8, 10), getDefaultCapacity());
+
+    // print("\n=== Available Configuration Functions ===\n", .{});
+    // print("  • setDefaultCapacity(value) - Set global default\n", .{});
+    // print("  • getDefaultCapacity() - Get current default\n", .{});
+    // print("  • resetDefaultCapacity() - Reset to 10\n", .{});
+    // print("\nCapacity options for collections:\n", .{});
+    // print("  • .single - Always capacity 1\n", .{});
+    // print("  • .default - Uses global default (configurable)\n", .{});
+    // print("  • .{{ .custom = .{{ .value = N }} }} - Explicit capacity N\n", .{});
 }

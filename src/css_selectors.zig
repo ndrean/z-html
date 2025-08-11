@@ -16,6 +16,15 @@ pub const CssSelectors = opaque {};
 pub const CssSelectorList = opaque {};
 pub const CssSelectorSpecificity = opaque {};
 
+//---------------------------------------------------------------------
+// lexbor match options
+// Without this flag: Can return duplicate nodes
+// With this flag: Each node appears only once in results
+const LXB_SELECTORS_OPT_MATCH_FIRST: usize = 0x01;
+
+// Without this flag: Only searches children/descendants
+// With this flag: Also tests the root node itself
+const LXB_SELECTORS_OPT_MATCH_ROOT: usize = 0x02;
 //=============================================================================
 // EXTERN CSS FUNCTIONS
 //=============================================================================
@@ -33,12 +42,16 @@ extern "c" fn lxb_selectors_destroy(selectors: *CssSelectors, destroy_self: bool
 // Parse selectors
 extern "c" fn lxb_css_selectors_parse(parser: *CssParser, selectors: [*]const u8, length: usize) ?*CssSelectorList;
 
+extern "c" fn lxb_selectors_opt_set_noi(selectors: *CssSelectors, opts: usize) void;
+
 // Find nodes matching selectors
 extern "c" fn lxb_selectors_find(selectors: *CssSelectors, root: *z.DomNode, list: *CssSelectorList, callback: *const fn (
     node: *z.DomNode,
     spec: *CssSelectorSpecificity,
     ctx: ?*anyopaque,
 ) callconv(.C) usize, ctx: ?*anyopaque) usize;
+
+extern "c" fn lxb_selectors_match_node(selectors: *CssSelectors, node: *z.DomNode, list: *CssSelectorList, callback: *const fn (*z.DomNode, *CssSelectorSpecificity, ?*anyopaque) callconv(.C) usize, ctx: ?*anyopaque) usize;
 
 // Cleanup selector list
 extern "c" fn lxb_css_selector_list_destroy_memory(list: *CssSelectorList) void;
@@ -71,6 +84,9 @@ pub const CssSelectorEngine = struct {
             return err.CssSelectorsInitFailed;
         }
 
+        // set options for unique results and root matching
+        lxb_selectors_opt_set_noi(selectors, LXB_SELECTORS_OPT_MATCH_FIRST | LXB_SELECTORS_OPT_MATCH_ROOT);
+
         return .{
             .parser = parser,
             .selectors = selectors,
@@ -88,28 +104,8 @@ pub const CssSelectorEngine = struct {
         }
     }
 
-    /// [selectors] Parse CSS selector string and find matching nodes
-    pub fn find(self: *Self, root_node: *z.DomNode, selector: []const u8) ![]*z.DomNode {
-        if (!self.initialized) return err.CssEngineNotInitialized;
-
-        // Parse the selector
-        const selector_list = lxb_css_selectors_parse(self.parser, selector.ptr, selector.len) orelse return err.CssSelectorParseFailed;
-        defer lxb_css_selector_list_destroy_memory(selector_list);
-
-        // Find matching nodes
-        var context = FindContext.init(self.allocator);
-        defer context.deinit();
-
-        const status = lxb_selectors_find(self.selectors, root_node, selector_list, findCallback, &context);
-        if (status != z.LXB_STATUS_OK) {
-            return err.CssSelectorFindFailed;
-        }
-
-        return context.results.toOwnedSlice();
-    }
-
     /// [selectors] Find first matching node
-    pub fn findFirst(
+    pub fn findFirstNode(
         self: *Self,
         root_node: *z.DomNode,
         selector: []const u8,
@@ -133,9 +129,75 @@ pub const CssSelectorEngine = struct {
             root_node,
             selector,
         );
+
         defer self.allocator.free(results);
 
         return results.len > 0;
+    }
+
+    /// [selectors] Match a single node against a CSS selector
+    /// Check if a specific node matches a selector (with type safety)
+    pub fn matchNode(self: *Self, node: *z.DomNode, selector: []const u8) !bool {
+        if (!self.initialized) return err.CssEngineNotInitialized;
+
+        // CSS selectors only work on element nodes
+        if (!z.isNodeElementType(node)) {
+            return false;
+        }
+
+        const selector_list = lxb_css_selectors_parse(
+            self.parser,
+            selector.ptr,
+            selector.len,
+        ) orelse return err.CssSelectorParseFailed;
+
+        defer lxb_css_selector_list_destroy_memory(selector_list);
+
+        var context = FindContext.init(self.allocator);
+        defer context.deinit();
+
+        const status = lxb_selectors_match_node(
+            self.selectors,
+            node,
+            selector_list,
+            findCallback,
+            &context,
+        );
+
+        if (status != z.LXB_STATUS_OK) {
+            return err.CssSelectorMatchFailed;
+        }
+
+        return context.results.items.len > 0;
+    }
+
+    /// Find matching nodes (with optional type filtering)
+    pub fn find(self: *Self, root_node: *z.DomNode, selector: []const u8) ![]*z.DomNode {
+        if (!self.initialized) return err.CssEngineNotInitialized;
+
+        const selector_list = lxb_css_selectors_parse(
+            self.parser,
+            selector.ptr,
+            selector.len,
+        ) orelse return err.CssSelectorParseFailed;
+
+        defer lxb_css_selector_list_destroy_memory(selector_list);
+
+        var context = FindContext.init(self.allocator);
+        defer context.deinit();
+
+        const status = lxb_selectors_find(
+            self.selectors,
+            root_node,
+            selector_list,
+            findCallback,
+            &context,
+        );
+        if (status != z.LXB_STATUS_OK) {
+            return err.CssSelectorFindFailed;
+        }
+
+        return context.results.toOwnedSlice();
     }
 };
 
@@ -169,6 +231,21 @@ fn findCallback(
 
     const context: *FindContext = @ptrCast(@alignCast(ctx.?));
     context.results.append(node) catch return 1; // Return error status on allocation failure
+
+    return z.LXB_STATUS_OK;
+}
+
+fn debugMatchCallback(
+    node: *z.DomNode,
+    spec: *CssSelectorSpecificity,
+    ctx: ?*anyopaque,
+) callconv(.C) usize {
+    _ = spec;
+
+    print("   DEBUG: matchCallback called with node\n", .{});
+
+    const context: *FindContext = @ptrCast(@alignCast(ctx.?));
+    context.results.append(node) catch return 1;
 
     return z.LXB_STATUS_OK;
 }
@@ -368,4 +445,162 @@ test "CSS selector edge cases" {
 
         try testing.expectEqual(test_case.expected_count, results.len);
     }
+}
+
+test "debug what classes lexbor sees" {
+    const allocator = testing.allocator;
+
+    const html =
+        "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    const collection = z.createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
+    defer z.destroyCollection(collection);
+    z.debugPrint(collection);
+
+    const body_node = try z.getDocumentBodyNode(doc);
+    const container_div = z.getNodeFirstChild(body_node).?;
+    const container_div_element = z.nodeToElement(container_div);
+    const class = try z.getElementClass(
+        allocator,
+        container_div_element.?,
+    );
+
+    defer if (class) |c| allocator.free(c);
+    try testing.expectEqualStrings("container", class.?);
+
+    const red_box = z.getNodeFirstChild(container_div).?;
+    const blue_box = z.getNodeNextSibling(red_box).?;
+    const paragraph = z.getNodeNextSibling(blue_box).?;
+
+    // Check what classes each element actually has
+    const elements = [_]struct { node: *z.DomNode, name: []const u8 }{
+        .{ .node = container_div, .name = "container" },
+        .{ .node = red_box, .name = "box red" },
+        .{ .node = blue_box, .name = "box blue" },
+        .{ .node = paragraph, .name = "text" },
+    };
+
+    for (elements) |elem| {
+        const element = z.nodeToElement(elem.node).?;
+
+        if (try z.elementGetNamedAttribute(allocator, element, "class")) |class_attr| {
+            defer allocator.free(class_attr);
+            try testing.expectEqualStrings(class_attr, elem.name);
+        }
+    }
+
+    // Test simple matchNode
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    // Test red box
+    const red_div = try css_engine.matchNode(red_box, "div");
+    const red_box_class = try css_engine.matchNode(red_box, ".box");
+    const red_red_class = try css_engine.matchNode(red_box, ".red");
+    const red_blue_class = try css_engine.matchNode(red_box, ".blue");
+    try testing.expect(red_div);
+    try testing.expect(red_box_class);
+    try testing.expect(red_red_class);
+    try testing.expect(!red_blue_class);
+
+    // Test blue box
+    const blue_div = try css_engine.matchNode(blue_box, "div");
+    const blue_box_class = try css_engine.matchNode(blue_box, ".box");
+    const blue_red_class = try css_engine.matchNode(blue_box, ".red");
+    const blue_blue_class = try css_engine.matchNode(blue_box, ".blue");
+
+    try testing.expect(blue_div);
+    try testing.expect(blue_box_class);
+    try testing.expect(!blue_red_class);
+    try testing.expect(blue_blue_class);
+}
+
+test "CSS selector matchNode vs find vs matches" {
+    const allocator = testing.allocator;
+    // !! the html string must be without whitespace, indentation, or newlines (#text nodes are not elements)
+    const html =
+        "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    const body_node = try z.getDocumentBodyNode(doc);
+    const container_div = z.getNodeFirstChild(body_node).?;
+    const red_box = z.getNodeFirstChild(container_div).?;
+    const blue_box = z.getNodeNextSibling(red_box).?;
+    const paragraph = z.getNodeNextSibling(blue_box).?;
+
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    print("1. Testing find() on the div itself:\n", .{});
+    const found_div = try css_engine.find(container_div, "div");
+    defer allocator.free(found_div);
+    print("   find(div_node, 'div'): {} results\n", .{found_div.len});
+
+    const found_box = try css_engine.find(container_div, ".box");
+    defer allocator.free(found_box);
+    print("   find(div_node, '.box'): {} results\n", .{found_box.len});
+
+    print("2. Testing matchNode():\n", .{});
+
+    const matches_div = try css_engine.matchNode(container_div, "div");
+    print("   matchNode(div_node, 'div'): {}\n", .{matches_div});
+
+    const matches_box = try css_engine.matchNode(container_div, ".box");
+    print("   matchNode(div_node, '.box'): {}\n", .{matches_box});
+
+    const find_results = try css_engine.find(container_div, ".box");
+    defer allocator.free(find_results);
+    print("find(div_node, '.box'): {} results\n", .{find_results.len});
+
+    for (find_results, 0..) |result_node, i| {
+        print("  Result {}: node == div_node? {}\n", .{ i, result_node == container_div });
+    }
+
+    // Test with matchNode (not working)
+    const match_result = try css_engine.matchNode(container_div, ".box");
+    print("matchNode(div_node, '.box'): {}\n", .{match_result});
+
+    print("\n=== CSS Selector Tests ===\n", .{});
+
+    // Test 1: matchNode - Check if specific nodes match selectors
+    print("1. matchNode tests:\n", .{});
+
+    // Red box tests
+    try testing.expect(try css_engine.matchNode(red_box, "div"));
+    try testing.expect(try css_engine.matchNode(red_box, ".box"));
+    try testing.expect(try css_engine.matchNode(red_box, ".red"));
+    try testing.expect(!try css_engine.matchNode(red_box, ".blue"));
+
+    // Blue box tests
+    try testing.expect(try css_engine.matchNode(blue_box, ".box"));
+    try testing.expect(try css_engine.matchNode(blue_box, ".blue"));
+    try testing.expect(!try css_engine.matchNode(blue_box, ".red"));
+
+    // Paragraph tests
+    try testing.expect(try css_engine.matchNode(paragraph, "p"));
+    try testing.expect(try css_engine.matchNode(paragraph, ".text"));
+    try testing.expect(!try css_engine.matchNode(paragraph, ".box"));
+
+    print("   ✅ matchNode correctly identifies individual node matches\n", .{});
+
+    // Test 2: Demonstrate difference between matchNode and find
+    print("2. matchNode vs find behavior:\n", .{});
+
+    // matchNode: Does the container itself have class "box"?
+    const container_matches_box = try css_engine.matchNode(container_div, ".box");
+    print("   container matchNode(.box): {} (container itself)\n", .{container_matches_box});
+
+    // find: Are there any descendants with class "box"?
+    const container_find_box = try css_engine.find(container_div, ".box");
+    defer allocator.free(container_find_box);
+    print("   container find(.box): {} results (descendants)\n", .{container_find_box.len});
+
+    try testing.expect(!container_matches_box); // Container itself is not .box
+    try testing.expect(container_find_box.len == 2); // But it has 2 descendants with .box
+
 }

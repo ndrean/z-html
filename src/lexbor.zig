@@ -215,9 +215,9 @@ pub fn appendChildren(parent: *DomNode, children: []const *DomNode) void {
 /// [core] Append all children from a document fragment to a parent node
 /// This properly handles the fragment semantics where the fragment children are moved (not copied)
 pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
-    var fragment_child = getNodeFirstChildNode(fragment);
+    var fragment_child = getNodeFirstChild(fragment);
     while (fragment_child != null) {
-        const next_sibling = getNodeNextSiblingNode(fragment_child.?);
+        const next_sibling = getNodeNextSibling(fragment_child.?);
         appendChild(parent, fragment_child.?);
         fragment_child = next_sibling;
     }
@@ -283,13 +283,13 @@ test "createTextNode and appendChild" {
 
     // Verify the structure
     const body_node = elementToNode(body);
-    const first_child = getNodeFirstChildNode(body_node).?;
+    const first_child = getNodeFirstChild(body_node).?;
     const div_from_tree = nodeToElement(first_child).?;
 
     try testing.expect(div == div_from_tree);
 
     // Check that div has the text content
-    const div_first_child = getNodeFirstChildNode(elementToNode(div_from_tree));
+    const div_first_child = getNodeFirstChild(elementToNode(div_from_tree));
     try testing.expect(div_first_child != null);
     try testing.expect(z.isNodeTextType(div_first_child.?));
 }
@@ -320,7 +320,7 @@ test "createDocumentFragment" {
 
     // Count P elements in the body
     var p_count: usize = 0;
-    var child = getNodeFirstChildNode(elementToNode(body));
+    var child = getNodeFirstChild(elementToNode(body));
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
             const tag_name = getElementName(element);
@@ -328,7 +328,7 @@ test "createDocumentFragment" {
                 p_count += 1;
             }
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     try testing.expectEqual(@as(usize, 2), p_count);
@@ -353,12 +353,12 @@ test "insertNodeBefore and insertNodeAfter" {
 
     // Verify that all three elements were added
     var element_count: usize = 0;
-    var child = getNodeFirstChildNode(body_node);
+    var child = getNodeFirstChild(body_node);
     while (child != null) {
         if (nodeToElement(child.?)) |_| {
             element_count += 1;
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     try testing.expectEqual(@as(usize, 3), element_count);
@@ -391,13 +391,13 @@ test "appendChildren helper" {
 
     // Verify all children were added
     var child_count: usize = 0;
-    var child = getNodeFirstChildNode(body_node);
+    var child = getNodeFirstChild(body_node);
 
     while (child != null) {
         if (nodeToElement(child.?)) |_| {
             child_count += 1;
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     try testing.expectEqual(@as(usize, 3), child_count);
@@ -577,11 +577,11 @@ test "void vs empty element detection" {
 
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const div_node = getNodeFirstChildNode(body_node).?;
+    const div_node = getNodeFirstChild(body_node).?;
 
     // print("\Void Element Test ========\n", .{});
 
-    var child = getNodeFirstChildNode(div_node);
+    var child = getNodeFirstChild(div_node);
     const void_elements = [_][]const u8{ "BR", "HR", "IMG", "INPUT", "META", "LINK", "AREA" };
 
     var empty_non_self_closing_non_text_nodes_count: usize = 0;
@@ -620,7 +620,7 @@ test "void vs empty element detection" {
             }
         }
 
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
     // print("Count result: {d}, {d}, {d}\n", .{ empty_nodes, empty_text_nodes_count, empty_non_self_closing_non_text_nodes_count });
     try testing.expect(empty_nodes == 3); // empty elements: <br/>, <img/>, <div>  </div>
@@ -642,14 +642,14 @@ pub fn getNodeParentNode(node: *DomNode) ?*DomNode {
 extern "c" fn lxb_dom_node_first_child_noi(node: *DomNode) ?*DomNode;
 
 /// [core] Get first child of node
-pub fn getNodeFirstChildNode(node: *DomNode) ?*DomNode {
+pub fn getNodeFirstChild(node: *DomNode) ?*DomNode {
     return lxb_dom_node_first_child_noi(node);
 }
 
 extern "c" fn lxb_dom_node_next_noi(node: *DomNode) ?*DomNode;
 
 /// [core] Get next sibling of node
-pub fn getNodeNextSiblingNode(node: *DomNode) ?*DomNode {
+pub fn getNodeNextSibling(node: *DomNode) ?*DomNode {
     return lxb_dom_node_next_noi(node);
 }
 
@@ -662,24 +662,24 @@ pub fn insertNodeChildNode(parent: *DomNode, child: *DomNode) void {
 
 /// [core] Get first element child (skip text nodes, comments, etc.)
 pub fn getNodeFirstChildElement(node: *DomNode) ?*DomElement {
-    var child = getNodeFirstChildNode(node);
+    var child = getNodeFirstChild(node);
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
             return element;
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
     return null;
 }
 
 /// [core] Get next element sibling (skip text nodes)
 pub fn getNodeNextSiblingElement(node: *DomNode) ?*DomElement {
-    var sibling = getNodeNextSiblingNode(node);
+    var sibling = getNodeNextSibling(node);
     while (sibling != null) {
         if (nodeToElement(sibling.?)) |element| {
             return element;
         }
-        sibling = getNodeNextSiblingNode(sibling.?);
+        sibling = getNodeNextSibling(sibling.?);
     }
     return null;
 }
@@ -693,14 +693,14 @@ pub fn getNodeChildrenElements(
     var elements = std.ArrayList(*DomElement).init(allocator);
     // defer elements.deinit(); <-- defer is not needed here since we return the slice
 
-    var child = getNodeFirstChildNode(parent_node);
+    var child = getNodeFirstChild(parent_node);
     while (child != null) {
         if (z.isNodeElementType(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     return elements.toOwnedSlice();
@@ -716,7 +716,7 @@ test "insertChild" {
     defer destroyNode(elementToNode(child));
     insertNodeChildNode(elementToNode(parent), elementToNode(child));
 
-    const first_child = getNodeFirstChildNode(elementToNode(parent)) orelse {
+    const first_child = getNodeFirstChild(elementToNode(parent)) orelse {
         return Err.EmptyTextContent;
     };
     const child_name = getElementName(nodeToElement(first_child).?);
@@ -739,7 +739,8 @@ pub const TextOptions = struct {
 extern "c" fn lxb_dom_node_text_content(node: *DomNode, len: ?*usize) ?[*:0]u8;
 
 /// [core] Get text content as Zig string (copies to Zig-managed memory)
-/// Caller must free the returned string
+///
+/// Caller needs to free the returned string
 pub fn getNodeAllTextContent(
     allocator: std.mem.Allocator,
     node: *DomNode,
@@ -833,9 +834,6 @@ test "HTML escaping" {
 
     const expected = "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;";
     try testing.expectEqualStrings(expected, escaped);
-
-    // print("Original: {s}\n", .{dangerous_text});
-    // print("Escaped:  {s}\n", .{escaped});
 }
 
 test "get & set NodeTextContent" {
@@ -882,7 +880,7 @@ test "text content" {
 
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p_node = getNodeFirstChildNode(body_node).?;
+    const p_node = getNodeFirstChild(body_node).?;
     const text = try getNodeTextContentsOpts(
         allocator,
         p_node,
@@ -891,8 +889,8 @@ test "text content" {
     defer allocator.free(text);
 
     try testing.expectEqualStrings("Hello World!", text);
-    const text_node = getNodeFirstChildNode(p_node);
-    const strong_node = getNodeNextSiblingNode(text_node.?);
+    const text_node = getNodeFirstChild(p_node);
+    const strong_node = getNodeNextSibling(text_node.?);
     const strong_text = try getNodeTextContentsOpts(
         allocator,
         strong_node.?,
@@ -912,8 +910,8 @@ test "getNodeTextContent" {
     const body_element = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body_element);
 
-    const first_child = getNodeFirstChildNode(body_node);
-    const second_child = getNodeNextSiblingNode(first_child.?);
+    const first_child = getNodeFirstChild(body_node);
+    const second_child = getNodeNextSibling(first_child.?);
 
     const all_text = try getNodeTextContentsOpts(
         allocator,
@@ -1000,12 +998,12 @@ test "getElementChildren from fragment" {
 
 /// [core] Helper: Walk only element children, skipping text nodes
 pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomElement) void) void {
-    var child = getNodeFirstChildNode(parent_node);
+    var child = getNodeFirstChild(parent_node);
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
             callback(element);
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 }
 
@@ -1018,7 +1016,7 @@ test "simple empty node" {
     defer destroyDocument(doc);
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p = getNodeFirstChildNode(body_node);
+    const p = getNodeFirstChild(body_node);
     try testing.expect(isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
@@ -1032,7 +1030,7 @@ test "node with whitespace like characters IS empty but contains characters" {
     defer destroyDocument(doc);
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p = getNodeFirstChildNode(body_node);
+    const p = getNodeFirstChild(body_node);
     try testing.expect(isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
@@ -1047,7 +1045,7 @@ test "node with (non empty) inenr text is NOT empty" {
     defer destroyDocument(doc);
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p = getNodeFirstChildNode(body_node);
+    const p = getNodeFirstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
 }
 
@@ -1056,7 +1054,7 @@ test "node with an (empty text content) node is NOT empty" {
     defer destroyDocument(doc);
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p = getNodeFirstChildNode(body_node);
+    const p = getNodeFirstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
@@ -1092,25 +1090,6 @@ test "isWhitespaceOnlyText" {
     try testing.expect(isWhitepaceOnlyText(text4));
 }
 
-// / [core] Check only whitespace only TEXT nodes.
-// / If the node is not a text node, it returns false.
-// / If the node is a text node, it checks if its content is only whitespace.
-// pub fn isWhitespaceOnlyTextNode(
-//     // allocator: std.mem.Allocator,
-//     node: *DomNode,
-// ) !bool {
-//     if (!z.isNodeTextType(node)) return Err.NotTextNode;
-
-//     if (isNodeEmpty(node)) return true;
-//     return false;
-
-//     // const text = try getNodeTextContentsOpts(allocator, node, .{});
-//     // defer allocator.free(text);
-//     // if (text.len == 0) return true;
-
-//     // return isWhitepaceOnlyText(text);
-// }
-
 pub fn isWhitespaceOnlyNode(node: *DomNode) bool {
     if (isSelfClosingNode(node)) return false; // Self-closing nodes are not considered whitespace-only
     if (isNodeEmpty(node)) return true;
@@ -1123,14 +1102,14 @@ test "isWhitespaceOnlyNode" {
     defer destroyDocument(doc);
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const p = getNodeFirstChildNode(body_node);
+    const p = getNodeFirstChild(body_node);
 
     try testing.expect(
         isWhitespaceOnlyNode(p.?),
     );
 
     // inner text node is whitespace-only
-    const inner_text_node = getNodeFirstChildNode(p.?);
+    const inner_text_node = getNodeFirstChild(p.?);
     try testing.expect(
         z.isNodeTextType(inner_text_node.?),
     );
@@ -1148,7 +1127,7 @@ test "isWhitespaceOnlyNode" {
     try setNodeTextContent(node_div, "\n \r  \t");
     // should be true
     try testing.expect(
-        isWhitespaceOnlyNode(getNodeFirstChildNode(node_div).?),
+        isWhitespaceOnlyNode(getNodeFirstChild(node_div).?),
     );
 }
 
@@ -1173,7 +1152,7 @@ test "isWhitespaceOnlyElement" {
         !isNodeEmpty(body_node),
     );
 
-    const div = getNodeFirstChildNode(body_node) orelse {
+    const div = getNodeFirstChild(body_node) orelse {
         try testing.expect(false);
         return;
     };
@@ -1248,9 +1227,9 @@ fn cleanNodeRecursive(
 
     // Recursively clean children (if node still exists)
     if (!node_was_removed) {
-        var child = getNodeFirstChildNode(node);
+        var child = getNodeFirstChild(node);
         while (child != null) {
-            const next_child = getNodeNextSiblingNode(child.?);
+            const next_child = getNodeNextSibling(child.?);
             try cleanNodeRecursive(allocator, child.?, options);
             child = next_child;
         }
@@ -1354,12 +1333,8 @@ extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, 
 
 /// [core] set or replace text data on a text node
 /// If the inner text node is empty, it will be created.
-pub fn setOrReplaceNodeTextData(
-    allocator: std.mem.Allocator,
-    node: *DomNode,
-    text: []const u8,
-) !void {
-    const inner_text_node = getNodeFirstChildNode(node) orelse null;
+pub fn setOrReplaceNodeTextData(allocator: std.mem.Allocator, node: *DomNode, text: []const u8) !void {
+    const inner_text_node = getNodeFirstChild(node) orelse null;
     if (inner_text_node == null) {
         try setNodeTextContent(node, text);
     } else {
@@ -1388,7 +1363,7 @@ test "setTextNodeData" {
     const element = try createElement(doc, .{ .tag = .div });
     defer destroyNode(elementToNode(element));
     const node = elementToNode(element);
-    const first_inner_text_node = getNodeFirstChildNode(node) orelse null;
+    const first_inner_text_node = getNodeFirstChild(node) orelse null;
 
     try testing.expect(first_inner_text_node == null);
 
@@ -1428,10 +1403,7 @@ fn shouldPreserveWhitespace(node: *DomNode) bool {
     return false;
 }
 
-fn normalizeTextWhitespace(
-    allocator: std.mem.Allocator,
-    text: []const u8,
-) ![]u8 {
+fn normalizeTextWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     // Trim leading and trailing whitespace
     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
 
@@ -1474,9 +1446,9 @@ test "cleanElementAttributes performance optimization" {
 
     const body = try getDocumentBodyElement(doc);
     const body_node = elementToNode(body);
-    const div_node = getNodeFirstChildNode(body_node).?;
+    const div_node = getNodeFirstChild(body_node).?;
 
-    var child = getNodeFirstChildNode(div_node);
+    var child = getNodeFirstChild(div_node);
     var elements_processed: usize = 0;
     var elements_with_attrs: usize = 0;
 
@@ -1492,7 +1464,7 @@ test "cleanElementAttributes performance optimization" {
             // This should now use the optimized path
             _ = try cleanElementAttributes(allocator, element);
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     try testing.expect(elements_processed == 2); // <p> and <span>

@@ -18,7 +18,8 @@ pub const lxbString = extern struct {
 extern "c" fn lxb_html_serialize_tree_str(node: *z.DomNode, str: *lxbString) usize;
 
 /// [Serialize] Serialize node tree (most common use case)
-/// Returns Zig-managed string that needs to be freed
+///
+/// Caller needs to free the returned string
 pub fn serializeTree(
     allocator: std.mem.Allocator,
     node: *z.DomNode,
@@ -48,8 +49,9 @@ pub fn serializeTree(
 
 extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
 
-/// [Serialize]  DOM node
-/// Returns Zig-managed string that needs to be freed
+/// [Serialize] DOM node
+///
+/// Caller needs to free the returned string
 pub fn serializeNode(
     allocator: std.mem.Allocator,
     node: *z.DomNode,
@@ -76,7 +78,8 @@ pub fn serializeNode(
 }
 
 /// [Serialize] HTMLElement
-/// Returns Zig-managed string that needs to be freed
+///
+/// Caller needs to free the returned string
 pub fn serializeElement(
     allocator: std.mem.Allocator,
     element: *z.DomElement,
@@ -90,6 +93,8 @@ pub fn serializeElement(
 // -------------------------------------------------------------------------------------
 
 /// [Serialize] Get element's inner HTML
+///
+/// Caller needs to free the returned string
 pub fn getElementInnerHTML(
     allocator: std.mem.Allocator,
     element: *z.DomElement,
@@ -100,14 +105,14 @@ pub fn getElementInnerHTML(
     const element_node = z.elementToNode(element);
 
     // Serialize all child nodes (excluding the element itself)
-    var child = z.getNodeFirstChildNode(element_node);
+    var child = z.getNodeFirstChild(element_node);
     while (child != null) {
         const child_html = try serializeTree(allocator, child.?);
         defer allocator.free(child_html);
 
         try result.appendSlice(child_html);
 
-        child = z.getNodeNextSiblingNode(child.?);
+        child = z.getNodeNextSibling(child.?);
     }
 
     return result.toOwnedSlice();
@@ -129,6 +134,8 @@ pub fn setElementInnerHTML(
 }
 
 /// [Serialize] Gets element's outer HTML (including the element itself)
+///
+/// Caller needs to free the returned string
 pub fn getElementOuterHTML(
     allocator: std.mem.Allocator,
     element: *z.DomElement,
@@ -189,7 +196,7 @@ test "set innerHTML" {
     const inner = "<ul><li>1<li>2<li>3</ul>";
     const doc = try z.parseHtmlString(html);
     const body = try z.getDocumentBodyElement(doc);
-    const div = z.getNodeFirstChildNode(z.elementToNode(body));
+    const div = z.getNodeFirstChild(z.elementToNode(body));
     const div_elt = z.nodeToElement(div.?);
     defer z.destroyDocument(doc);
 
@@ -222,7 +229,7 @@ test "direct serialization" {
     const body = (try z.getDocumentBodyElement(doc));
     const body_node = z.elementToNode(body);
 
-    if (z.getNodeFirstChildNode(body_node)) |div_node| {
+    if (z.getNodeFirstChild(body_node)) |div_node| {
         const serialized = try serializeTree(allocator, div_node);
         defer allocator.free(serialized);
 
@@ -241,7 +248,7 @@ test "serialize Node vs tree functionality" {
     const body_node = z.elementToNode(body);
 
     // Get the div element
-    const div_node = z.getNodeFirstChildNode(body_node) orelse {
+    const div_node = z.getNodeFirstChild(body_node) orelse {
         try testing.expect(false); // Should have div
         return;
     };
@@ -292,10 +299,10 @@ test "serialize Node vs tree functionality" {
 
 //     const body = z.getBodyElement(doc).?;
 //     const body_node = z.elementToNode(body);
-//     const container_node = z.getNodeFirstChildNode(body_node).?;
+//     const container_node = z.getNodeFirstChild(body_node).?;
 
 //     // Walk children and only process ELEMENT nodes
-//     var current_child = z.getNodeFirstChildNode(container_node);
+//     var current_child = z.getNodeFirstChild(container_node);
 //     var element_count: u32 = 0;
 
 //     while (current_child != null) {
@@ -326,7 +333,7 @@ test "serialize Node vs tree functionality" {
 //             // print("Skipping text node: '{s}'\n", .{element_name});
 //         }
 
-//         current_child = z.getNodeNextSiblingNode(current_child.?);
+//         current_child = z.getNodeNextSiblingcurrent_child.?);
 //     }
 
 //     // print("Found {} element nodes\n", .{element_count});
@@ -356,7 +363,7 @@ test "behaviour of serializeNode" {
 
         const body = try z.getDocumentBodyElement(doc);
         const body_node = z.elementToNode(body);
-        const element_node = z.getNodeFirstChildNode(body_node).?;
+        const element_node = z.getNodeFirstChild(body_node).?;
 
         const serial_node = try serializeNode(allocator, element_node);
         defer allocator.free(serial_node);
@@ -379,7 +386,7 @@ test "serializeNode vs serializeTree comparison" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const article_node = z.getNodeFirstChildNode(body_node).?;
+    const article_node = z.getNodeFirstChild(body_node).?;
 
     // Serialize the article element
     const node_result = try serializeNode(allocator, article_node);

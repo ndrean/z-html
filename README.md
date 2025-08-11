@@ -201,5 +201,11 @@ nm lexbor_src_2.4.0/build/liblexbor_static.a | grep -i "serialize"
 In the source code:
 
 ```sh
+find lexbor_src_2.4.0/source -name "*.c" | xargs grep -l "lxb_selectors_opt_set_noi"
+```
+
+or
+
+```sh
 grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/
 ```

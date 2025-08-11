@@ -32,4 +32,5 @@ pub const LexborError = error{
     GetAttributeFailed,
     SetAttributeValueFailed,
     NotTextNode,
+    CssSelectorMatchFailed,
 };

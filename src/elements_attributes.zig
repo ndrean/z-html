@@ -22,6 +22,10 @@ pub const AttributePair = struct {
 extern "c" fn lxb_dom_element_get_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value_len: *usize) ?[*]const u8;
 
 /// [attributes] Get attribute value
+///
+/// Returns null if attribute doesn't exist, empty string if attribute exists but has no value.
+///
+/// Caller needs to free the slice if not null
 pub fn elementGetNamedAttribute(
     allocator: std.mem.Allocator,
     element: *z.DomElement,
@@ -35,6 +39,8 @@ pub fn elementGetNamedAttribute(
         &value_len,
     ) orelse return null;
 
+    // If empty value, return empty string rather than null
+    // This matches HTML behavior where attributes can have empty values
     const result = try allocator.alloc(u8, value_len);
     @memcpy(result, value_ptr[0..value_len]);
     return result;
@@ -85,6 +91,8 @@ pub fn elementGetNamedAttributeValue(element: *z.DomElement, name: []const u8) ?
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 
 /// Get attribute name as owned string
+///
+/// Caller needs to free the slice
 pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_attr_qualified_name(
@@ -101,6 +109,8 @@ pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
 /// [attributes] Get attribute value as owned string
+///
+/// Caller needs to free the slice
 pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_attr_value_noi(
@@ -186,7 +196,7 @@ extern "c" fn lxb_dom_element_id_noi(element: *z.DomElement, len: *usize) [*]con
 
 /// Get element ID as owned string
 ///
-/// Caller needs to be free the slice
+/// Caller needs to free the slice
 pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
@@ -204,13 +214,19 @@ extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]
 
 /// [attributes] Get element class as owned string
 ///
-/// Caller needs to free the slice
+/// Caller needs to free the slice if not null
 pub fn getElementClass(allocator: std.mem.Allocator, element: *z.DomElement) !?[]const u8 {
     var class_len: usize = 0;
     const class_ptr = lxb_dom_element_class_noi(
         element,
         &class_len,
     );
+
+    // If no class or empty class, return null
+    if (class_len == 0) {
+        return null;
+    }
+
     const result = try allocator.alloc(u8, class_len);
     @memcpy(result, class_ptr[0..class_len]);
     return result;
@@ -227,7 +243,7 @@ test "element / attribute  name & value" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.getNodeFirstChildNode(body_node).?;
+    const div = z.getNodeFirstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
     // Get ID attribute from an element
@@ -257,7 +273,7 @@ test "collect  attributes" {
     const doc = try z.parseHtmlString(html);
     defer z.destroyDocument(doc);
     const body_node = try z.getDocumentBodyNode(doc);
-    const div = z.getNodeFirstChildNode(body_node).?;
+    const div = z.getNodeFirstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
     const attributes = try elementCollectAttributes(allocator, div_elt);
@@ -273,7 +289,8 @@ test "collect  attributes" {
     const expected_values = [_][]const u8{ "test", "my-id", "123", "tooltip", "" };
 
     for (attributes, 0..) |attr_pair, i| {
-        print("Attribute {}: {s} = {s}\n", .{ i, attr_pair.name, attr_pair.value });
+        _ = i; // Unused index
+        // print("Attribute {}: {s} = {s}\n", .{ i, attr_pair.name, attr_pair.value });
 
         // Find this attribute in expected lists
         var found = false;
@@ -297,7 +314,7 @@ test "named attribute operations" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChildNode(body_node).?;
+    const div_node = z.getNodeFirstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // Test hasAttribute
@@ -338,7 +355,7 @@ test "attribute modification" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const p_node = z.getNodeFirstChildNode(body_node).?;
+    const p_node = z.getNodeFirstChild(body_node).?;
     const p_element = z.nodeToElement(p_node).?;
 
     try elementSetAttributes(
@@ -394,7 +411,7 @@ test "attribute iteration" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const div_node = z.getNodeFirstChildNode(body_node);
+    const div_node = z.getNodeFirstChild(body_node);
     const div_element = z.nodeToElement(div_node.?).?;
 
     // Manual check of expected attributes
@@ -430,7 +447,7 @@ test "ID and CLASS attribute getters" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const section_node = z.getNodeFirstChildNode(body_node);
+    const section_node = z.getNodeFirstChild(body_node);
     const section_element = z.nodeToElement(section_node.?).?;
 
     // Test ID getter
@@ -455,7 +472,7 @@ test "attribute edge cases" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChildNode(body_node).?;
+    const div_node = z.getNodeFirstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // print("\n=== Attribute Edge Cases ===\n", .{});
@@ -505,28 +522,28 @@ test "elementHasNamedAttribute - isolated test" {
 
     const body = try z.getDocumentBodyElement(doc);
     const body_node = z.elementToNode(body);
-    const div_node = z.getNodeFirstChildNode(body_node).?;
+    const div_node = z.getNodeFirstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
-    print("\n=== Testing elementHasNamedAttribute in isolation ===\n", .{});
+    // print("\n=== Testing elementHasNamedAttribute in isolation ===\n", .{});
 
     // Test basic functionality
-    print("Testing 'id' attribute...\n", .{});
+    // print("Testing 'id' attribute...\n", .{});
     const has_id = elementHasNamedAttribute(div_element, "id");
     try testing.expect(has_id);
-    print("✅ Has 'id' attribute: {}\n", .{has_id});
+    // print("✅ Has 'id' attribute: {}\n", .{has_id});
 
-    print("Testing 'class' attribute...\n", .{});
+    // print("Testing 'class' attribute...\n", .{});
     const has_class = elementHasNamedAttribute(div_element, "class");
     try testing.expect(has_class);
-    print("✅ Has 'class' attribute: {}\n", .{has_class});
+    // print("✅ Has 'class' attribute: {}\n", .{has_class});
 
-    print("Testing 'missing' attribute...\n", .{});
+    // print("Testing 'missing' attribute...\n", .{});
     const has_missing = elementHasNamedAttribute(div_element, "missing");
     try testing.expect(!has_missing);
-    print("✅ Has 'missing' attribute: {}\n", .{has_missing});
+    // print("✅ Has 'missing' attribute: {}\n", .{has_missing});
 
-    print("✅ elementHasNamedAttribute isolated test passed!\n", .{});
+    // print("✅ elementHasNamedAttribute isolated test passed!\n", .{});
 }
 
 test "attribute error handling" {
@@ -538,11 +555,11 @@ test "attribute error handling" {
     defer z.destroyDocument(doc);
 
     const body_node = try z.getDocumentBodyNode(doc);
-    const div_node = z.getNodeFirstChildNode(body_node).?;
+    const div_node = z.getNodeFirstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
     // Test setting attribute on non-element node should return null
-    const text_node = z.getNodeFirstChildNode(div_node).?;
+    const text_node = z.getNodeFirstChild(div_node).?;
     const text_element = z.nodeToElement(text_node);
 
     // With our fix, nodeToElement should return null for text nodes

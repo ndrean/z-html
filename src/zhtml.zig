@@ -45,8 +45,8 @@ pub const getDocumentBodyNode = lxb.getDocumentBodyNode;
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
-pub const getNodeFirstChildNode = lxb.getNodeFirstChildNode;
-pub const getNodeNextSiblingNode = lxb.getNodeNextSiblingNode;
+pub const getNodeFirstChild = lxb.getNodeFirstChild;
+pub const getNodeNextSibling = lxb.getNodeNextSibling;
 pub const getNodeName = lxb.getNodeName;
 pub const getElementName = lxb.getElementName;
 pub const removeNode = lxb.removeNode;
@@ -79,12 +79,19 @@ pub const getLastCollectionElement = collection.getCollectionLastElement;
 pub const isCollectionEmpty = collection.isCollectionEmpty;
 pub const appendElementToCollection = collection.appendElementToCollection;
 pub const collectionIterator = collection.iterator;
+pub const debugPrint = collection.debugPrint;
+pub const collectionToSlice = collection.collectionToSlice;
 pub const CollectionIterator = collection.CollectionIterator;
+
+// Collection configuration
+pub const setDefaultCapacity = collection.setDefaultCapacity;
+pub const getDefaultCapacity = collection.getDefaultCapacity;
+pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
 // Element search functions
 
 pub const getElementById = collection.getElementById;
-pub const getElementsByAttribute = collection.getElementsByAttribute;
+pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 pub const getElementsByTagName = collection.getElementsByTagName;
@@ -230,7 +237,7 @@ pub const elementCollectAttributes = attributes.elementCollectAttributes;
 
 /// [lexbor] Debug: Walk and print DOM tree
 pub fn walkTree(node: *DomNode, depth: u32) void {
-    var child = getNodeFirstChildNode(node);
+    var child = getNodeFirstChild(node);
     while (child != null) {
         const name = getNodeName(child.?);
         const indent = switch (@min(depth, 10)) {
@@ -245,7 +252,7 @@ pub fn walkTree(node: *DomNode, depth: u32) void {
         print("{s}{s}\n", .{ indent, name });
 
         walkTree(child.?, depth + 1);
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 }
 
@@ -264,14 +271,14 @@ pub fn getElementChildrenWithTypes(
     var elements = std.ArrayList(*DomElement).init(allocator);
     defer elements.deinit();
 
-    var child = getNodeFirstChildNode(parent_node);
+    var child = getNodeFirstChild(parent_node);
     while (child != null) {
         if (isNodeElementType(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }
         }
-        child = getNodeNextSiblingNode(child.?);
+        child = getNodeNextSibling(child.?);
     }
 
     return elements.toOwnedSlice();
