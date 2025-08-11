@@ -199,6 +199,52 @@ pub const CssSelectorEngine = struct {
 
         return context.results.toOwnedSlice();
     }
+
+    /// Query: Find all descendant nodes that match the selector
+    /// Equivalent to C++ query()
+    pub fn query(self: *Self, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
+        if (!self.initialized) return err.CssEngineNotInitialized;
+
+        const selector_list = lxb_css_selectors_parse(self.parser, selector.ptr, selector.len) orelse return err.CssSelectorParseFailed;
+        defer lxb_css_selector_list_destroy_memory(selector_list);
+
+        var context = FindContext.init(self.allocator);
+        defer context.deinit();
+
+        // Search descendants of each input node
+        for (nodes) |node| {
+            const status = lxb_selectors_find(self.selectors, node, selector_list, findCallback, &context);
+            if (status != z.LXB_STATUS_OK) {
+                return err.CssSelectorFindFailed;
+            }
+        }
+
+        return context.results.toOwnedSlice();
+    }
+
+    /// Filter: Keep only nodes that match the selector themselves
+    /// Equivalent to C++ filter()
+    pub fn filter(self: *Self, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
+        if (!self.initialized) return err.CssEngineNotInitialized;
+
+        const selector_list = lxb_css_selectors_parse(self.parser, selector.ptr, selector.len) orelse return err.CssSelectorParseFailed;
+        defer lxb_css_selector_list_destroy_memory(selector_list);
+
+        var context = FindContext.init(self.allocator);
+        defer context.deinit();
+
+        // Test each input node directly
+        for (nodes) |node| {
+            if (z.isNodeElementType(node)) { // Guard for element nodes only
+                const status = lxb_selectors_match_node(self.selectors, node, selector_list, findCallback, &context);
+                if (status != z.LXB_STATUS_OK) {
+                    return err.CssSelectorMatchFailed;
+                }
+            }
+        }
+
+        return context.results.toOwnedSlice();
+    }
 };
 
 //=============================================================================
@@ -255,6 +301,8 @@ fn debugMatchCallback(
 //=============================================================================
 
 /// [selectors] High-level function: Find elements by CSS selector in a document
+///
+/// Caller needs to free the returned slice.
 pub fn findElements(
     allocator: std.mem.Allocator,
     doc: *z.HtmlDocument,
@@ -603,4 +651,49 @@ test "CSS selector matchNode vs find vs matches" {
     try testing.expect(!container_matches_box); // Container itself is not .box
     try testing.expect(container_find_box.len == 2); // But it has 2 descendants with .box
 
+}
+
+test "query vs filter behavior" {
+    const allocator = testing.allocator;
+
+    const html = "<div class='container'><div class='box'>Content</div><p class='text'>Para</p></div>";
+
+    const doc = try z.parseHtmlString(html);
+    defer z.destroyDocument(doc);
+
+    const body_node = try z.getDocumentBodyNode(doc);
+    const container_div = z.getNodeFirstChild(body_node).?;
+    const box_div = z.getNodeFirstChild(container_div).?;
+    const paragraph = z.getNodeNextSibling(box_div).?;
+
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    print("\n=== Query vs Filter ===\n", .{});
+
+    // Setup: Array of nodes to work with
+    var input_nodes = [_]*z.DomNode{ container_div, box_div, paragraph };
+
+    // Query: Find descendants with class "box" from each input node
+    const query_results = try css_engine.query(&input_nodes, ".box");
+    defer allocator.free(query_results);
+    print("query(nodes, '.box'): {} results\n", .{query_results.len});
+    // Should find the box_div when searching from container_div
+
+    // Filter: Keep only input nodes that have class "box"
+    const filter_results = try css_engine.filter(&input_nodes, ".box");
+    defer allocator.free(filter_results);
+    print("filter(nodes, '.box'): {} results\n", .{filter_results.len});
+    // Should keep only box_div from the input nodes
+
+    // Test with different selector
+    const query_divs = try css_engine.query(&input_nodes, "div");
+    defer allocator.free(query_divs);
+    print("query(nodes, 'div'): {} results\n", .{query_divs.len});
+
+    const filter_divs = try css_engine.filter(&input_nodes, "div");
+    defer allocator.free(filter_divs);
+    print("filter(nodes, 'div'): {} results\n", .{filter_divs.len});
+
+    print("✅ Query vs Filter test completed\n", .{});
 }
