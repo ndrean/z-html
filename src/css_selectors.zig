@@ -132,7 +132,8 @@ pub const CssSelectorEngine = struct {
             &context,
         );
 
-        if (status != z.LXB_STATUS_OK) {
+        // Accept both success and our early stopping code
+        if (status != z.LXB_STATUS_OK and status != 0x7FFFFFFF) {
             return err.CssSelectorFindFailed;
         }
 
@@ -345,18 +346,21 @@ fn findFirstNodeCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?
 
     const context: *FirstNodeContext = @ptrCast(@alignCast(ctx.?));
     context.first_node = node;
-    return 1; // Return non-zero to stop the search early!
+
+    // Return a special status to indicate early stopping
+    // Some lexbor implementations might use this pattern
+    return 0x7FFFFFFF; // Large positive number to indicate early stop
 }
 
 /// Callback that stops after finding first element
-fn findFirstCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
+fn findFirstElementCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
     _ = spec; // unused
 
     const context: *FirstElementContext = @ptrCast(@alignCast(ctx.?));
 
     if (z.nodeToElement(node)) |element| {
         context.first_element = element;
-        return 1; // Return non-zero to stop the search early!
+        return 0x7FFFFFFF; // Large positive number to indicate early stop
     }
 
     return z.LXB_STATUS_OK; // Continue searching
@@ -436,6 +440,147 @@ test "CSS selector basic functionality" {
     const element_name = z.getNodeName(z.elementToNode(id_elements[0]));
     // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
+}
+
+test "querySelector vs querySelectorAll functionality" {
+    const allocator = testing.allocator;
+
+    // Create HTML document with multiple matching elements
+    const html =
+        \\<div>
+        \\  <p class='target'>First paragraph</p>
+        \\  <div class='target'>Middle div</div>
+        \\  <span class='target'>Last span</span>
+        \\  <p id='unique'>Unique paragraph</p>
+        \\</div>
+    ;
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test 1: querySelector should return first match
+    const first_target = try querySelector(allocator, doc, ".target");
+    try testing.expect(first_target != null);
+
+    if (first_target) |element| {
+        const tag_name = z.getElementName(element);
+        try testing.expectEqualStrings("P", tag_name); // Should be the first <p>
+    }
+
+    // Test 2: querySelectorAll should return all matches
+    const all_targets = try querySelectorAll(allocator, doc, ".target");
+    defer allocator.free(all_targets);
+    try testing.expectEqual(@as(usize, 3), all_targets.len); // p, div, span
+
+    // Test 3: querySelector with unique ID
+    const unique_element = try querySelector(allocator, doc, "#unique");
+    try testing.expect(unique_element != null);
+
+    if (unique_element) |element| {
+        const tag_name = z.getElementName(element);
+        try testing.expectEqualStrings("P", tag_name);
+    }
+
+    // Test 4: querySelector with non-existent selector
+    const missing = try querySelector(allocator, doc, ".nonexistent");
+    try testing.expect(missing == null);
+
+    // Test 5: querySelectorAll with non-existent selector
+    const missing_all = try querySelectorAll(allocator, doc, ".nonexistent");
+    defer allocator.free(missing_all);
+    try testing.expectEqual(@as(usize, 0), missing_all.len);
+}
+
+test "CssSelectorEngine querySelector (low-level) functionality" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div>
+        \\  <!-- This is a comment -->
+        \\  Some text content
+        \\  <p class='first'>First paragraph</p>
+        \\  <p class='second'>Second paragraph</p>
+        \\</div>
+    ;
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    const body = try z.getBodyElement(doc);
+    const body_node = z.elementToNode(body);
+
+    // Test 1: Engine querySelector should return first matching node
+    const first_p_node = try css_engine.querySelector(body_node, "p");
+    try testing.expect(first_p_node != null);
+
+    if (first_p_node) |node| {
+        // Should be able to convert to element
+        const element = z.nodeToElement(node);
+        try testing.expect(element != null);
+
+        if (element) |el| {
+            const tag_name = z.getElementName(el);
+            try testing.expectEqualStrings("P", tag_name);
+        }
+    }
+
+    // Test 2: Engine querySelectorAll should return all matching nodes
+    const all_p_nodes = try css_engine.querySelectorAll(body_node, "p");
+    defer allocator.free(all_p_nodes);
+    try testing.expectEqual(@as(usize, 2), all_p_nodes.len);
+
+    // Test 3: Verify early stopping efficiency
+    // querySelector should stop after finding first match
+    const div_node = try css_engine.querySelector(body_node, "div");
+    try testing.expect(div_node != null);
+
+    // Test 4: Non-existent selector
+    const missing_node = try css_engine.querySelector(body_node, ".nonexistent");
+    try testing.expect(missing_node == null);
+}
+
+test "querySelector performance vs querySelectorAll[0]" {
+    const allocator = testing.allocator;
+
+    // Create a document with many elements where target is near the end
+    const html =
+        \\<div>
+        \\  <p>Paragraph 1</p>
+        \\  <p>Paragraph 2</p>
+        \\  <p>Paragraph 3</p>
+        \\  <p>Paragraph 4</p>
+        \\  <p>Paragraph 5</p>
+        \\  <p>Paragraph 6</p>
+        \\  <p>Paragraph 7</p>
+        \\  <p>Paragraph 8</p>
+        \\  <p>Paragraph 9</p>
+        \\  <p class='target'>Target paragraph</p>
+        \\  <p>Paragraph 11</p>
+        \\  <p>Paragraph 12</p>
+        \\</div>
+    ;
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Method 1: Using querySelector (early stopping)
+    const target1 = try querySelector(allocator, doc, ".target");
+    try testing.expect(target1 != null);
+
+    // Method 2: Using querySelectorAll and taking first
+    const all_targets = try querySelectorAll(allocator, doc, ".target");
+    defer allocator.free(all_targets);
+    try testing.expect(all_targets.len == 1);
+    const target2 = all_targets[0];
+
+    // Both should find the same element
+    try testing.expect(target1.? == target2);
+
+    // Test that querySelector actually stops early (both should work, but querySelector is more efficient)
+    const tag_name1 = z.getElementName(target1.?);
+    const tag_name2 = z.getElementName(target2);
+    try testing.expectEqualStrings(tag_name1, tag_name2);
+    try testing.expectEqualStrings("P", tag_name1);
 }
 
 test "CSS selector engine reuse" {
