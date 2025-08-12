@@ -7,7 +7,8 @@
 
 `lexbor` follows <https://dom.spec.whatwg.org/>.
 
-We expose a _small_ but significant subset of all available functions.
+We expose a significant subset of all available functions.
+
 
 We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
 
@@ -18,11 +19,8 @@ We opted to use `Zig` allocators instead of using `lexbor` internals for most fu
 - node/element/fragment/document serialization
 - DOM to DOM_tree and return: tuple and (todo) JSON format
 - DOM cleaning with HTML aware manipulation:
-  - optional comment removal
-  - optional script removal
-  - optional empty HTMLElement removal (preserves elements with attributes)
 - CSS selectors using `lexbor`'s "css_parser" engine
-- HTML attributes on an HTMLElement via a "name" or a `DomAttr`.
+- HTML attributes and search
 - DOM node manipulation
 - Search by attribute with collections.
 

@@ -180,9 +180,10 @@ pub const getType = Type.getType;
 pub const getTypeName = Type.getTypeName;
 
 pub const isElementType = Type.isElementType;
+pub const isCommentType = Type.isCommentType;
 pub const isTextType = Type.isTextType;
 pub const isNodeDocumentType = Type.isNodeDocumentType;
-pub const isCommentType = Type.isCommentType;
+// debug
 pub const walkTreeWithTypes = Type.walkTreeWithTypes;
 
 // CSS selectors - unified top-level access
@@ -192,6 +193,7 @@ pub const querySelector = css.querySelector;
 // Attributes
 
 pub const hasAttributes = attrs.hasAttributes;
+
 pub const elementGetNamedAttributeValue = attrs.elementGetNamedAttributeValue;
 
 // JavaScript DOM conventions for attributes
@@ -203,7 +205,7 @@ pub const getElementId = attrs.getElementId;
 pub const getAttributes = attrs.getAttributes;
 pub const classList = attrs.classList;
 
-// Attribute reflexion
+// Attribute struct reflexion
 pub const getAttributeName =
     attrs.getAttributeName;
 
