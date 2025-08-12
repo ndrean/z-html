@@ -221,7 +221,7 @@ pub fn iterator(collection: *z.DomCollection) CollectionIterator {
 /// Caller is responsible for freeing the collection with `destroyCollection`
 pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.DomCollection {
     // Start from the body element but also check the body itself
-    const root = try z.getDocumentBodyElement(doc);
+    const root = try z.getBodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
 
     if (collectElementsByTagName(root, collection, tag_name)) {
@@ -273,7 +273,7 @@ pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollect
 ///
 /// If you want to detect multiple IDs, use `getElementsByAttributePair`.
 pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
-    const root = try z.getDocumentBodyElement(doc);
+    const root = try z.getBodyElement(doc);
 
     const collection = createSingleElementCollection(doc) orelse return Err.CollectionFailed;
     defer destroyCollection(collection);
@@ -307,7 +307,7 @@ pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
 ///
 /// Caller is responsible for freeing the return collection with `destroyCollection`
 pub fn getElementsByAttributePair(doc: *z.HtmlDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
-    const root = try z.getDocumentBodyElement(doc);
+    const root = try z.getBodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return null;
     const name = attr.name;
     const value = attr.value;
@@ -372,7 +372,7 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 /// ```
 ///
 pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
-    const root = try z.getDocumentBodyElement(doc);
+    const root = try z.getBodyElement(doc);
     const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
     if (collectElementsWithAttribute(root, collection, attr_name)) {
@@ -465,7 +465,7 @@ test "collection with CSS selector results" {
     defer z.destroyDocument(doc);
 
     // Use CSS selector to populate collection
-    const elements = try z.findElements(allocator, doc, "p.test");
+    const elements = try z.querySelectorAll(allocator, doc, "p.test");
     defer allocator.free(elements);
 
     // Verify we found elements
@@ -478,7 +478,7 @@ test "collection iterator" {
     const doc = try z.parseFromString("<div><p>1</p><p>2</p><p>3</p></div>");
     defer z.destroyDocument(doc);
 
-    const elements = try z.findElements(allocator, doc, "p");
+    const elements = try z.querySelectorAll(allocator, doc, "p");
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3);
@@ -888,6 +888,8 @@ test "performance comparison: Lexbor native vs custom Zig traversal" {
 }
 
 test "elementHasAnyAttribute performance demonstration" {
+    const allocator = testing.allocator;
+
     const html =
         \\<div>
         \\  <p>No attributes</p>
@@ -902,18 +904,18 @@ test "elementHasAnyAttribute performance demonstration" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getDocumentBodyElement(doc);
+    const body = try z.getBodyElement(doc);
     const first_child = z.firstChild(z.elementToNode(body)) orelse return error.NoChild;
     const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
 
-    // Demonstrate that elementHasAnyAttribute correctly identifies elements with/without attributes
+    // Demonstrate that hasAttributes correctly identifies elements with/without attributes
     var child_node = z.firstChild(z.elementToNode(div_element));
     var elements_with_attrs: usize = 0;
     var elements_without_attrs: usize = 0;
 
     while (child_node) |node| {
         if (z.nodeToElement(node)) |element| {
-            if (z.elementHasAnyAttribute(element)) {
+            if (z.hasAttributes(element)) {
                 elements_with_attrs += 1;
             } else {
                 elements_without_attrs += 1;
@@ -938,8 +940,10 @@ test "elementHasAnyAttribute performance demonstration" {
     const found_element = getCollectionElementAt(id_elements, 0).?;
     try testing.expect(z.hasAttribute(found_element, "id"));
 
-    const id_value = z.getAttribute(found_element, "id").?;
-    try testing.expect(std.mem.eql(u8, id_value, "with-attr"));
+    if (try z.getAttribute(allocator, found_element, "id")) |id_value| {
+        defer allocator.free(id_value);
+        try testing.expect(std.mem.eql(u8, id_value, "with-attr"));
+    }
 }
 
 test "getElementsByAttributeName performance optimization" {
@@ -979,7 +983,7 @@ test "getElementsByAttributeName performance optimization" {
     for (0..count) |i| {
         const element = getCollectionElementAt(id_elements, i).?;
         try testing.expect(z.hasAttribute(element, "id"));
-        try testing.expect(z.elementHasAnyAttribute(element)); // Should have at least some attribute
+        try testing.expect(z.hasAttributes(element)); // Should have at least some attribute
     }
 }
 
@@ -1169,6 +1173,8 @@ test "getElementsByTagName functionality" {
 }
 
 test "getElementsByName functionality" {
+    const allocator = testing.allocator;
+
     const html =
         \\<html>
         \\  <body>
@@ -1199,8 +1205,10 @@ test "getElementsByName functionality" {
         // Verify all found elements have the correct name attribute
         for (0..getCollectionLength(gender_inputs)) |i| {
             const element = getCollectionElementAt(gender_inputs, i).?;
-            const name_value = z.getAttribute(element, "name").?;
-            try testing.expect(std.mem.eql(u8, name_value, "gender"));
+            if (try z.getAttribute(allocator, element, "name")) |name_value| {
+                defer allocator.free(name_value);
+                try testing.expect(std.mem.eql(u8, name_value, "gender"));
+            }
         }
     }
 

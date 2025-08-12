@@ -9,9 +9,11 @@
 
 We expose a _small_ but significant subset of all available functions.
 
+We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
+
 **Features:**
 
-- document and fragment parsing
+- document and fragment parsing 
 - chunk parsing with the "chunk_parser" engine
 - node/element/fragment/document serialization
 - DOM to DOM_tree and return: tuple and (todo) JSON format
@@ -68,7 +70,7 @@ It imports all the submodules and run the tests.
 const z = @import("zhtml.zig");
 const allocator = std.heap.c_allocator;
 
-const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+const doc = try z.parseFromString("<p>Hello <!-- emphasis plz --><strong>world</strong></p>");
 defer z.destryoDocument(doc);
 
 z.printDocumentStructure(doc);
@@ -83,9 +85,22 @@ HTML
   BODY
     P
       #text
+      #comment
       STRONG
         #text
 ```
+
+```c
+try z.cleanDomTree(
+  allocator,
+  body_node.?,
+  .{ .remove_comments = true },
+);
+```
+
+```txt
+
+
 
 ## Examples
 

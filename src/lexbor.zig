@@ -177,7 +177,7 @@ pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
 // ---------------------------------------------------------------------------
 
 /// [core] Get the document's body element (usually BODY)
-pub fn getDocumentBodyElement(doc: *HtmlDocument) !*DomElement {
+pub fn getBodyElement(doc: *HtmlDocument) !*DomElement {
     if (lxb_html_document_body_element_noi(doc)) |element| {
         return element;
     } else {
@@ -185,9 +185,9 @@ pub fn getDocumentBodyElement(doc: *HtmlDocument) !*DomElement {
     }
 }
 
-/// [core] convience function using `try getDocumentBodyElement`.
-pub fn getDocumentBodyNode(doc: *HtmlDocument) !*DomNode {
-    const body_element = getDocumentBodyElement(doc) catch {
+/// [core] convience function using `try getBodyElement`.
+pub fn getBodyNode(doc: *HtmlDocument) !*DomNode {
+    const body_element = getBodyElement(doc) catch {
         return Err.NoBodyElement;
     };
     return elementToNode(body_element);
@@ -208,7 +208,7 @@ pub fn objectToNode(obj: *anyopaque) *DomNode {
 /// [core] Convert DOM node to Element (if it is one)
 pub fn nodeToElement(node: *DomNode) ?*DomElement {
     // Only convert if it's actually an element node
-    if (z.getNodeType(node) != .element) {
+    if (z.getType(node) != .element) {
         return null;
     }
 
@@ -294,84 +294,16 @@ pub fn destroyElement(element: *DomElement) void {
 // Reflexion
 
 extern "c" fn lxb_html_node_is_void_noi(node: *DomNode) bool;
+extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
 
 /// [core] Check if element is void (self-closing like <img>, <br>)
 pub fn isSelfClosingNode(node: *DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
-extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
-
 /// [core] Check if node contains only whitespace
 pub fn isNodeEmpty(node: *DomNode) bool {
     return lxb_dom_node_is_empty(node);
-}
-
-test "void vs empty element detection" {
-    const html =
-        \\<div>
-        \\  <br/>
-        \\  <img src="test.jpg"/>
-        \\  <p>Not void</p>
-        \\  <div>  </div>
-        \\  <p><span></span></>
-        \\</div>
-    ;
-
-    const doc = try parseFromString(html);
-    defer destroyDocument(doc);
-
-    const body = try getDocumentBodyElement(doc);
-    const body_node = elementToNode(body);
-    const div_node = firstChild(body_node).?;
-
-    // print("\Void Element Test ========\n", .{});
-
-    var child = firstChild(div_node);
-    const void_elements = [_][]const u8{ "BR", "HR", "IMG", "INPUT", "META", "LINK", "AREA" };
-
-    var empty_non_self_closing_non_text_nodes_count: usize = 0;
-    var empty_text_nodes_count: usize = 0;
-    var empty_nodes: usize = 0;
-
-    while (child != null) {
-        if (nodeToElement(child.?)) |_| {
-            const tag_name = getNodeName(child.?);
-            const is_void = isSelfClosingNode(child.?);
-            const is_empty = isNodeEmpty(child.?);
-
-            // print("Element: {s} - is void?: {}, is empty?: {}, is non-text empty?: {}\n", .{ tag_name, is_void, is_empty, is_non_text_empty });
-
-            // Expected void elements
-            const should_be_void =
-                for (void_elements) |void_elem| {
-                    if (std.mem.eql(u8, tag_name, void_elem)) break true;
-                } else false;
-
-            if (should_be_void) {
-                empty_nodes += 1;
-                // void elements are considered empty
-                try testing.expect(is_empty and is_void);
-            } else {
-                try testing.expect(!is_void);
-                // a non-void can be empty or not
-                if (is_empty) {
-                    empty_nodes += 1;
-                    if (z.isNodeTextType(child.?)) {
-                        empty_text_nodes_count += 1;
-                    } else {
-                        empty_non_self_closing_non_text_nodes_count += 1;
-                    }
-                }
-            }
-        }
-
-        child = nextSibling(child.?);
-    }
-    // print("Count result: {d}, {d}, {d}\n", .{ empty_nodes, empty_text_nodes_count, empty_non_self_closing_non_text_nodes_count });
-    try testing.expect(empty_nodes == 3); // empty elements: <br/>, <img/>, <div>  </div>
-    try testing.expect(empty_text_nodes_count == 0); // empty text elements (no longer counted since nodeToElement returns null for text)
-    try testing.expect(empty_non_self_closing_non_text_nodes_count == 1); // 1 empty non-self-closing non-text element
 }
 
 //=============================================================================
@@ -452,7 +384,7 @@ pub fn nextElementSibling(element: *DomElement) ?*DomElement {
 /// Returns a slice of all child nodes (including text, comments)
 ///
 /// Caller needs to free the slice
-pub fn childNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomNode {
+pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomNode {
     var nodes = std.ArrayList(*DomNode).init(allocator);
 
     var child = firstChild(parent_node);
@@ -465,8 +397,9 @@ pub fn childNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomNo
 }
 
 /// [core] Helper: Collect only element children from an element (JavaScript convention: children)
-/// Returns a slice of child elements and needs to be freed
-pub fn children(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*DomElement {
+///
+/// Caller needs to free the slice
+pub fn getChildren(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*DomElement {
     var elements = std.ArrayList(*DomElement).init(allocator);
 
     var child = firstElementChild(parent_element);
@@ -484,17 +417,6 @@ pub fn children(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*D
 pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
     const tag = getElementName(element); // Safe for immediate use
     return std.mem.eql(u8, tag, tag_name);
-}
-
-/// [utility] Attribute matcher function
-pub fn matchesAttribute(element: *DomElement, attr_name: []const u8, attr_value: ?[]const u8) bool {
-    if (!attributes.elementHasNamedAttribute(element, attr_name)) return false;
-
-    if (attr_value) |value| {
-        const actual_value = attributes.elementGetNamedAttributeValue(element, attr_name) orelse return false;
-        return std.mem.eql(u8, actual_value, value);
-    }
-    return true; // Just check for attribute existence
 }
 
 //=============================================================================
@@ -549,7 +471,7 @@ pub fn getNodeTextContentsOpts(allocator: std.mem.Allocator, node: *DomNode, opt
 }
 
 /// [core] Set text content on empty node from Zig string
-pub fn setNodeTextContent(node: *DomNode, content: []const u8) !void {
+pub fn setTextContent(node: *DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
         content.ptr,
@@ -564,7 +486,7 @@ pub fn setNodeTextContent(node: *DomNode, content: []const u8) !void {
 pub fn setOrReplaceNodeTextData(allocator: std.mem.Allocator, node: *DomNode, text: []const u8) !void {
     const inner_text_node = firstChild(node) orelse null;
     if (inner_text_node == null) {
-        try setNodeTextContent(node, text);
+        try setTextContent(node, text);
     } else {
         const current_text = try getNodeTextContentsOpts(
             allocator,
@@ -673,7 +595,7 @@ pub fn cleanDomTree(allocator: std.mem.Allocator, root: *DomNode, options: DomCl
 }
 
 fn cleanNodeRecursive(allocator: std.mem.Allocator, node: *DomNode, options: DomCleanOptions) !void {
-    const node_type = z.getNodeType(node);
+    const node_type = z.getType(node);
     var node_was_removed = false;
 
     switch (node_type) {
@@ -726,11 +648,11 @@ fn cleanElementNode(allocator: std.mem.Allocator, node: *DomNode, options: DomCl
 }
 
 fn cleanElementAttributes(allocator: std.mem.Allocator, element: *DomElement) !usize {
-    if (!z.elementHasAnyAttribute(element)) {
+    if (!z.hasAttributes(element)) {
         return 0;
     }
 
-    const attr_list = try z.attributes(allocator, element);
+    const attr_list = try z.getAttributes(allocator, element);
     defer {
         for (attr_list) |attr| {
             allocator.free(attr.name);
@@ -790,7 +712,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *DomNode) !boo
 
     // Only update if content actually changed
     if (!std.mem.eql(u8, text, cleaned)) {
-        // try setNodeTextContent(node, cleaned);
+        // try setTextContent(node, cleaned);
         try setOrReplaceNodeTextData(allocator, node, cleaned);
     }
     return false;
@@ -919,10 +841,10 @@ test "insertChild" {
 
 test "check error get body of empty element" {
     const doc = try createDocument();
-    const body_element = getDocumentBodyElement(doc);
+    const body_element = getBodyElement(doc);
     try testing.expectError(Err.NoBodyElement, body_element);
 
-    const body_node = getDocumentBodyNode(doc);
+    const body_node = getBodyNode(doc);
     try testing.expectError(Err.NoBodyElement, body_node);
 }
 
@@ -930,8 +852,8 @@ test "root node element" {
     const doc = try parseFromString("");
     defer z.destroyDocument(doc);
     // // try z.printDocumentStructure(doc);
-    const body_doc_node = try getDocumentBodyNode(doc);
-    const body_element = try getDocumentBodyElement(doc);
+    const body_doc_node = try getBodyNode(doc);
+    const body_element = try getBodyElement(doc);
 
     try testing.expectEqualStrings("BODY", getElementName(body_element));
     try testing.expectEqualStrings("BODY", getNodeName(body_doc_node));
@@ -942,23 +864,23 @@ test "JavaScript DOM conventions - children and childNodes" {
     const doc = try parseFromString("<html><body><div>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const div = firstElementChild(body).?;
 
     // Test children (only elements)
-    const element_children = try children(allocator, div);
+    const element_children = try getChildren(allocator, div);
     defer allocator.free(element_children);
     try testing.expect(element_children.len == 2); // p and span
     try testing.expectEqualStrings("P", getElementName(element_children[0]));
     try testing.expectEqualStrings("SPAN", getElementName(element_children[1]));
 
     // Test childNodes (all nodes including text and comments)
-    const all_child_nodes = try childNodes(allocator, elementToNode(div));
+    const all_child_nodes = try getChildNodes(allocator, elementToNode(div));
     defer allocator.free(all_child_nodes);
     try testing.expect(all_child_nodes.len == 4); // text, p, comment, span
 
     // Verify legacy functions still work
-    const legacy_children = try children(allocator, div);
+    const legacy_children = try getChildren(allocator, div);
     defer allocator.free(legacy_children);
     try testing.expect(legacy_children.len == element_children.len);
 }
@@ -968,21 +890,23 @@ test "JavaScript DOM API consistency check" {
     const doc = try parseFromString("<html><body><div id='test' class='demo'>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const div = firstElementChild(body).?;
 
     // Test JavaScript-style attribute functions
     try testing.expect(z.hasAttribute(div, "id"));
     try testing.expect(z.hasAttribute(div, "class"));
-    const id_value = z.getAttribute(div, "id").?;
-    try testing.expectEqualStrings("test", id_value);
+    if (try z.getAttribute(allocator, div, "id")) |id_value| {
+        defer allocator.free(id_value);
+        try testing.expectEqualStrings("test", id_value);
+    }
 
     // Test JavaScript-style children functions
-    const element_children = try children(allocator, div);
+    const element_children = try getChildren(allocator, div);
     defer allocator.free(element_children);
     try testing.expect(element_children.len == 2); // p and span only
 
-    const all_child_nodes = try childNodes(allocator, elementToNode(div));
+    const all_child_nodes = try getChildNodes(allocator, elementToNode(div));
     defer allocator.free(all_child_nodes);
     try testing.expect(all_child_nodes.len == 4); // text, p, comment, span
 
@@ -1005,7 +929,7 @@ test "createTextNode and appendChild" {
     appendChild(elementToNode(div), text_node);
 
     // Append div to body
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     appendChild(elementToNode(body), elementToNode(div));
 
     // Verify the structure
@@ -1018,7 +942,7 @@ test "createTextNode and appendChild" {
     // Check that div has the text content
     const div_first_child = firstChild(elementToNode(div_from_tree));
     try testing.expect(div_first_child != null);
-    try testing.expect(z.isNodeTextType(div_first_child.?));
+    try testing.expect(z.isTextType(div_first_child.?));
 }
 
 test "createDocumentFragment" {
@@ -1040,7 +964,7 @@ test "createDocumentFragment" {
     appendChild(fragment, elementToNode(p2));
 
     // Get the body element
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
 
     // Use the proper appendFragment function to move fragment children
     appendFragment(elementToNode(body), fragment);
@@ -1064,7 +988,7 @@ test "insertNodeBefore and insertNodeAfter" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const body_node = try getDocumentBodyNode(doc);
+    const body_node = try getBodyNode(doc);
 
     // Create three elements
     const div1 = try createElement(doc, "div", &.{});
@@ -1102,7 +1026,7 @@ test "appendChildren helper" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const body_node = try getDocumentBodyNode(doc);
+    const body_node = try getBodyNode(doc);
 
     // Create multiple elements
     const div1 = try createElement(doc, "div", &.{});
@@ -1131,7 +1055,7 @@ test "appendChildren helper" {
 test "simple empty node" {
     const doc = try parseFromString("<p></p>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(isNodeEmpty(p.?));
@@ -1145,7 +1069,7 @@ test "node with whitespace like characters IS empty but contains characters" {
     // this is "lxb_empty" too
     const doc = try parseFromString("<p> \n</p>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(isNodeEmpty(p.?));
@@ -1160,7 +1084,7 @@ test "node with (non empty) inenr text is NOT empty" {
     // node with inner text node
     const doc = try parseFromString("<p>Text</p>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
@@ -1169,7 +1093,7 @@ test "node with (non empty) inenr text is NOT empty" {
 test "node with an (empty text content) node is NOT empty" {
     const doc = try parseFromString("<p><span><strong></strong></span></p>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
@@ -1200,7 +1124,7 @@ test "isWhitespaceOnlyNode" {
     // one way to create some nodes
     const doc = try parseFromString("<p>   </p>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
 
@@ -1211,7 +1135,7 @@ test "isWhitespaceOnlyNode" {
     // inner text node is whitespace-only
     const inner_text_node = firstChild(p.?);
     try testing.expect(
-        z.isNodeTextType(inner_text_node.?),
+        z.isTextType(inner_text_node.?),
     );
 
     try testing.expect(
@@ -1224,7 +1148,7 @@ test "isWhitespaceOnlyNode" {
     // defer destroyNode(elementToNode(div));
     const node_div = elementToNode(div);
 
-    try setNodeTextContent(node_div, "\n \r  \t");
+    try setTextContent(node_div, "\n \r  \t");
     // should be true
     try testing.expect(
         isWhitespaceOnlyNode(firstChild(node_div).?),
@@ -1233,7 +1157,7 @@ test "isWhitespaceOnlyNode" {
 test "isWhitespaceOnlyElement" {
     const doc = try parseFromString("<div>   </div>");
     defer destroyDocument(doc);
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     try testing.expect(
         !isWhitespaceOnlyElement(body),
     );
@@ -1278,7 +1202,7 @@ test "setTextNodeData" {
 
     try testing.expect(first_inner_text_node == null);
 
-    // try setNodeTextContent(node, "Initial text");
+    // try setTextContent(node, "Initial text");
     try setOrReplaceNodeTextData(allocator, node, "Initial text");
 
     const initial_text = try getNodeTextContentsOpts(allocator, node, .{});
@@ -1294,7 +1218,7 @@ test "setTextNodeData" {
 
 test "create Html element, custom element" {
     const doc = try z.parseFromString("<p></p>");
-    const body_node = try getDocumentBodyNode(doc);
+    const body_node = try getBodyNode(doc);
 
     const span_element = try createElement(doc, "span", &.{});
     const tag = (getElementName(span_element));
@@ -1349,7 +1273,7 @@ test "create Html element, custom element" {
     const doc_with_custom = try z.parseFromString("<body><custom-element>Test</custom-element></body>");
     defer z.destroyDocument(doc_with_custom);
 
-    const custom_body = try getDocumentBodyNode(doc_with_custom);
+    const custom_body = try getBodyNode(doc_with_custom);
     var parsed_child = firstChild(custom_body);
     var found_parsed_custom = false;
 
@@ -1389,7 +1313,7 @@ test "get & set NodeTextContent" {
     defer destroyDocument(doc);
     const node = elementToNode(element);
 
-    try setNodeTextContent(node, "Hello, world!");
+    try setTextContent(node, "Hello, world!");
 
     const text_content = try getNodeTextContentsOpts(
         allocator,
@@ -1407,7 +1331,7 @@ test "gets all text elements from Fragment" {
     const allocator = testing.allocator;
     const doc = try parseFromString(fragment);
     defer destroyDocument(doc);
-    const body_element = try getDocumentBodyElement(doc);
+    const body_element = try getBodyElement(doc);
     const body_node = elementToNode(body_element);
     const text_content = try getNodeTextContentsOpts(allocator, body_node, .{});
     defer allocator.free(text_content);
@@ -1421,7 +1345,7 @@ test "text content" {
     const doc = try parseFromString(html);
     defer destroyDocument(doc);
 
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = firstChild(body_node).?;
     const text = try getNodeTextContentsOpts(
@@ -1450,7 +1374,7 @@ test "getNodeTextContent" {
     const doc = try parseFromString(frag);
     defer destroyDocument(doc);
 
-    const body_element = try getDocumentBodyElement(doc);
+    const body_element = try getBodyElement(doc);
     const body_node = elementToNode(body_element);
 
     const first_child = firstChild(body_node);
@@ -1499,7 +1423,7 @@ test "JavaScript children from createElement" {
     appendChild(elementToNode(parent), elementToNode(child2));
 
     // Get children using JavaScript convention
-    const child_elements = try children(allocator, parent);
+    const child_elements = try getChildren(allocator, parent);
     defer allocator.free(child_elements);
     // print("len: {d}\n", .{child_elements.len});
 
@@ -1516,17 +1440,17 @@ test "JavaScript children from fragment" {
     const doc = try parseFromString(frag);
     defer destroyDocument(doc);
 
-    const body_element = try getDocumentBodyElement(doc);
+    const body_element = try getBodyElement(doc);
     const body_node = elementToNode(body_element);
     try testing.expectEqualStrings("BODY", getNodeName(body_node));
 
-    const children1 = try childNodes(allocator, body_node);
+    const children1 = try getChildNodes(allocator, body_node);
     defer allocator.free(children1);
     try testing.expect(children1.len == 1); // Only one child <div>
     try testing.expect(!isNodeEmpty(body_node)); // DIV contains SPAN and P elements
 
     const div_element = nodeToElement(children1[0]).?;
-    const children2 = try children(allocator, div_element);
+    const children2 = try getChildren(allocator, div_element);
     defer allocator.free(children2);
     try testing.expectEqualStrings(getElementName(children2[0]), "SPAN");
 
@@ -1556,7 +1480,7 @@ test "cleanElementAttributes" {
     const doc = try parseFromString("<div><p>No attrs</p><span id='test' class='demo'>With attrs</span></div>");
     defer destroyDocument(doc);
 
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const div_node = firstChild(body_node).?;
 
@@ -1569,7 +1493,7 @@ test "cleanElementAttributes" {
             elements_processed += 1;
 
             // Test the fast path optimization
-            if (z.elementHasAnyAttribute(element)) {
+            if (z.hasAttributes(element)) {
                 elements_with_attrs += 1;
             }
 
@@ -1608,7 +1532,7 @@ test "complete DOM cleaning with proper node removal" {
     const doc = try parseFromString(messy_html);
     defer destroyDocument(doc);
 
-    const body = try getDocumentBodyElement(doc);
+    const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
 
     // print("\n=== Complete DOM Cleaning Test ===\n", .{});
@@ -1639,4 +1563,71 @@ test "complete DOM cleaning with proper node removal" {
     // printDocumentStructure(doc);
 
     // print("✅ Complete DOM cleaning works perfectly!\n", .{});
+}
+
+test "void vs empty element detection" {
+    const html =
+        \\<div>
+        \\  <br/>
+        \\  <img src="test.jpg"/>
+        \\  <p>Not void</p>
+        \\  <div>  </div>
+        \\  <p><span></span></>
+        \\</div>
+    ;
+
+    const doc = try parseFromString(html);
+    defer destroyDocument(doc);
+
+    const body = try getBodyElement(doc);
+    const body_node = elementToNode(body);
+    const div_node = firstChild(body_node).?;
+
+    // print("\Void Element Test ========\n", .{});
+
+    var child = firstChild(div_node);
+    const void_elements = [_][]const u8{ "BR", "HR", "IMG", "INPUT", "META", "LINK", "AREA" };
+
+    var empty_non_self_closing_non_text_nodes_count: usize = 0;
+    var empty_text_nodes_count: usize = 0;
+    var empty_nodes: usize = 0;
+
+    while (child != null) {
+        if (nodeToElement(child.?)) |_| {
+            const tag_name = getNodeName(child.?);
+            const is_void = isSelfClosingNode(child.?);
+            const is_empty = isNodeEmpty(child.?);
+
+            // print("Element: {s} - is void?: {}, is empty?: {}, is non-text empty?: {}\n", .{ tag_name, is_void, is_empty, is_non_text_empty });
+
+            // Expected void elements
+            const should_be_void =
+                for (void_elements) |void_elem| {
+                    if (std.mem.eql(u8, tag_name, void_elem)) break true;
+                } else false;
+
+            if (should_be_void) {
+                empty_nodes += 1;
+                // void elements are considered empty
+                try testing.expect(is_empty and is_void);
+            } else {
+                try testing.expect(!is_void);
+                // a non-void can be empty or not
+                if (is_empty) {
+                    empty_nodes += 1;
+                    if (z.isTextType(child.?)) {
+                        empty_text_nodes_count += 1;
+                    } else {
+                        empty_non_self_closing_non_text_nodes_count += 1;
+                    }
+                }
+            }
+        }
+
+        child = nextSibling(child.?);
+    }
+    // print("Count result: {d}, {d}, {d}\n", .{ empty_nodes, empty_text_nodes_count, empty_non_self_closing_non_text_nodes_count });
+    try testing.expect(empty_nodes == 3); // empty elements: <br/>, <img/>, <div>  </div>
+    try testing.expect(empty_text_nodes_count == 0); // empty text elements (no longer counted since nodeToElement returns null for text)
+    try testing.expect(empty_non_self_closing_non_text_nodes_count == 1); // 1 empty non-self-closing non-text element
 }

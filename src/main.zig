@@ -4,16 +4,16 @@ const builtin = @import("builtin");
 const writer = std.io.getStdOut().writer();
 
 // Import the collection examples
-const collection_examples = @import("examples/collection_examples.zig");
-const example_collection = @import("examples/example_collection.zig");
+// const collection_examples = @import("examples/collection_examples.zig");
+// const example_collection = @import("examples/example_collection.zig");
 
-const request = @import("examples/http.zig").request;
+// const request = @import("examples/http.zig").request;
 
 fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void {
     const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getDocumentBodyNode(doc);
+    const body_node = try z.getBodyNode(doc);
 
     const html = try z.serializeTree(
         allocator,
@@ -22,6 +22,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
     defer allocator.free(html);
 
     try writer.print("\n\n---------HTML string to parse---------\n\n", .{});
+    try z.printDocumentStructure(doc);
     try writer.print("{s}\n\n", .{html});
 
     try z.cleanDomTree(
@@ -75,7 +76,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 fn demonstrateAttributes(html: []const u8) !void {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
-    const body_node = try z.getDocumentBodyNode(doc);
+    const body_node = try z.getBodyNode(doc);
     const div = z.firstChild(body_node).?;
 
     try writer.print("Demonstrating attribute iteration:\n", .{});

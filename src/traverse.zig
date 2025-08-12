@@ -107,7 +107,7 @@ test "DOM traversal utilities" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getDocumentBodyElement(doc);
+    const body = try z.getBodyElement(doc);
     const div = z.firstElementChild(body).?;
 
     const allPs = z.forEachChildElement(div, areAllPs);

@@ -64,7 +64,7 @@ pub const JsonTree = []JsonNode;
 
 /// [tree] Convert DOM node to HtmlNode recursively
 pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
-    const node_type = z.getNodeType(node);
+    const node_type = z.getType(node);
 
     switch (node_type) {
         .element => {
@@ -72,7 +72,7 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
             // Use the owned version for safety
             const tag_name = try z.getNodeNameOwned(allocator, node);
 
-            const elt_attrs = try z.attributes(allocator, element);
+            const elt_attrs = try z.getAttributes(allocator, element);
 
             // Convert child nodes recursively
             var children_list = std.ArrayList(HtmlNode).init(allocator);
@@ -125,7 +125,7 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
 
 /// [json] Convert DOM node to JSON-friendly format
 pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
-    const node_type = z.getNodeType(node);
+    const node_type = z.getType(node);
 
     switch (node_type) {
         .element => {
@@ -134,7 +134,7 @@ pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
 
             // Convert attributes to HashMap for JSON-friendly format
             var attributes = std.StringHashMap([]const u8).init(allocator);
-            const elt_attrs = try z.attributes(allocator, element);
+            const elt_attrs = try z.getAttributes(allocator, element);
             defer {
                 // Free the original attributes array since we're copying to HashMap
                 for (elt_attrs) |attr| {
@@ -287,7 +287,7 @@ pub fn printNode(node: HtmlNode, indent: usize) void {
 ///
 /// Caller must free the returned HtmlTree slice
 pub fn documentToTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlTree {
-    const body_node = try z.getDocumentBodyNode(doc);
+    const body_node = try z.getBodyNode(doc);
 
     var tree_list = std.ArrayList(HtmlNode).init(allocator);
     defer tree_list.deinit();
@@ -306,9 +306,9 @@ pub fn documentToTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlT
 /// [tree] Convert entire document including HTML element (for full document structure)
 pub fn fullDocumentToTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlNode {
     // Try to get HTML element if it exists
-    const html_element = z.getDocumentBodyElement(doc) catch {
+    const html_element = z.getBodyElement(doc) catch {
         // Fallback to body if no HTML element found
-        const body_node = try z.getDocumentBodyNode(doc);
+        const body_node = try z.getBodyNode(doc);
         return try domNodeToTree(allocator, body_node);
     };
 
@@ -321,7 +321,7 @@ pub fn fullDocumentToTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !H
 
 /// [json] Convert entire DOM document to JsonTree
 pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonTree {
-    const body_node = try z.getDocumentBodyNode(doc);
+    const body_node = try z.getBodyNode(doc);
 
     var tree_list = std.ArrayList(JsonNode).init(allocator);
     defer tree_list.deinit();
@@ -339,9 +339,9 @@ pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !J
 /// [json] Convert entire document including HTML element to JSON format
 pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonNode {
     // Try to get HTML element if it exists
-    const html_element = z.getDocumentBodyElement(doc) catch {
+    const html_element = z.getBodyElement(doc) catch {
         // Fallback to body if no HTML element found
-        const body_node = try z.getDocumentBodyNode(doc);
+        const body_node = try z.getBodyNode(doc);
         return try domNodeToJson(allocator, body_node);
     };
 
@@ -473,7 +473,7 @@ pub fn walkTree(node: *z.DomNode, depth: u32) void {
 /// [tree] Debug: print document structure (for debugging)
 pub fn printDocumentStructure(doc: *z.HtmlDocument) !void {
     print("\n--- DOCUMENT STRUCTURE ----\n", .{});
-    const root = try z.getDocumentBodyNode(doc);
+    const root = try z.getBodyNode(doc);
     walkTree(root, 0);
 }
 
@@ -716,7 +716,7 @@ test "complex HTML structure" {
     );
     defer freeHtmlNode(allocator, full_tree);
 
-    const body_node = try z.getDocumentBodyNode(doc);
+    const body_node = try z.getBodyNode(doc);
     try z.cleanDomTree(
         allocator,
         body_node,

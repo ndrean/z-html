@@ -25,7 +25,7 @@ pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
 /// [node_types] Get node type by parsing the node name
-pub fn getNodeType(node: *z.DomNode) NodeType {
+pub fn getType(node: *z.DomNode) NodeType {
     const node_name = z.getNodeName(node);
 
     // Switch on common node name patterns
@@ -44,8 +44,8 @@ pub fn getNodeType(node: *z.DomNode) NodeType {
 }
 
 /// [node_types] human-readable type name
-pub fn getNodeTypeName(node: *z.DomNode) []const u8 {
-    return switch (getNodeType(node)) {
+pub fn getTypeName(node: *z.DomNode) []const u8 {
+    return switch (getType(node)) {
         .element => "element",
         .text => "text",
         .comment => "comment",
@@ -55,23 +55,23 @@ pub fn getNodeTypeName(node: *z.DomNode) []const u8 {
 }
 
 /// [node_types] Check if node is of a specific type
-pub fn isNodeElementType(node: *z.DomNode) bool {
-    return getNodeType(node) == .element;
+pub fn isElementType(node: *z.DomNode) bool {
+    return getType(node) == .element;
 }
 
 /// [node_types] Check if node is a text node
-pub fn isNodeTextType(node: *z.DomNode) bool {
-    return getNodeType(node) == .text;
+pub fn isTextType(node: *z.DomNode) bool {
+    return getType(node) == .text;
 }
 
 /// [node_types] Check if node is a comment node
-pub fn isNodeCommentType(node: *z.DomNode) bool {
-    return getNodeType(node) == .comment;
+pub fn isCommentType(node: *z.DomNode) bool {
+    return getType(node) == .comment;
 }
 
 /// [node_types] Check if node is a document node
 pub fn isNodeDocumentType(node: *z.DomNode) bool {
-    return getNodeType(node) == .document;
+    return getType(node) == .document;
 }
 
 /// [node_types] Debug:  Walk the DOM tree and print node types with indentation:
@@ -79,8 +79,8 @@ pub fn walkTreeWithTypes(node: *z.DomNode, depth: u32) void {
     var child = z.firstChild(node);
     while (child != null) {
         // const name = z.getNodeName(child.?);
-        const node_type = z.getNodeType(child.?);
-        // const type_name = z.getNodeTypeName(child.?);
+        const node_type = z.getType(child.?);
+        // const type_name = z.getTypeName(child.?);
 
         // Create indentation
         var i: u32 = 0;
@@ -116,19 +116,19 @@ test "node type detection using getNodeName" {
 
     // print("\n--- NODE TYPE ANALYSIS ---\n", .{});
 
-    const body = try z.getDocumentBodyElement(doc);
+    const body = try z.getBodyElement(doc);
     const body_node = z.elementToNode(body);
 
     var child = z.firstChild(body_node);
     while (child != null) {
         // const node_name = z.getNodeName(child.?);
-        // const node_type = z.getNodeType(child.?);
-        // const type_name = z.getNodeTypeName(child.?);
+        // const node_type = z.getType(child.?);
+        // const type_name = z.getTypeName(child.?);
 
         // print("Node: '{s}' -> Type: {d} ({s})\n", .{ node_name, @intFromEnum(node_type), type_name });
 
         // // Test helper functions
-        // print("  isElement: {}, isText: {}, isComment: {}\n", .{ isNodeElementType(child.?), isNodeTextType(child.?), isNodeCommentType(child.?) });
+        // print("  isElement: {}, isText: {}, isComment: {}\n", .{ isElementType(child.?), isTextType(child.?), isCommentType(child.?) });
 
         child = z.firstChild(child.?);
     }

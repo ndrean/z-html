@@ -79,7 +79,7 @@ pub fn main() !void {
     print("Created fragment with 3 div elements\n", .{});
 
     // 5. Get the body element and append the fragment
-    if (z.getDocumentBodyElement(doc)) |body| {
+    if (z.getBodyElement(doc)) |body| {
         print("\n4. Appending fragment to body:\n", .{});
         try z.appendFragment(body, fragment);
         print("Fragment children moved to body (fragment semantics - children move, not copy)\n", .{});

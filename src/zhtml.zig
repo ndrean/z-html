@@ -48,8 +48,8 @@ pub const createElement = lxb.createElement;
 
 // DOM access and navigation
 pub const ownerDocument = lxb.ownerDocument;
-pub const getDocumentBodyElement = lxb.getDocumentBodyElement;
-pub const getDocumentBodyNode = lxb.getDocumentBodyNode;
+pub const getBodyElement = lxb.getBodyElement;
+pub const getBodyNode = lxb.getBodyNode;
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
@@ -76,11 +76,10 @@ pub const appendChild = lxb.appendChild;
 pub const appendChildren = lxb.appendChildren;
 pub const appendFragment = lxb.appendFragment;
 
-// JavaScript DOM conventions for children access
-pub const childNodes = lxb.childNodes;
-pub const children = lxb.children;
+pub const getChildNodes = lxb.getChildNodes;
+pub const getChildren = lxb.getChildren;
 
-// DOM Traversal utilities
+// Experimental DOM Traversal utilities
 pub const forEachChildNode = traverse.forEachChildNode;
 pub const forEachChildElement = traverse.forEachChildElement;
 pub const collectChildNodes = traverse.collectChildNodes;
@@ -90,7 +89,7 @@ pub const ElementCallback = traverse.ElementCallback;
 
 // DOM Matcher utilities
 pub const matchesTagName = lxb.matchesTagName;
-pub const matchesAttribute = lxb.matchesAttribute;
+pub const matchesAttribute = attrs.matchesAttribute;
 
 // DOM Tree representation utilities (aliased to avoid conflicts)
 pub const dom_tree = @import("dom_tree.zig");
@@ -173,33 +172,38 @@ pub const getElementHTMLAsString = serialize.serializeElement;
 pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getNodeTextContentsOpts = lxb.getNodeTextContentsOpts;
 pub const setOrReplaceNodeTextData = lxb.setOrReplaceNodeTextData;
-pub const setNodeTextContent = lxb.setNodeTextContent;
+pub const setTextContent = lxb.setTextContent;
 
 // NodeTypes
 pub const NodeType = Type.NodeType;
-pub const getNodeType = Type.getNodeType;
-pub const getNodeTypeName = Type.getNodeTypeName;
+pub const getType = Type.getType;
+pub const getTypeName = Type.getTypeName;
 
-pub const isNodeElementType = Type.isNodeElementType;
-pub const isNodeTextType = Type.isNodeTextType;
+pub const isElementType = Type.isElementType;
+pub const isTextType = Type.isTextType;
 pub const isNodeDocumentType = Type.isNodeDocumentType;
-pub const isNodeCommentType = Type.isNodeCommentType;
+pub const isCommentType = Type.isCommentType;
 pub const walkTreeWithTypes = Type.walkTreeWithTypes;
 
 // CSS selectors - unified top-level access
-pub const findElements = css.findElements;
+pub const querySelectorAll = css.querySelectorAll;
+pub const querySelector = css.querySelector;
 
 // Attributes
 
-pub const elementHasAnyAttribute = attrs.elementHasAnyAttribute;
-pub const elementGetNamedAttribute = attrs.elementGetNamedAttribute;
+pub const hasAttributes = attrs.hasAttributes;
+pub const elementGetNamedAttributeValue = attrs.elementGetNamedAttributeValue;
 
 // JavaScript DOM conventions for attributes
-pub const getAttribute = attrs.elementGetNamedAttributeValue;
+pub const getAttribute = attrs.getAttribute;
 pub const setAttribute = attrs.elementSetAttributes;
-pub const hasAttribute = attrs.elementHasNamedAttribute;
-pub const removeAttribute = attrs.elementRemoveNamedAttribute;
+pub const hasAttribute = attrs.hasAttribute;
+pub const removeAttribute = attrs.removeAttribute;
+pub const getElementId = attrs.getElementId;
+pub const getAttributes = attrs.getAttributes;
+pub const classList = attrs.classList;
 
+// Attribute reflexion
 pub const getAttributeName =
     attrs.getAttributeName;
 
@@ -211,13 +215,6 @@ pub const getElementFirstAttribute =
 
 pub const getElementNextAttribute =
     attrs.getElementNextAttribute;
-
-pub const classList =
-    attrs.classList;
-
-pub const elementId = attrs.elementId;
-
-pub const attributes = attrs.attributes;
 
 //-------------------------------------------------------------------------------------
 // HIGH-LEVEL CONVENIENCE FUNCTIONS
@@ -289,7 +286,7 @@ pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *D
 
     var child = firstChild(parent_node);
     while (child != null) {
-        if (isNodeElementType(child.?)) {
+        if (isElementType(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }
