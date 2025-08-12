@@ -1,4 +1,5 @@
 //! CSS Selectors
+
 const std = @import("std");
 const z = @import("zhtml.zig");
 
@@ -277,13 +278,13 @@ pub const CssSelectorEngine = struct {
 //=============================================================================
 
 const FindContext = struct {
-    results: std.ArrayList(*z.DomNode),
     allocator: std.mem.Allocator,
+    results: std.ArrayList(*z.DomNode),
 
     fn init(allocator: std.mem.Allocator) FindContext {
         return FindContext{
-            .results = std.ArrayList(*z.DomNode).init(allocator),
             .allocator = allocator,
+            .results = std.ArrayList(*z.DomNode).init(allocator),
         };
     }
 
@@ -309,11 +310,7 @@ fn findCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaqu
 /// [selectors] High-level function: Find elements by CSS selector in a document
 ///
 /// Caller needs to free the returned slice.
-pub fn findElements(
-    allocator: std.mem.Allocator,
-    doc: *z.HtmlDocument,
-    selector: []const u8,
-) ![]*z.DomElement {
+pub fn findElements(allocator: std.mem.Allocator, doc: *z.HtmlDocument, selector: []const u8) ![]*z.DomElement {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 

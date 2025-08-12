@@ -36,40 +36,17 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
     return null;
 }
 
-test "parseHtmlTag" {
-    const good_tag = parseTag("div");
-    try testing.expect(good_tag.? == HtmlTag.div);
+/// Helper to parse HTML tag with case conversion
+pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !?z.HtmlTag {
+    // Convert to lowercase for parsing
+    var lowercase_name = try allocator.alloc(u8, tag_name.len);
+    defer allocator.free(lowercase_name);
 
-    const custom_tag = parseTag("custom-element");
-    try testing.expect(custom_tag == null);
-}
+    for (tag_name, 0..) |c, i| {
+        lowercase_name[i] = std.ascii.toLower(c);
+    }
 
-test "elementTag" {
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    // Test creating elements from enum
-    const div_elt = try z.createElement(doc, "div", &.{});
-
-    const node_name = z.getNodeName(z.elementToNode(div_elt));
-    const expected_name = HtmlTag.div.toString();
-
-    // Note: DOM names are typically uppercase
-    try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
-
-    // Test creating elements from string
-    const custom_elt = try z.createElement(
-        doc,
-        // .{ .custom = "custom-element" },
-        "custom-element",
-        &.{},
-    );
-
-    const custom_node_name = z.getNodeName(z.elementToNode(custom_elt));
-    const custom_expected_name = "custom-element";
-
-    // Note: DOM names are typically uppercase
-    try testing.expect(std.ascii.eqlIgnoreCase(custom_expected_name, custom_node_name));
+    return z.parseTag(lowercase_name);
 }
 
 /// [HtmlTag] Enum that represents the various HTML tags.
@@ -202,8 +179,58 @@ pub const HtmlTag = enum {
 
 const HtmlVoidTag = [_]HtmlTag{ .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr };
 
+/// [HtmlTag] Check if an element is a void (self-closing) element using html_tags
+pub fn isVoidElement(tag: []const u8) bool {
+    // Convert to lowercase for parsing (lexbor often returns uppercase)
+    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
+    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
+
+    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
+
+    if (parseTag(lowercase_tag)) |html_tag| {
+        return html_tag.isVoid();
+    }
+    return false; // Unknown tags are not void
+}
 // =================================================================
 // === Tests ===
+
+test "parseHtmlTag" {
+    const good_tag = parseTag("div");
+    try testing.expect(good_tag.? == HtmlTag.div);
+
+    const custom_tag = parseTag("custom-element");
+    try testing.expect(custom_tag == null);
+}
+
+test "elementTag" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // Test creating elements from enum
+    const div_elt = try z.createElement(doc, "div", &.{});
+
+    const node_name = z.getNodeName(z.elementToNode(div_elt));
+    const expected_name = HtmlTag.div.toString();
+
+    // Note: DOM names are typically uppercase
+    try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
+
+    // Test creating elements from string
+    const custom_elt = try z.createElement(
+        doc,
+        // .{ .custom = "custom-element" },
+        "custom-element",
+        &.{},
+    );
+
+    const custom_node_name = z.getNodeName(z.elementToNode(custom_elt));
+    const custom_expected_name = "custom-element";
+
+    // Note: DOM names are typically uppercase
+    try testing.expect(std.ascii.eqlIgnoreCase(custom_expected_name, custom_node_name));
+}
+
 test "isVoid tag" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
@@ -220,6 +247,16 @@ test "isVoid tag" {
     for (non_void_tags) |tag| {
         try testing.expect(!tag.isVoid());
     }
+}
+
+test "isVoidElement modernized with html_tags" {
+    // Test the updated isVoidElement function
+    try testing.expect(isVoidElement("br") == true);
+    try testing.expect(isVoidElement("img") == true);
+    try testing.expect(isVoidElement("div") == false);
+    try testing.expect(isVoidElement("custom-element") == false);
+    try testing.expect(isVoidElement("BR") == true); // Case insensitive
+    try testing.expect(isVoidElement("IMG") == true);
 }
 test "lexbor NODENAME and self.toString" {
     const doc = try z.createDocument();

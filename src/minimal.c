@@ -25,8 +25,9 @@ lxb_html_document_t *lexbor_node_owner_document(lxb_dom_node_t *node)
 }
 
 // Wrapper for field access to destroy text with proper document
+// Uses the _noi (no-inline) version for ABI compatibility
 void lexbor_destroy_text_wrapper(lxb_dom_node_t *node, lxb_char_t *text)
 {
   if (text != NULL)
-    lxb_dom_document_destroy_text(node->owner_document, text);
+    lxb_dom_document_destroy_text_noi(node->owner_document, text);
 }

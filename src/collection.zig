@@ -1,10 +1,7 @@
-//=============================================================================
-// COLLECTION MANAGEMENT
-//=============================================================================
+//! Collection management
 
 const std = @import("std");
 const z = @import("zhtml.zig");
-const writer = std.io.getStdOut().writer();
 
 const Err = z.Err;
 
@@ -34,41 +31,38 @@ extern "c" fn lxb_dom_elements_by_attr(
 ) usize;
 
 //=============================================================================
-// CONFIGURATION FUNCTIONS
+// COLLECTION CAPACITY CONFIGURATION FUNCTIONS
 //=============================================================================
 
-/// [config] Set the global default collection capacity
+/// [config] Set the global `default_collection_capacity`.
+///
 /// This affects all future collections created with `.default` capacity
 pub fn setDefaultCapacity(capacity: u8) void {
-    default_collection_capacity = capacity;
+    z.default_collection_capacity = capacity;
 }
 
-/// [config] Get the current global default collection capacity
+/// [config] Get the current `default_collection_capacity`.
 pub fn getDefaultCapacity() u8 {
-    return default_collection_capacity;
+    return z.default_collection_capacity;
 }
 
-/// [config] Reset the default capacity to the original value (10)
+/// [config] Reset the `default_collection_capacity` to the original value (10).
 pub fn resetDefaultCapacity() void {
-    default_collection_capacity = 10;
+    z.default_collection_capacity = 10;
 }
 
-//=============================================================================
-// HIGH-LEVEL COLLECTION FUNCTIONS
-//=============================================================================
-
-/// [collection] Global default collection capacity (can be modified at runtime)
-pub var default_collection_capacity: u8 = 10;
-
-/// [collection] Capacity options for collections
-/// You use `.single` for single element collections,
-/// `.default` for the default capacity, and
-/// `.custom` for a user-defined capacity.
+/// [collection] Capacity options for collections (can be modified at runtime)
+///
+/// You use:
+/// - `.single` for single element collections,
+/// - `.default` for the default capacity, and
+/// - `.custom` for a user-defined capacity.
 ///
 /// For the custom capacity `N`, pass the desired value as follows:
 /// ```
 /// .{.custom = .{.value = N }}
 /// ```
+///
 pub const CapacityOpt = union(enum) {
     single,
     default,
@@ -76,11 +70,15 @@ pub const CapacityOpt = union(enum) {
     pub fn getValue(self: CapacityOpt) u8 {
         return switch (self) {
             .single => 1,
-            .default => default_collection_capacity,
+            .default => z.default_collection_capacity,
             .custom => |c| c.value,
         };
     }
 };
+
+//=============================================================================
+// HIGH-LEVEL COLLECTION FUNCTIONS
+//=============================================================================
 
 /// [collection] Create a new collection with initial capacity
 ///
@@ -100,6 +98,7 @@ pub const CapacityOpt = union(enum) {
 /// ```
 /// .{.custom = .{.value = N }}
 /// ```
+///
 pub fn createCollection(doc: *z.HtmlDocument, capacity: CapacityOpt) ?*z.DomCollection {
     const collection = lxb_dom_collection_create(doc) orelse return null;
 
@@ -372,11 +371,7 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 /// defer destroyCollection(elements);
 /// ```
 ///
-pub fn getElementsByAttributeName(
-    doc: *z.HtmlDocument,
-    attr_name: []const u8,
-    capacity: CapacityOpt,
-) !?*z.DomCollection {
+pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
     const root = try z.getDocumentBodyElement(doc);
     const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
@@ -496,37 +491,6 @@ test "collection iterator" {
         _ = i; // Use the index if needed
     }
 }
-
-// pb with numm comparison
-// test "getElementById functionality" {
-//     const html =
-//         \\<html>
-//         \\  <body>
-//         \\    <div id="container">
-//         \\      <p id="paragraph">Hello World</p>
-//         \\      <span id="text">Test</span>
-//         \\    </div>
-//         \\  </body>
-//         \\</html>
-//     ;
-
-//     const doc = try z.parseFromString(html);
-//     defer z.destroyDocument(doc);
-
-//     // Test finding existing elements
-//     const container = getElementById(doc, "container");
-//     try testing.expect(container != null);
-
-//     const paragraph = getElementById(doc, "paragraph");
-//     try testing.expect(paragraph != null);
-
-//     const text_span = getElementById(doc, "text");
-//     try testing.expect(text_span != null);
-
-//     // Test non-existing element
-//     const missing = getElementById(doc, "nonexistent");
-//     try testing.expect(missing == null);
-// }
 
 test "getElementsByAttribute functionality" {
     const html =

@@ -1,15 +1,20 @@
 # z-html
 
+> [!WARNING]
+> Work in progress
+
 `zhtml` is a `Zig` wrapper for the `C` library [lexbor](https://github.com/lexbor/lexbor).
 
 `lexbor` follows <https://dom.spec.whatwg.org/>.
 
-We expose a _small_ but significant subset of all available functions.Events are not wrapped.
+We expose a _small_ but significant subset of all available functions.
 
 **Features:**
 
-- document and fragment and chunk parsing with the "chunk_parser" engine
+- document and fragment parsing
+- chunk parsing with the "chunk_parser" engine
 - node/element/fragment/document serialization
+- DOM to DOM_tree and return: tuple and (todo) JSON format
 - DOM cleaning with HTML aware manipulation:
   - optional comment removal
   - optional script removal
@@ -21,25 +26,27 @@ We expose a _small_ but significant subset of all available functions.Events are
 
 ## File structure
 
-- src /
-  - zhtml.zig   # main module (re-exports all functionalities)
-  - _minimal.c_     #`C` wrapper functions
-  - _errors.zig_:   # Error types
-  - _lexbor.zig_:   # Document parsing, DOM navigation, whitespace, escaping
-  - _chunks.zig_        #chunk/streaming parsing
-  - _css_selectors.zig_ # CSS selector engine
-  - _node_types.zig_    # Node type definitions
-  - _html_tags.zig_     # HTML tag enumerations
-  - _attributes.zig_    # Element attribute operations
-  - _collection.zig_    # Search by attribute
-  - _serialize.zig_     # innerHTML, serialize nodes/HTMLElements
-  - _title.zig_ (TODO)
-
-  - _main.zig_ (demo TODO)
-- build.zig     # Build configuration
+- build.zig
 - Makefile.lexbor   # `lexbor` build automation
-- lexbor_src        # `lexbor` source code
-  
+- lexbor_src        # local `lexbor` source code & built static file
+- src /
+  - zhtml.zig
+  - minimal.c
+  - modules
+    - errors.zig
+    - html_tags.zig
+    - node_types.zig
+    - core.zig
+    - chunks.zig
+    - css_selectors.zig
+    - attributes.zig
+    - collection.zig
+    - serialize.zig
+    - tree.zig
+    - title.zig (TODO?)
+
+  - _main.zig_ (demo TODO?)
+
 ## `lexbor` built with static linking
 
 ```sh
@@ -174,7 +181,7 @@ HTML
 
 Examples in _main.zig_: TODO
 
-- Parsing a web document
+- DOM_tree
 - Serialization
 - CSS selector
 - Attributes
@@ -190,7 +197,7 @@ Examples in _main.zig_: TODO
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
-## Searching in the  `lexbor` library
+## Notes: searching in the  `lexbor` library
 
 In the build static object _liblexbor_static.a_:
 
@@ -209,3 +216,9 @@ or
 ```sh
 grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/
 ```
+
+Test individual `Zig` files:
+
+```sh
+ zig test src/test_traversal.zig -I lexbor_src_2.4.0/source --library c lexbor_src_2.4.0/build/liblexbor_static.a src/minimal.c
+ ```

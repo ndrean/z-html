@@ -240,6 +240,7 @@ pub fn getNodeName(node: *DomNode) []const u8 {
 /// [core] Get node's tag name as owned Zig string (SAFE: copies to Zig memory)
 ///
 /// Returns a copy of the tag name that is owned by the caller.
+///
 /// Caller must free the returned string.
 pub fn getNodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     const name_slice = getNodeName(node);
@@ -282,61 +283,12 @@ pub fn destroyNode(node: *DomNode) void {
     lxb_dom_node_destroy(node);
 }
 
+/// [core] Destroy an element in the document
+pub fn destroyElement(element: *DomElement) void {
+    _ = lxb_dom_document_destroy_element(element);
+}
+
 //=============================================================================
-
-test "memory safety: getNodeName vs getNodeNameOwned" {
-    const allocator = std.testing.allocator;
-    const doc = try createDocument();
-    defer destroyDocument(doc);
-
-    const element = try createElement(doc, "div", &.{});
-    defer destroyNode(elementToNode(element));
-
-    // Test immediate use (safe with both versions)
-    const unsafe_name = getElementName(element);
-    try testing.expectEqualStrings("DIV", unsafe_name);
-
-    // Test owned version (safe for storage)
-    const owned_name = try getElementNameOwned(allocator, element);
-    defer allocator.free(owned_name);
-    try testing.expectEqualStrings("DIV", owned_name);
-
-    // Both should have the same content
-    try testing.expectEqualStrings(unsafe_name, owned_name);
-
-    // The owned version can be safely used after modifications
-    const another_element = try createElement(doc, "span", &.{});
-    defer destroyNode(elementToNode(another_element));
-
-    // owned_name is still valid and safe to use
-    try testing.expectEqualStrings("DIV", owned_name);
-}
-
-test "create element and comment" {
-    const allocator = std.testing.allocator;
-    const doc = try createDocument();
-    defer destroyDocument(doc);
-    const element = try createElement(doc, "div", &.{});
-    defer destroyNode(elementToNode(element));
-    const name = getElementName(element);
-    try testing.expectEqualStrings("DIV", name);
-
-    const comment = try createComment(doc, "This is a comment");
-    const comment_text = try getCommentTextContent(
-        allocator,
-        comment,
-    );
-    defer allocator.free(comment_text);
-
-    try testing.expectEqualStrings("This is a comment", comment_text);
-
-    // Test type-safe conversion
-    const comment_node = commentToNode(comment);
-    const comment_name = getNodeName(comment_node);
-    try testing.expectEqualStrings("#comment", comment_name);
-
-    destroyComment(comment);
-}
 
 //=============================================================================
 // Reflexion
@@ -526,78 +478,6 @@ pub fn children(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*D
     return elements.toOwnedSlice();
 }
 
-//=============================================================================
-// DOM TRAVERSAL UTILITIES
-//=============================================================================
-
-/// Callback function type for node traversal
-/// Return false to stop traversal early
-pub const NodeCallback = *const fn (node: *DomNode) bool;
-
-/// Callback function type for element traversal
-/// Return false to stop traversal early
-pub const ElementCallback = *const fn (element: *DomElement) bool;
-
-/// [traversal] Traverse all child nodes (including text, comments) calling callback for each
-/// Stops early if callback returns false
-pub fn forEachChildNode(parent_node: *DomNode, callback: NodeCallback) void {
-    var child = firstChild(parent_node);
-    while (child != null) {
-        const current = child.?;
-        child = nextSibling(current);
-
-        if (!callback(current)) {
-            break;
-        }
-    }
-}
-
-/// [traversal] Traverse only child elements calling callback for each
-/// Stops early if callback returns false
-pub fn forEachChildElement(parent_element: *DomElement, callback: ElementCallback) void {
-    var child_element = firstElementChild(parent_element);
-    while (child_element) |child| {
-        const current = child;
-        child_element = nextElementSibling(current);
-
-        if (!callback(current)) {
-            break;
-        }
-    }
-}
-
-/// [traversal] Traverse all child nodes and collect results into an ArrayList
-/// Predicate function determines what to collect
-pub fn collectChildNodes(allocator: std.mem.Allocator, parent_node: *DomNode, comptime T: type, collectFn: *const fn (node: *DomNode) ?T) ![]T {
-    var results = std.ArrayList(T).init(allocator);
-
-    var child = firstChild(parent_node);
-    while (child != null) {
-        if (collectFn(child.?)) |item| {
-            try results.append(item);
-        }
-        child = nextSibling(child.?);
-    }
-
-    return results.toOwnedSlice();
-}
-
-/// [traversal] Traverse child elements and collect results into an ArrayList
-/// Predicate function determines what to collect
-pub fn collectChildElements(allocator: std.mem.Allocator, parent_element: *DomElement, comptime T: type, collectFn: *const fn (element: *DomElement) ?T) ![]T {
-    var results = std.ArrayList(T).init(allocator);
-
-    var child_element = firstElementChild(parent_element);
-    while (child_element) |child| {
-        if (collectFn(child)) |item| {
-            try results.append(item);
-        }
-        child_element = nextElementSibling(child);
-    }
-
-    return results.toOwnedSlice();
-}
-
 /// [utility] Tag name matcher function (safe: uses immediate comparison)
 ///
 /// This is safe because it compares the tag name immediately without storing it.
@@ -621,6 +501,12 @@ pub fn matchesAttribute(element: *DomElement, attr_name: []const u8, attr_value:
 // TEXT CONTENT FUNCTIONS -
 //=============================================================================
 
+extern "c" fn lxb_dom_node_text_content(node: *DomNode, len: ?*usize) ?[*:0]u8;
+extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8, len: usize) u8;
+extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
+extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
+
+// Check if all this is needed !!
 pub const TextOptions = struct {
     escape: bool = false,
     skip_whitespace_nodes: bool = false,
@@ -629,8 +515,6 @@ pub const TextOptions = struct {
     clean_empty_nodes: bool = false,
     clean_comments: bool = false,
 };
-
-extern "c" fn lxb_dom_node_text_content(node: *DomNode, len: ?*usize) ?[*:0]u8;
 
 /// [core] Get text content as Zig string (copies to Zig-managed memory)
 ///
@@ -664,9 +548,6 @@ pub fn getNodeTextContentsOpts(allocator: std.mem.Allocator, node: *DomNode, opt
     }
 }
 
-/// Set text content of a node
-extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8, len: usize) u8;
-
 /// [core] Set text content on empty node from Zig string
 pub fn setNodeTextContent(node: *DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
@@ -675,6 +556,31 @@ pub fn setNodeTextContent(node: *DomNode, content: []const u8) !void {
         content.len,
     );
     if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+}
+
+/// [core] set or replace text data on a text node
+///
+/// If the inner text node is empty, it will be created.
+pub fn setOrReplaceNodeTextData(allocator: std.mem.Allocator, node: *DomNode, text: []const u8) !void {
+    const inner_text_node = firstChild(node) orelse null;
+    if (inner_text_node == null) {
+        try setNodeTextContent(node, text);
+    } else {
+        const current_text = try getNodeTextContentsOpts(
+            allocator,
+            node,
+            .{},
+        );
+        defer allocator.free(current_text);
+        const status = lxb_dom_character_data_replace(
+            inner_text_node.?,
+            text.ptr,
+            text.len,
+            0, // Start at beginning
+            current_text.len,
+        );
+        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+    }
 }
 
 /// [core] Get comment text content
@@ -689,15 +595,9 @@ pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![
     return inner_text;
 }
 
-// extern "c" fn lxb_dom_document_destroy_text(doc: *anyopaque, text: [*]usize) void;
-
-/// Destroy text with proper cleanup
-extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
-
 /// Free lexbor-allocated memory ????
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
 
-// ==============================================================
 /// [core] HTML escape text content for safe output
 pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
@@ -717,6 +617,7 @@ pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return result.toOwnedSlice();
 }
 
+// ==============================================================
 /// [core] Helper: Walk only element children, skipping text nodes
 pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomElement) void) void {
     var child = firstChild(parent_node);
@@ -788,7 +689,6 @@ fn cleanNodeRecursive(allocator: std.mem.Allocator, node: *DomNode, options: Dom
                 node,
                 options,
             );
-            // if (node_was_removed) print("was removed: {s}\n", .{getNodeName(node)});
         },
         .comment => {
             if (options.remove_comments) {
@@ -896,32 +796,6 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *DomNode) !boo
     return false;
 }
 
-extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
-
-/// [core] set or replace text data on a text node
-/// If the inner text node is empty, it will be created.
-pub fn setOrReplaceNodeTextData(allocator: std.mem.Allocator, node: *DomNode, text: []const u8) !void {
-    const inner_text_node = firstChild(node) orelse null;
-    if (inner_text_node == null) {
-        try setNodeTextContent(node, text);
-    } else {
-        const current_text = try getNodeTextContentsOpts(
-            allocator,
-            node,
-            .{},
-        );
-        defer allocator.free(current_text);
-        const status = lxb_dom_character_data_replace(
-            inner_text_node.?,
-            text.ptr,
-            text.len,
-            0, // Start at beginning
-            current_text.len,
-        );
-        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
-    }
-}
-
 fn shouldPreserveWhitespace(node: *DomNode) bool {
     // // debug -->
     // const allocator = testing.allocator;
@@ -971,6 +845,60 @@ fn normalizeTextWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8
 // =====================================================================
 // Tests
 // =====================================================================
+
+test "memory safety: getNodeName vs getNodeNameOwned" {
+    const allocator = std.testing.allocator;
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+
+    const element = try createElement(doc, "div", &.{});
+    defer destroyNode(elementToNode(element));
+
+    // Test immediate use (safe with both versions)
+    const unsafe_name = getElementName(element);
+    try testing.expectEqualStrings("DIV", unsafe_name);
+
+    // Test owned version (safe for storage)
+    const owned_name = try getElementNameOwned(allocator, element);
+    defer allocator.free(owned_name);
+    try testing.expectEqualStrings("DIV", owned_name);
+
+    // Both should have the same content
+    try testing.expectEqualStrings(unsafe_name, owned_name);
+
+    // The owned version can be safely used after modifications
+    const another_element = try createElement(doc, "span", &.{});
+    defer destroyNode(elementToNode(another_element));
+
+    // owned_name is still valid and safe to use
+    try testing.expectEqualStrings("DIV", owned_name);
+}
+
+test "create element and comment" {
+    const allocator = std.testing.allocator;
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const element = try createElement(doc, "div", &.{});
+    defer destroyNode(elementToNode(element));
+    const name = getElementName(element);
+    try testing.expectEqualStrings("DIV", name);
+
+    const comment = try createComment(doc, "This is a comment");
+    const comment_text = try getCommentTextContent(
+        allocator,
+        comment,
+    );
+    defer allocator.free(comment_text);
+
+    try testing.expectEqualStrings("This is a comment", comment_text);
+
+    // Test type-safe conversion
+    const comment_node = commentToNode(comment);
+    const comment_name = getNodeName(comment_node);
+    try testing.expectEqualStrings("#comment", comment_name);
+
+    destroyComment(comment);
+}
 
 test "insertChild" {
     const doc = try createDocument();
@@ -1622,7 +1550,7 @@ test "normalizeTextWhitespace" {
     // print("Normalized: {s}\n", .{normalized});
 }
 
-test "cleanElementAttributes performance optimization" {
+test "cleanElementAttributes" {
     const allocator = testing.allocator;
 
     const doc = try parseFromString("<div><p>No attrs</p><span id='test' class='demo'>With attrs</span></div>");

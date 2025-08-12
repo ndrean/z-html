@@ -36,11 +36,7 @@ extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8
 /// Returns null if attribute doesn't exist, empty string if attribute exists but has no value.
 ///
 /// Caller needs to free the slice if not null
-pub fn elementGetNamedAttribute(
-    allocator: std.mem.Allocator,
-    element: *z.DomElement,
-    name: []const u8,
-) !?[]u8 {
+pub fn elementGetNamedAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: []const u8) !?[]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(
         element,

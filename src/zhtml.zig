@@ -10,6 +10,7 @@ const collection = @import("collection.zig");
 const tag = @import("html_tags.zig");
 const Type = @import("node_types.zig");
 const tree = @import("dom_tree.zig");
+const traverse = @import("traverse.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -19,12 +20,11 @@ pub const DomElement = lxb.DomElement;
 pub const DomCollection = lxb.DomCollection;
 pub const DomAttr = attrs.DomAttr;
 pub const HtmlTag = tag.HtmlTag;
-pub const ElementTag = tag.ElementTag;
 pub const AttributePair = attrs.AttributePair;
 pub const Comment: type = lxb.Comment;
-pub const HtmlTree = tree.HtmlTree;
 
 pub const LXB_STATUS_OK: usize = 0;
+pub var default_collection_capacity: u8 = 10;
 // pub const lxb_char_t = u8;
 // pub const lxb_status_t = usize;
 
@@ -36,6 +36,9 @@ pub const ChunkParser = chunks.ChunkParser;
 pub const HtmlParser = chunks.HtmlParser;
 
 pub const parseTag = tag.parseTag;
+pub const parseTagInsensitive = tag.parseTagInsensitive;
+pub const isVoidElement = tag.isVoidElement;
+
 //----------------------------------------------------------------------------
 // Core
 pub const createDocument = lxb.createDocument;
@@ -78,12 +81,12 @@ pub const childNodes = lxb.childNodes;
 pub const children = lxb.children;
 
 // DOM Traversal utilities
-pub const forEachChildNode = lxb.forEachChildNode;
-pub const forEachChildElement = lxb.forEachChildElement;
-pub const collectChildNodes = lxb.collectChildNodes;
-pub const collectChildElements = lxb.collectChildElements;
-pub const NodeCallback = lxb.NodeCallback;
-pub const ElementCallback = lxb.ElementCallback;
+pub const forEachChildNode = traverse.forEachChildNode;
+pub const forEachChildElement = traverse.forEachChildElement;
+pub const collectChildNodes = traverse.collectChildNodes;
+pub const collectChildElements = traverse.collectChildElements;
+pub const NodeCallback = traverse.NodeCallback;
+pub const ElementCallback = traverse.ElementCallback;
 
 // DOM Matcher utilities
 pub const matchesTagName = lxb.matchesTagName;
@@ -93,14 +96,23 @@ pub const matchesAttribute = lxb.matchesAttribute;
 pub const dom_tree = @import("dom_tree.zig");
 pub const DomTreeNode = dom_tree.HtmlNode;
 pub const DomTreeArray = dom_tree.HtmlTree;
+pub const JsonTreeNode = dom_tree.JsonNode;
+pub const JsonTreeArray = dom_tree.JsonTree;
+
 pub const domNodeToTree = dom_tree.domNodeToTree;
 pub const documentToTree = dom_tree.documentToTree;
 pub const fullDocumentToTree = dom_tree.fullDocumentToTree;
+pub const domNodeToJson = dom_tree.domNodeToJson;
+pub const documentToJsonTree = dom_tree.documentToJsonTree;
+pub const fullDocumentToJsonTree = dom_tree.fullDocumentToJsonTree;
 pub const nodeToHtml = dom_tree.nodeToHtml;
 pub const treeToHtml = dom_tree.treeToHtml;
 pub const roundTripConversion = dom_tree.roundTripConversion;
 pub const freeDomTreeArray = dom_tree.freeHtmlTree;
 pub const freeDomTreeNode = dom_tree.freeHtmlNode;
+pub const freeJsonTreeArray = dom_tree.freeJsonTree;
+pub const freeJsonTreeNode = dom_tree.freeJsonNode;
+pub const printDocumentStructure = dom_tree.printDocumentStructure;
 
 // Collection management
 pub const createCollection = collection.createCollection;
@@ -136,6 +148,7 @@ pub const getElementsByName = collection.getElementsByName;
 pub const removeNode = lxb.removeNode;
 pub const destroyComment = lxb.destroyComment;
 pub const destroyNode = lxb.destroyNode;
+pub const destroyElement = lxb.destroyElement;
 
 // Reflexion
 pub const documentRoot = lxb.documentRoot;
@@ -269,39 +282,8 @@ pub const attributes = attrs.attributes;
 // UTILITY FUNCTIONS
 //=============================================================================
 
-/// [lexbor] Debug: Walk and print DOM tree
-pub fn walkTree(node: *DomNode, depth: u32) void {
-    var child = firstChild(node);
-    while (child != null) {
-        const name = getNodeName(child.?);
-        const indent = switch (@min(depth, 10)) {
-            0 => "",
-            1 => "  ",
-            2 => "    ",
-            3 => "      ",
-            4 => "        ",
-            5 => "          ",
-            else => "            ", // For deeper levels
-        };
-        print("{s}{s}\n", .{ indent, name });
-
-        walkTree(child.?, depth + 1);
-        child = nextSibling(child.?);
-    }
-}
-
-/// [lexbor] Debug: print document structure (for debugging)
-pub fn printDocumentStructure(doc: *HtmlDocument) !void {
-    print("\n--- DOCUMENT STRUCTURE ----\n", .{});
-    const root = try getDocumentBodyNode(doc);
-    walkTree(root, 0);
-}
-
 /// [zhtml] Debug: Get only element children (filter out text/comment nodes)
-pub fn getElementChildrenWithTypes(
-    allocator: std.mem.Allocator,
-    parent_node: *DomNode,
-) ![]*DomElement {
+pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomElement {
     var elements = std.ArrayList(*DomElement).init(allocator);
     defer elements.deinit();
 
@@ -319,14 +301,13 @@ pub fn getElementChildrenWithTypes(
 }
 
 // ----------------------------------------------------------------------------
-// includes all tests from imported modules
+// Test all imported modules
 // ----------------------------------------------------------------------------
 test {
     std.testing.refAllDecls(@This());
 }
 
 const std = @import("std");
-const writer = std.io.getStdOut().writer();
 
 const print = std.debug.print;
 const testing = std.testing;

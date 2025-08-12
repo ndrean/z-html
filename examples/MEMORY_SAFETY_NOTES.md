@@ -2,10 +2,8 @@
 
 ## The Issue
 
-The original `getNodeName()` and `getElementName()` functions in lexbor.zig had a **memory safety issue**:
-
 ```zig
-// ❌ UNSAFE: Returns a slice pointing to lexbor's internal memory
+// UNSAFE: Returns a slice pointing to lexbor's internal memory
 pub fn getElementName(element: *DomElement) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);  // C function returns [*:0]const u8
     return std.mem.span(name_ptr);                   // Converts to []const u8 but doesn't copy!
