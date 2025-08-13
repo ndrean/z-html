@@ -95,39 +95,38 @@ pub const matchesAttribute = attrs.matchesAttribute;
 pub const hasClass = attrs.hasClass;
 
 // DOM Tree representation utilities (aliased to avoid conflicts)
+pub const DomTreeNode = tree.HtmlNode;
 // JsonTreeNode follows W3C DOM specification with nodeType, tagName, attributes, children
-pub const dom_tree = @import("dom_tree.zig");
-pub const DomTreeNode = dom_tree.HtmlNode;
-pub const DomTreeArray = dom_tree.HtmlTree;
-pub const JsonTreeNode = dom_tree.JsonNode;
-pub const JsonTreeArray = dom_tree.JsonTree;
-pub const JsonAttribute = dom_tree.JsonAttribute;
+pub const DomTreeArray = tree.HtmlTree;
+pub const JsonTreeNode = tree.JsonNode;
+pub const JsonTreeArray = tree.JsonTree;
+pub const JsonAttribute = tree.JsonAttribute;
 
-pub const domNodeToTree = dom_tree.domNodeToTree;
-pub const documentToTupleTree = dom_tree.documentToTupleTree;
-// pub const fullDocumentToTupleTree = dom_tree.fullDocumentToTupleTree;
-pub const domNodeToJson = dom_tree.domNodeToJson;
-pub const documentToJsonTree = dom_tree.documentToJsonTree;
-pub const fullDocumentToJsonTree = dom_tree.fullDocumentToJsonTree;
-pub const freeHtmlTree = dom_tree.freeHtmlTree;
-pub const freeJsonTree = dom_tree.freeJsonTree;
-pub const printNode = dom_tree.printNode;
+pub const domNodeToTree = tree.domNodeToTree;
+pub const documentToTupleTree = tree.documentToTupleTree;
+// pub const fullDocumentToTupleTree = tree.fullDocumentToTupleTree;
+pub const domNodeToJson = tree.domNodeToJson;
+pub const documentToJsonTree = tree.documentToJsonTree;
+pub const fullDocumentToJsonTree = tree.fullDocumentToJsonTree;
+pub const freeHtmlTree = tree.freeHtmlTree;
+pub const freeJsonTree = tree.freeJsonTree;
+pub const printNode = tree.printNode;
 
 // JSON serialization and parsing
-pub const jsonNodeToString = dom_tree.jsonNodeToString;
-pub const jsonTreeToString = dom_tree.jsonTreeToString;
-pub const parseJsonString = dom_tree.parseJsonString;
-pub const parseJsonTreeString = dom_tree.parseJsonTreeString;
+pub const jsonNodeToString = tree.jsonNodeToString;
+pub const jsonTreeToString = tree.jsonTreeToString;
+pub const parseJsonString = tree.parseJsonString;
+pub const parseJsonTreeString = tree.parseJsonTreeString;
 
-pub const nodeToHtml = dom_tree.nodeToHtml;
-pub const treeToHtml = dom_tree.treeToHtml;
-pub const roundTripConversion = dom_tree.roundTripConversion;
-pub const freeDomTreeArray = dom_tree.freeHtmlTree;
-pub const freeDomTreeNode = dom_tree.freeHtmlNode;
-pub const freeJsonTreeArray = dom_tree.freeJsonTree;
-pub const freeJsonTreeNode = dom_tree.freeJsonNode;
+pub const nodeToHtml = tree.nodeToHtml;
+pub const treeToHtml = tree.treeToHtml;
+pub const roundTripConversion = tree.roundTripConversion;
+pub const freeDomTreeArray = tree.freeHtmlTree;
+pub const freeDomTreeNode = tree.freeHtmlNode;
+pub const freeJsonTreeArray = tree.freeJsonTree;
+pub const freeJsonTreeNode = tree.freeJsonNode;
 
-pub const printDocumentStructure = dom_tree.printDocumentStructure;
+pub const printDocumentStructure = tree.printDocumentStructure;
 
 // Collection management
 pub const createCollection = collection.createCollection;
@@ -161,7 +160,7 @@ pub const destroyElement = lxb.destroyElement;
 pub const documentRoot = lxb.documentRoot;
 pub const isNodeEmpty = lxb.isNodeEmpty;
 pub const isSelfClosingNode = lxb.isSelfClosingNode;
-pub const isWhitepaceOnlyText = lxb.isWhitespaceOnlyText;
+pub const isWhitespaceOnlyText = lxb.isWhitespaceOnlyText;
 pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
 pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 

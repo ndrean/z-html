@@ -1,6 +1,7 @@
 //! DOM tree cleaner
 const std = @import("std");
 const z = @import("zhtml.zig");
+const print = std.debug.print;
 
 pub const DomCleanOptions = struct {
     remove_comments: bool = false,
@@ -137,7 +138,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
     );
     defer allocator.free(text);
 
-    if (z.isWhitepaceOnlyText(text) and options.remove_empty_elements) { //<-------- CHANGED ???
+    if (z.isWhitespaceOnlyText(text) and options.remove_empty_elements) { //<-------- CHANGED ???
         z.removeNode(node);
         return true;
     }
@@ -180,22 +181,17 @@ fn shouldPreserveWhitespace(node: *z.DomNode) bool {
 fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNode) !void {
     if (z.previousSibling(comment_node)) |prev| {
         if (z.isTypeText(prev)) {
-            // Handle the case where the text node might be empty
-            const txt = z.getTextContentsOpts(allocator, prev, .{}) catch |err| switch (err) {
-                z.Err.EmptyTextContent => {
-                    // Empty text node - nothing to add space to
-                    z.removeNode(comment_node);
-                    z.destroyNode(comment_node);
-                    return;
-                },
-                else => return err,
+            const txt = z.getTextContentsOpts(allocator, prev, .{}) catch {
+                z.removeNode(comment_node);
+                z.destroyNode(comment_node);
+                return;
             };
             defer allocator.free(txt);
-
+            
             if (txt.len > 0) {
                 const result = try std.fmt.allocPrint(
                     allocator,
-                    "{s} ",
+                    "{s} ", // add whitespace after text
                     .{txt},
                 );
 
@@ -216,47 +212,6 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
     z.removeNode(comment_node);
     z.destroyNode(comment_node);
 }
-
-/// New approach using insertBefore function
-/// Strategy: Always add space between text nodes when removing comments
-// fn removeCommentWithSpacing3(_: std.mem.Allocator, comment_node: *z.DomNode) !void {
-//     // Helper function to find previous sibling (since it's not exported)
-//     const getPreviousSibling = struct {
-//         fn call(node: *z.DomNode) ?*z.DomNode {
-//             const parent = z.parentNode(node) orelse return null;
-//             var child = z.firstChild(parent);
-//             var prev: ?*z.DomNode = null;
-
-//             while (child != null) {
-//                 if (child.? == node) return prev;
-//                 prev = child;
-//                 child = z.nextSibling(child.?);
-//             }
-//             return null;
-//         }
-//     }.call;
-
-//     const prev_sibling = getPreviousSibling(comment_node);
-//     const next_sibling = z.nextSibling(comment_node);
-
-//     // Check if we have text nodes on both sides that will get concatenated
-//     const prev_is_text = prev_sibling != null and z.isTypeText(prev_sibling.?);
-//     const next_is_text = next_sibling != null and z.isTypeText(next_sibling.?);
-
-//     // Only add space if removing the comment will cause text concatenation
-//     if (prev_is_text and next_is_text) {
-//         // Create a space text node
-//         const doc = z.ownerDocument(comment_node);
-//         const space_text_node = try z.createTextNode(doc, " ");
-
-//         // Insert space after the previous text node (this puts it right between the text nodes)
-//         z.insertAfter(prev_sibling.?, space_text_node);
-//     }
-
-//     // Remove the comment
-//     z.removeNode(comment_node);
-//     z.destroyNode(comment_node);
-// }
 
 /// [cleaner] Remove excessive whitespace from HTML text to match serialized output.
 ///
@@ -398,7 +353,6 @@ pub fn normalizeHtmlWithLexbor(allocator: std.mem.Allocator, html: []const u8) !
 // ========================================================================
 
 const testing = std.testing;
-const print = std.debug.print;
 
 test "normalizeTextWhitespace" {
     const allocator = testing.allocator;
@@ -538,7 +492,7 @@ test "comprehensive cleaning options coverage" {
         defer allocator.free(result);
 
         // Debug: print the actual result to see what we're getting
-        print("Test 2 result: '{s}'\n", .{result});
+        // print("Test 2 result: '{s}'\n", .{result});
 
         // Should remove comments but preserve empty elements
         try testing.expect(std.mem.indexOf(u8, result, "<!--") == null);
@@ -571,7 +525,7 @@ test "comprehensive cleaning options coverage" {
         const result = try z.serializeTree(allocator, body_node);
         defer allocator.free(result);
         // print("After empty element removal: {s}\n", .{result});
-        print("T3: {s}\n", .{result});
+        // print("T3: {s}\n", .{result});
 
         // Should remove empty elements but preserve comments
         try testing.expect(
@@ -625,7 +579,7 @@ test "comprehensive cleaning options coverage" {
 
         const result = try z.serializeTree(allocator, body_node);
         defer allocator.free(result);
-        print("T4: {s}\n", .{result});
+        // print("T4: {s}\n", .{result});
 
         // Comments removed
         try testing.expect(
