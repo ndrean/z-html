@@ -6,6 +6,9 @@ const z = @import("zhtml.zig");
 
 const testing = std.testing;
 const print = std.debug.print;
+const time = std.time;
+const Instant = time.Instant;
+const Timer = time.Timer;
 const writer = std.io.getStdOut().writer();
 
 // Opaque types
@@ -1324,20 +1327,31 @@ test "Append JS fragment" {
         \\</div>
     ;
 
-    const expected_html = try z.normalizeWhitespace(allocator, pretty_html);
-    defer allocator.free(expected_html);
+    // Instead of using normalizeWhitespace (which was for text nodes),
+    // use the new lexbor-based approach for accurate HTML comparison
+
+    // const start2 = try Instant.now();
+    const expected_html2 = try z.normalizeWhitespace(allocator, pretty_html);
+    defer allocator.free(expected_html2);
+    // const end2 = try Instant.now();
+    // const elapsed2: f64 = @floatFromInt(end2.since(start2));
+    // print("Time elapsed is: {d:.3}ms\n", .{
+    // elapsed2 / time.ns_per_ms,
+    // });
 
     const expected =
         "<div class=\"container-list\"><!--a comment--><ul><li data-id=\"1\">Item 1</li><li data-id=\"2\">Item 2</li><li data-id=\"3\">Item 3</li></ul></div>";
 
     try testing.expectEqualStrings(
         expected,
-        expected_html,
+        expected_html2,
     );
     try testing.expectEqualStrings(
-        expected_html, // Use expected_html instead of expected
+        expected_html2, // Use expected_html instead of expected
         fragment_txt,
     );
+    try testing.expectEqualStrings(expected_html2, fragment_txt);
+    try testing.expectEqualStrings(expected_html2, fragment_txt);
 
     var engine = try z.CssSelectorEngine.init(allocator);
     defer engine.deinit();
@@ -1360,16 +1374,23 @@ test "Append JS fragment" {
         }
     }
 
-    try z.printDocumentStructure(doc);
+    // try z.printDocumentStructure(doc);
 
-    const tree = try z.documentToTree(allocator, doc);
+    const tree = try z.documentToTupleTree(allocator, doc);
     defer z.freeHtmlTree(allocator, tree);
 
     for (tree, 0..) |node, i| {
         _ = i;
+        _ = node;
         // print("[{}]: ", .{i});
-        z.printNode(node, 0);
+        // z.printNode(node, 0);
     }
+
+    const json_tree = try z.documentToJsonTree(allocator, doc);
+    defer z.freeJsonTree(allocator, json_tree);
+    const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
+    defer allocator.free(json_string);
+    print("\n\n{s}\n", .{json_string});
 }
 
 test "JavaScript children from fragment" {
@@ -1540,11 +1561,6 @@ test "class search functionality" {
         }
         child = z.nextSibling(child.?);
     }
-
-    print("✅ Class search functionality test passed!\n", .{});
-    print("   - hasClass(): searches for individual class names\n", .{});
-    print("   - classList(): returns full class attribute string\n", .{});
-    print("   - getClasses(): returns array of individual class names\n", .{});
 }
 
 test "CSS selector nth-child functionality" {
@@ -1599,6 +1615,159 @@ test "CSS selector nth-child functionality" {
     } else {
         try testing.expect(false); // Should find first li
     }
+}
 
-    print("✅ CSS selector nth-child functionality test passed!\n", .{});
+test "Performance comparison: Character-based vs Lexbor-based HTML normalization" {
+    // const allocator = testing.allocator;
+
+    // Create a complex, realistic HTML document with lots of whitespace variations
+    const complex_html =
+        \\<!DOCTYPE html>
+        \\<html lang="en">
+        \\  <head>
+        \\    <meta charset="UTF-8">
+        \\    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        \\    <title>   Complex   HTML   Document   </title>
+        \\    <style>
+        \\      body {
+        \\        margin: 0;
+        \\        padding: 20px;
+        \\        font-family: Arial, sans-serif;
+        \\      }
+        \\      .container {
+        \\        max-width: 1200px;
+        \\        margin: 0 auto;
+        \\      }
+        \\    </style>
+        \\  </head>
+        \\  <body>
+        \\    <header class="main-header">
+        \\      <nav>
+        \\        <ul class="nav-list">
+        \\          <li><a href="/">  Home  </a></li>
+        \\          <li><a href="/about">   About   </a></li>
+        \\          <li><a href="/services">    Services    </a></li>
+        \\          <li><a href="/contact">     Contact     </a></li>
+        \\        </ul>
+        \\      </nav>
+        \\    </header>
+        \\    
+        \\    <main class="container">
+        \\      <section class="hero">
+        \\        <h1>   Welcome to Our   Amazing   Website   </h1>
+        \\        <p>
+        \\          This is a   complex   HTML document   with   lots of   
+        \\          whitespace   variations   to test   the performance   
+        \\          of different   normalization   approaches.
+        \\        </p>
+        \\        <div class="cta-buttons">
+        \\          <button class="btn primary">   Get Started   </button>
+        \\          <button class="btn secondary">   Learn More   </button>
+        \\        </div>
+        \\      </section>
+        \\      
+        \\      <section class="features">
+        \\        <h2>   Our   Features   </h2>
+        \\        <div class="feature-grid">
+        \\          <div class="feature-card">
+        \\            <h3>   Fast   Performance   </h3>
+        \\            <p>   Lightning fast   response times   for all   operations.   </p>
+        \\            <ul>
+        \\              <li>   Sub-millisecond   parsing   </li>
+        \\              <li>   Optimized   memory   usage   </li>
+        \\              <li>   Parallel   processing   </li>
+        \\            </ul>
+        \\          </div>
+        \\          <div class="feature-card">
+        \\            <h3>   Easy   Integration   </h3>
+        \\            <p>   Simple   API   that   works   with   any   framework.   </p>
+        \\            <ul>
+        \\              <li>   RESTful   endpoints   </li>
+        \\              <li>   SDK   for   popular   languages   </li>
+        \\              <li>   Comprehensive   documentation   </li>
+        \\            </ul>
+        \\          </div>
+        \\          <div class="feature-card">
+        \\            <h3>   Reliable   Support   </h3>
+        \\            <p>   24/7   customer   support   and   monitoring.   </p>
+        \\            <ul>
+        \\              <li>   99.9%   uptime   guarantee   </li>
+        \\              <li>   Expert   technical   support   </li>
+        \\              <li>   Real-time   monitoring   </li>
+        \\            </ul>
+        \\          </div>
+        \\        </div>
+        \\      </section>
+        \\      
+        \\      <section class="testimonials">
+        \\        <h2>   What   Our   Customers   Say   </h2>
+        \\        <div class="testimonial-list">
+        \\          <blockquote class="testimonial">
+        \\            <p>   "This   product   has   revolutionized   our   workflow.   
+        \\            The   performance   improvements   are   incredible!"   </p>
+        \\            <cite>   John   Smith,   CEO   of   TechCorp   </cite>
+        \\          </blockquote>
+        \\          <blockquote class="testimonial">
+        \\            <p>   "Outstanding   support   and   rock-solid   reliability.   
+        \\            We've   never   had   any   downtime   issues."   </p>
+        \\            <cite>   Sarah   Johnson,   CTO   of   WebSolutions   </cite>
+        \\          </blockquote>
+        \\          <blockquote class="testimonial">
+        \\            <p>   "The   integration   was   seamless   and   the   
+        \\            documentation   is   excellent.   Highly   recommended!"   </p>
+        \\            <cite>   Mike   Davis,   Lead   Developer   at   StartupXYZ   </cite>
+        \\          </blockquote>
+        \\        </div>
+        \\      </section>
+        \\    </main>
+        \\    
+        \\    <footer class="main-footer">
+        \\      <div class="container">
+        \\        <div class="footer-content">
+        \\          <div class="footer-section">
+        \\            <h4>   Company   </h4>
+        \\            <ul>
+        \\              <li><a href="/about">   About   Us   </a></li>
+        \\              <li><a href="/careers">   Careers   </a></li>
+        \\              <li><a href="/press">   Press   </a></li>
+        \\            </ul>
+        \\          </div>
+        \\          <div class="footer-section">
+        \\            <h4>   Support   </h4>
+        \\            <ul>
+        \\              <li><a href="/help">   Help   Center   </a></li>
+        \\              <li><a href="/contact">   Contact   Us   </a></li>
+        \\              <li><a href="/status">   System   Status   </a></li>
+        \\            </ul>
+        \\          </div>
+        \\          <div class="footer-section">
+        \\            <h4>   Legal   </h4>
+        \\            <ul>
+        \\              <li><a href="/privacy">   Privacy   Policy   </a></li>
+        \\              <li><a href="/terms">   Terms   of   Service   </a></li>
+        \\              <li><a href="/cookies">   Cookie   Policy   </a></li>
+        \\            </ul>
+        \\          </div>
+        \\        </div>
+        \\        <div class="footer-bottom">
+        \\          <p>   ©   2024   Amazing   Company.   All   rights   reserved.   </p>
+        \\        </div>
+        \\      </div>
+        \\    </footer>
+        \\    
+        \\    <script>
+        \\      // Some JavaScript with whitespace
+        \\      document.addEventListener('DOMContentLoaded', function() {
+        \\        const   buttons   =   document.querySelectorAll('.btn');
+        \\        buttons.forEach(function(button) {
+        \\          button.addEventListener('click',   function(e)   {
+        \\            console.log('Button   clicked:',   e.target.textContent.trim());
+        \\          });
+        \\        });
+        \\      });
+        \\    </script>
+        \\  </body>
+        \\</html>
+    ;
+    _ = complex_html;
 }

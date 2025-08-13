@@ -97,20 +97,29 @@ pub const matchesAttribute = attrs.matchesAttribute;
 pub const hasClass = attrs.hasClass;
 
 // DOM Tree representation utilities (aliased to avoid conflicts)
+// JsonTreeNode follows W3C DOM specification with nodeType, tagName, attributes, children
 pub const dom_tree = @import("dom_tree.zig");
 pub const DomTreeNode = dom_tree.HtmlNode;
 pub const DomTreeArray = dom_tree.HtmlTree;
 pub const JsonTreeNode = dom_tree.JsonNode;
 pub const JsonTreeArray = dom_tree.JsonTree;
+pub const JsonAttribute = dom_tree.JsonAttribute;
 
 pub const domNodeToTree = dom_tree.domNodeToTree;
-pub const documentToTree = dom_tree.documentToTree;
-pub const fullDocumentToTree = dom_tree.fullDocumentToTree;
+pub const documentToTupleTree = dom_tree.documentToTupleTree;
+// pub const fullDocumentToTupleTree = dom_tree.fullDocumentToTupleTree;
 pub const domNodeToJson = dom_tree.domNodeToJson;
 pub const documentToJsonTree = dom_tree.documentToJsonTree;
 pub const fullDocumentToJsonTree = dom_tree.fullDocumentToJsonTree;
 pub const freeHtmlTree = dom_tree.freeHtmlTree;
+pub const freeJsonTree = dom_tree.freeJsonTree;
 pub const printNode = dom_tree.printNode;
+
+// JSON serialization and parsing
+pub const jsonNodeToString = dom_tree.jsonNodeToString;
+pub const jsonTreeToString = dom_tree.jsonTreeToString;
+pub const parseJsonString = dom_tree.parseJsonString;
+pub const parseJsonTreeString = dom_tree.parseJsonTreeString;
 
 pub const nodeToHtml = dom_tree.nodeToHtml;
 pub const treeToHtml = dom_tree.treeToHtml;
@@ -165,6 +174,7 @@ pub const serializeElement = serialize.serializeElement;
 
 pub const cleanDomTree = cleaner.cleanDomTree;
 pub const normalizeWhitespace = cleaner.normalizeWhitespace;
+pub const normalizeHtmlWithLexbor = cleaner.normalizeHtmlWithLexbor;
 
 // InnerHTML manipulation
 pub const innerHTML = serialize.innerHtml;

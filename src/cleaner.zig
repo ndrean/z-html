@@ -168,7 +168,11 @@ fn shouldPreserveWhitespace(node: *z.DomNode) bool {
 /// Caller needs to free the slice
 pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     // Trim leading and trailing whitespace
-    const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+    const trimmed = std.mem.trim(
+        u8,
+        text,
+        &std.ascii.whitespace,
+    );
 
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
@@ -206,6 +210,82 @@ pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8
     }
 
     return result.toOwnedSlice();
+}
+
+// ORIGINAL VERSION - for text node content only:
+// [cleaner] Remove excessive whitespace from text content (original version)
+//
+// This was the original function designed for normalizing whitespace within text nodes,
+// not for processing full HTML markup.
+//
+// Caller needs to free the slice
+// pub fn normalizeTextWhitespace_original(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+//     // Trim leading and trailing whitespace
+//     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+//
+//     // Collapse internal whitespace sequences to single spaces
+//     var result = std.ArrayList(u8).init(allocator);
+//     defer result.deinit();
+//
+//     var prev_was_whitespace = false;
+//     for (trimmed) |ch| {
+//         if (std.ascii.isWhitespace(ch)) {
+//             if (!prev_was_whitespace) {
+//                 try result.append(' '); // Normalize all whitespace to spaces
+//                 prev_was_whitespace = true;
+//             }
+//         } else {
+//             try result.append(ch);
+//             prev_was_whitespace = false;
+//         }
+//     }
+//
+//     return result.toOwnedSlice();
+// }
+
+/// [cleaner] Parse HTML and serialize it back compactly (lexbor-based approach)
+///
+/// This approach combines the best of both worlds:
+/// 1. Parse the HTML string into a DOM tree (lexbor handles correctness)
+/// 2. Handle both full documents and fragments
+/// 3. Serialize it back using lexbor's serialization
+/// 4. Apply whitespace normalization to get compact output
+/// 5. Much more robust than character-by-character processing alone
+///
+/// Caller needs to free the slice
+pub fn normalizeHtmlWithLexbor(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+    const zhtml = @import("zhtml.zig");
+
+    // Parse the HTML into a DOM tree
+    const doc = try zhtml.parseFromString(html);
+    defer zhtml.destroyDocument(doc);
+
+    // Check if this looks like a full document (has doctype or html tag)
+    const is_full_document = std.mem.indexOf(u8, html, "<!DOCTYPE") != null or
+        std.mem.indexOf(u8, html, "<html") != null or
+        std.mem.indexOf(u8, html, "<HTML") != null;
+
+    const serialized = if (is_full_document) blk: {
+        // For full documents, serialize the entire document
+        const root = zhtml.documentRoot(doc) orelse return allocator.dupe(u8, "");
+        break :blk try zhtml.serializeTree(allocator, root);
+    } else blk: {
+        // For fragments, get content from body
+        const body_element = try zhtml.getBodyElement(doc);
+        const body_node = zhtml.elementToNode(body_element);
+
+        const first_child = zhtml.firstChild(body_node);
+        if (first_child == null) {
+            return allocator.dupe(u8, "");
+        }
+
+        break :blk try zhtml.serializeTree(allocator, first_child.?);
+    };
+
+    defer allocator.free(serialized);
+
+    // Apply our existing HTML-aware whitespace normalization to make it compact
+    return try normalizeWhitespace(allocator, serialized);
 }
 
 // ========================================================================

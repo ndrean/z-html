@@ -130,11 +130,13 @@ DIV
       #text
 ```
 
-### DOM tree
+### DOM tree: tuple and W3C JSON
+
+- the tuple version: `{tagName, attributes, children}`
 
 ```c
   // continue
-  const tree = try z.documentToTree(allocator, doc);
+  const tree = try z.documentToTupleTree(allocator, doc);
   defer z.freeHtmlTree(allocator, tree);
 
   for (tree) |node| {
@@ -159,6 +161,50 @@ DIV
     ]
   }
 ]
+```
+
+- the JSON format: `{nodeType, tagName, attributes, children}` where element = 1, text = 3, comment = 8, document = 9, fragment = 11.
+
+```c
+  const json_tree = try documentToJsonTree(allocator, doc);
+  const json_string = try jsonNodeToString(allocator, json_tree[0]);
+  print("{s}", .{json_string });
+```
+gives:
+
+```txt
+{
+  "nodeType": 1, 
+  "tagName": "DIV", 
+  "attributes": [
+    {"name": "class", "value": "container-list"}
+  ], 
+  "children": [
+    {"nodeType": 8, "data": "a comment"}, 
+    {
+      "nodeType": 1, 
+      "tagName": "UL", 
+      "attributes": [], 
+      "children": [
+        {
+          "nodeType": 1, 
+          "tagName": "LI", 
+          "attributes": [{"name": "data-id", "value": "1"}], "children": [{"nodeType": 3, "data": "Item 1"}]
+        }, 
+        {
+          "nodeType": 1, 
+          "tagName": "LI", 
+          "attributes": [{"name": "data-id", "value": "2"}], "children": [{"nodeType": 3, "data": "Item 2"}]
+        },
+        {
+          "nodeType": 1, 
+          "tagName": "LI", 
+          "attributes": [{"name": "data-id", "value": "3"}], "children": [{"nodeType": 3, "data": "Item 3"}]
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ### CSS selectors and attributes
@@ -228,106 +274,6 @@ It imports all the submodules and run the tests.
 ```sh
  zig build test --summary all -Doptimize=Debug
  ```
-
-## Examples
-
-### Cleaning HTML document
-
-```c
-const z = @import("zhtml");
-const allocator = std.heap.c_allocator;
-const writer = std.io.getStdOut().writer();
-
-
-const fragment = 
-  \\<body><div class=" container test " id="main">
-  \\  
-  \\ <p>   Hello     World   </p>
-  \\  
-  \\  <!-- Remove this comment -->
-  \\  <span data-id="123"></span>
-  \\  <pre>    preserve    this    </pre>
-  \\  
-  \\  <p>  </p>
-  \\
-  \\ <br> <!-- This should be removed -->
-  \\
-  \\ <img src="http://google.com" alt="my-image" data-value=""> 
-  \\
-  \\   <script> const div  = document.querySelector('div'); </script>
-  \\</div>
-  \\. <div data-empty="" title="  spaces  ">Content</div>
-  \\ <article>
-  \\ <h1>Title</h1><p>Para 1</p><p>Para 2</p>
-  \\    <footer>End</footer>
-  \\                   </article></body>
-;
-
-
-const doc = try z.parseFromString(fragment);
-defer z.destroyDocument(doc);
-
-try z.cleanDomTree(
-  allocator,
-  body_node.?,
-  .{ .remove_comments = true },
-);
-
-const new_html = try z.serializeTree(
-  allocator,
-  body_node.?,
-);
-defer allocator.free(new_html);
-
-try writer.print("{s}\n", .{new_html});
-z.printDocumentStructure(doc);
-```
-
-```txt
-<body>
-<div class="container test" id="main">
-<p>Hello World</p>
-<span data-id="123"></span>
-<pre>    preserve    this    </pre>
-<p></p><br>
-<img src="http://google.com" alt="my-image" data-value="">
-<script> const div  = document.querySelector('div'); </script>
-</div>
-```
-
-The new document structure is:
-
-- cleaned from unwanted empty `#text` nodes,
-- has preserved and cleaned attributes,
-- left untouched special tags (`<pre>`, `<meta>`...),
-- optionally removes comments,
-- optionally can remove empty nodes if they don't contain any attribute.
-
-```txt
---- DOCUMENT STRUCTURE ----
-HTML
-  HEAD
-  BODY
-    DIV
-      P
-        #text
-      SPAN
-      PRE
-        #text
-      P
-      BR
-      IMG
-      SCRIPT
-        #text
-```
-
-Examples in _main.zig_: TODO
-
-- DOM_tree
-- Serialization
-- CSS selector
-- Attributes
-- Chunks
 
 ## Build
 

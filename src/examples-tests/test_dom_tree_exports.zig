@@ -11,7 +11,7 @@ pub fn main() !void {
     defer z.destroyDocument(doc);
 
     // Test DOM tree conversion
-    const tree: z.DomTreeNode = try z.fullDocumentToTree(allocator, doc);
+    const tree: z.DomTreeNode = try z.fulldocumentToTupleTree(allocator, doc);
     defer z.freeDomTreeNode(allocator, tree);
 
     std.debug.print("DOM tree conversion successful!\n", .{});
