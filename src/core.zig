@@ -1270,6 +1270,8 @@ test "Append JS fragment" {
     );
 
     const div_node = elementToNode(div);
+    const comment_node = try z.createComment(doc, "a comment");
+    z.appendChild(div_node, commentToNode(comment_node));
 
     const ul = try z.createElement(doc, "ul", &.{});
     const ul_node = elementToNode(ul);
@@ -1310,11 +1312,30 @@ test "Append JS fragment" {
 
     defer allocator.free(fragment_txt);
 
+    // Create expected HTML (pretty formatted for readability)
+    const pretty_html =
+        \\<div class="container-list">
+        \\  <!--a comment-->
+        \\  <ul>
+        \\      <li data-id="1">Item 1</li>
+        \\      <li data-id="2">Item 2</li>
+        \\      <li data-id="3">Item 3</li>
+        \\  </ul>
+        \\</div>
+    ;
+
+    const expected_html = try z.normalizeWhitespace(allocator, pretty_html);
+    defer allocator.free(expected_html);
+
     const expected =
-        "<div class=\"container-list\"><ul><li data-id=\"1\">Item 1</li><li data-id=\"2\">Item 2</li><li data-id=\"3\">Item 3</li></ul></div>";
+        "<div class=\"container-list\"><!--a comment--><ul><li data-id=\"1\">Item 1</li><li data-id=\"2\">Item 2</li><li data-id=\"3\">Item 3</li></ul></div>";
 
     try testing.expectEqualStrings(
         expected,
+        expected_html,
+    );
+    try testing.expectEqualStrings(
+        expected_html, // Use expected_html instead of expected
         fragment_txt,
     );
 

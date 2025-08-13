@@ -129,7 +129,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode) !b
     }
 
     // Trim and collapse whitespace (mandatory normalization)
-    const cleaned = try normalizeTextWhitespace(allocator, text);
+    const cleaned = try normalizeWhitespace(allocator, text);
     defer allocator.free(cleaned);
 
     // Only update if content actually changed
@@ -162,24 +162,46 @@ fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     return false;
 }
 
-pub fn normalizeTextWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+/// [cleaner] Remove excessive whitespace from HTML text to match serialized output
+///
+/// Removes whitespace between HTML elements but preserves whitespace within text content
+/// Caller needs to free the slice
+pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     // Trim leading and trailing whitespace
     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
 
-    // Collapse internal whitespace sequences to single spaces
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
 
-    var prev_was_whitespace = false;
-    for (trimmed) |ch| {
+    var i: usize = 0;
+    while (i < trimmed.len) {
+        const ch = trimmed[i];
+
         if (std.ascii.isWhitespace(ch)) {
-            if (!prev_was_whitespace) {
-                try result.append(' '); // Normalize all whitespace to spaces
-                prev_was_whitespace = true;
+            // Look ahead to see if we're between HTML elements (> ... <)
+            const whitespace_start = i;
+            while (i < trimmed.len and std.ascii.isWhitespace(trimmed[i])) {
+                i += 1;
+            }
+
+            // Check if whitespace is between HTML elements
+            var prev_char: u8 = 0;
+            if (whitespace_start > 0) prev_char = trimmed[whitespace_start - 1];
+            var next_char: u8 = 0;
+            if (i < trimmed.len) next_char = trimmed[i];
+
+            // If whitespace is between > and < (between HTML elements), skip it
+            // Otherwise, collapse to single space (within text content)
+            if (prev_char == '>' and next_char == '<') {
+                // Skip whitespace between elements completely
+                continue;
+            } else {
+                // Preserve single space for text content
+                try result.append(' ');
             }
         } else {
             try result.append(ch);
-            prev_was_whitespace = false;
+            i += 1;
         }
     }
 
@@ -196,7 +218,7 @@ test "normalizeTextWhitespace" {
     const allocator = testing.allocator;
 
     const messy_text = "  Hello   \t  World!  \n\n  ";
-    const normalized = try normalizeTextWhitespace(allocator, messy_text);
+    const normalized = try normalizeWhitespace(allocator, messy_text);
     defer allocator.free(normalized);
 
     try testing.expectEqualStrings("Hello World!", normalized);

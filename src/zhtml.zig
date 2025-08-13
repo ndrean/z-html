@@ -164,7 +164,7 @@ pub const serializeNode = serialize.serializeNode;
 pub const serializeElement = serialize.serializeElement;
 
 pub const cleanDomTree = cleaner.cleanDomTree;
-pub const normalizeTextWhitespace = cleaner.normalizeTextWhitespace;
+pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 
 // InnerHTML manipulation
 pub const innerHTML = serialize.innerHtml;
