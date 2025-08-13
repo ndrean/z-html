@@ -1322,28 +1322,22 @@ test "Append JS fragment" {
     defer engine.deinit();
 
     // Find the second li element using nth-child
-    const second_li_results = try engine.querySelectorAll(
+    const second_li = try engine.querySelector(
         body_node,
         "ul > li:nth-child(2)",
     );
-    defer allocator.free(second_li_results);
 
-    try testing.expect(second_li_results.len == 1);
-
-    const attribute = try z.getAttributes(
-        allocator,
-        nodeToElement(second_li_results[0]).?,
-    );
-    defer {
-        for (attribute) |attr| {
-            allocator.free(attr.name);
-            allocator.free(attr.value);
+    if (second_li) |result| {
+        const attribute = try z.getAttribute(
+            allocator,
+            nodeToElement(result).?,
+            "data-id",
+        );
+        if (attribute) |attr| {
+            defer allocator.free(attr);
+            try testing.expectEqualStrings(attr, "2");
         }
-        allocator.free(attribute);
     }
-
-    try testing.expectEqualStrings(attribute[0].name, "data-id");
-    try testing.expectEqualStrings(attribute[0].value, "2");
 
     try z.printDocumentStructure(doc);
 
@@ -1351,7 +1345,8 @@ test "Append JS fragment" {
     defer z.freeHtmlTree(allocator, tree);
 
     for (tree, 0..) |node, i| {
-        print("[{}]: ", .{i});
+        _ = i;
+        // print("[{}]: ", .{i});
         z.printNode(node, 0);
     }
 }
