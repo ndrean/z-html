@@ -110,7 +110,7 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
         },
 
         .text => {
-            const text_content = try z.getNodeTextContentsOpts(
+            const text_content = try z.getTextContentsOpts(
                 allocator,
                 node,
                 .{}, // options, e.g.: .{ .escape = true },
@@ -186,7 +186,7 @@ pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
         },
 
         .text => {
-            const text_content = try z.getNodeTextContentsOpts(
+            const text_content = try z.getTextContentsOpts(
                 allocator,
                 node,
                 .{},
@@ -388,7 +388,7 @@ pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument
 pub fn jsonNodeToString(allocator: std.mem.Allocator, node: JsonNode) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
-    
+
     try jsonNodeToWriter(node, result.writer());
     return try result.toOwnedSlice();
 }
@@ -397,14 +397,14 @@ pub fn jsonNodeToString(allocator: std.mem.Allocator, node: JsonNode) ![]u8 {
 pub fn jsonTreeToString(allocator: std.mem.Allocator, tree: JsonTree) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
-    
+
     try result.append('[');
     for (tree, 0..) |node, i| {
         if (i > 0) try result.appendSlice(", ");
         try jsonNodeToWriter(node, result.writer());
     }
     try result.append(']');
-    
+
     return try result.toOwnedSlice();
 }
 
@@ -415,15 +415,15 @@ fn jsonNodeToWriter(node: JsonNode, json_writer: anytype) !void {
             try json_writer.writeAll("{");
             try json_writer.print("\"nodeType\": {d}, ", .{elem.nodeType});
             try json_writer.print("\"tagName\": \"{s}\", ", .{elem.tagName});
-            
+
             // Write attributes array
             try json_writer.writeAll("\"attributes\": [");
             for (elem.attributes, 0..) |attr, i| {
                 if (i > 0) try json_writer.writeAll(", ");
-                try json_writer.print("{{\"name\": \"{s}\", \"value\": \"{s}\"}}", .{attr.name, attr.value});
+                try json_writer.print("{{\"name\": \"{s}\", \"value\": \"{s}\"}}", .{ attr.name, attr.value });
             }
             try json_writer.writeAll("], ");
-            
+
             // Write children array
             try json_writer.writeAll("\"children\": [");
             for (elem.children, 0..) |child, i| {
@@ -432,14 +432,14 @@ fn jsonNodeToWriter(node: JsonNode, json_writer: anytype) !void {
             }
             try json_writer.writeAll("]}");
         },
-        
+
         .text => |text_node| {
             try json_writer.writeAll("{");
             try json_writer.print("\"nodeType\": {d}, ", .{text_node.nodeType});
             try json_writer.print("\"data\": \"{s}\"", .{text_node.data});
             try json_writer.writeAll("}");
         },
-        
+
         .comment => |comment_node| {
             try json_writer.writeAll("{");
             try json_writer.print("\"nodeType\": {d}, ", .{comment_node.nodeType});
@@ -453,7 +453,7 @@ fn jsonNodeToWriter(node: JsonNode, json_writer: anytype) !void {
 pub fn parseJsonString(allocator: std.mem.Allocator, json_string: []const u8) !JsonNode {
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_string, .{});
     defer parsed.deinit();
-    
+
     return try parseJsonValue(allocator, parsed.value);
 }
 
@@ -461,19 +461,19 @@ pub fn parseJsonString(allocator: std.mem.Allocator, json_string: []const u8) !J
 pub fn parseJsonTreeString(allocator: std.mem.Allocator, json_string: []const u8) !JsonTree {
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_string, .{});
     defer parsed.deinit();
-    
+
     if (parsed.value != .array) {
         return error.ExpectedArray;
     }
-    
+
     var tree_list = std.ArrayList(JsonNode).init(allocator);
     defer tree_list.deinit();
-    
+
     for (parsed.value.array.items) |item| {
         const node = try parseJsonValue(allocator, item);
         try tree_list.append(node);
     }
-    
+
     return try tree_list.toOwnedSlice();
 }
 
@@ -482,51 +482,51 @@ fn parseJsonValue(allocator: std.mem.Allocator, value: std.json.Value) !JsonNode
     if (value != .object) {
         return error.ExpectedObject;
     }
-    
+
     const obj = value.object;
     const node_type_value = obj.get("nodeType") orelse return error.MissingNodeType;
     if (node_type_value != .integer) return error.InvalidNodeType;
-    
+
     const node_type = @as(u8, @intCast(node_type_value.integer));
-    
+
     switch (node_type) {
         1 => { // ELEMENT_NODE
             const tag_name_value = obj.get("tagName") orelse return error.MissingTagName;
             if (tag_name_value != .string) return error.InvalidTagName;
-            
+
             const attributes_value = obj.get("attributes") orelse return error.MissingAttributes;
             if (attributes_value != .array) return error.InvalidAttributes;
-            
+
             const children_value = obj.get("children") orelse return error.MissingChildren;
             if (children_value != .array) return error.InvalidChildren;
-            
+
             // Parse attributes
             var attr_list = std.ArrayList(JsonAttribute).init(allocator);
             defer attr_list.deinit();
-            
+
             for (attributes_value.array.items) |attr_item| {
                 if (attr_item != .object) continue;
                 const attr_obj = attr_item.object;
-                
+
                 const name_value = attr_obj.get("name") orelse continue;
                 const value_value = attr_obj.get("value") orelse continue;
                 if (name_value != .string or value_value != .string) continue;
-                
+
                 try attr_list.append(.{
                     .name = try allocator.dupe(u8, name_value.string),
                     .value = try allocator.dupe(u8, value_value.string),
                 });
             }
-            
+
             // Parse children
             var children_list = std.ArrayList(JsonNode).init(allocator);
             defer children_list.deinit();
-            
+
             for (children_value.array.items) |child_item| {
                 const child_node = try parseJsonValue(allocator, child_item);
                 try children_list.append(child_node);
             }
-            
+
             return JsonNode{
                 .element = .{
                     .nodeType = node_type,
@@ -536,20 +536,20 @@ fn parseJsonValue(allocator: std.mem.Allocator, value: std.json.Value) !JsonNode
                 },
             };
         },
-        
+
         3, 8 => { // TEXT_NODE or COMMENT_NODE
             const data_value = obj.get("data") orelse return error.MissingData;
             if (data_value != .string) return error.InvalidData;
-            
+
             const data = try allocator.dupe(u8, data_value.string);
-            
+
             if (node_type == 3) {
                 return JsonNode{ .text = .{ .nodeType = node_type, .data = data } };
             } else {
                 return JsonNode{ .comment = .{ .nodeType = node_type, .data = data } };
             }
         },
-        
+
         else => return error.UnsupportedNodeType,
     }
 }
@@ -799,7 +799,7 @@ test "JSON serialization and parsing round-trip" {
     // Serialize JsonNode to JSON string
     const json_string = try jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);
-    
+
     print("Serialized JSON:\n{s}\n", .{json_string});
 
     // Parse JSON string back to JsonNode
@@ -813,7 +813,7 @@ test "JSON serialization and parsing round-trip" {
             try testing.expectEqualStrings("DIV", elem.tagName);
             try testing.expect(elem.attributes.len == 2);
             try testing.expect(elem.children.len == 2); // p element + comment
-            
+
             // Check first child is P element
             switch (elem.children[0]) {
                 .element => |p_elem| {
@@ -822,7 +822,7 @@ test "JSON serialization and parsing round-trip" {
                 },
                 else => try testing.expect(false),
             }
-            
+
             // Check second child is comment
             switch (elem.children[1]) {
                 .comment => |comment| {
@@ -860,7 +860,7 @@ test "JSON array serialization" {
     defer freeJsonTree(allocator, parsed_tree);
 
     try testing.expect(parsed_tree.len == 2);
-    
+
     print("✅ JSON array test passed!\n", .{});
 }
 

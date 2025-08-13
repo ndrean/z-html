@@ -1,4 +1,4 @@
-//! Chunks processing
+//! Chunks processor
 
 const std = @import("std");
 const z = @import("zhtml.zig");
@@ -16,6 +16,15 @@ extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HtmlDocument) usi
 extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HtmlDocument) usize;
 extern "c" fn lxb_html_document_parse_chunk(document: *z.HtmlDocument, chunk: [*:0]const u8, len: usize) usize;
 
+/// [chunks] Chunk engine.
+///
+/// Exposes:
+/// - `init`: create a new document
+/// - `deinit`: destroy the document and parser
+/// - `beginParsing`: start the parsing process
+/// - `processChunk`: process a chunk of HTML
+/// - `endParsing`: end the parsing process
+/// - `getDocument`: get the underlying HTML document
 pub const ChunkParser = struct {
     doc: *z.HtmlDocument,
     parser: *z.HtmlParser,
@@ -86,9 +95,9 @@ pub const ChunkParser = struct {
         return self.doc;
     }
 
-    pub fn getHtmlDocument(self: *ChunkParser) z.HtmlDocument {
-        return .{ .doc = self.doc };
-    }
+    // pub fn getHtmlDocument(self: *ChunkParser) z.HtmlDocument {
+    //     return .{ .doc = self.doc };
+    // }
 };
 
 test "chunks1" {

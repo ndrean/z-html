@@ -162,7 +162,7 @@ pub const CssSelectorEngine = struct {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         // CSS selectors only work on element nodes
-        if (!z.isElementType(node)) {
+        if (!z.isTypeElement(node)) {
             return false;
         }
 
@@ -274,7 +274,7 @@ pub const CssSelectorEngine = struct {
 
         // Test each input node directly
         for (nodes) |node| {
-            if (z.isElementType(node)) { // Guard for element nodes only
+            if (z.isTypeElement(node)) { // Guard for element nodes only
                 const status = lxb_selectors_match_node(
                     self.selectors,
                     node,

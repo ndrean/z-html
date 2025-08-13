@@ -9,6 +9,7 @@ pub const NodeType = enum(u16) {
     text = 3,
     comment = 8,
     document = 9,
+    fragment = 11,
     unknown = 0,
 
     tag_template = 0x31,
@@ -50,53 +51,30 @@ pub fn getTypeName(node: *z.DomNode) []const u8 {
         .text => "text",
         .comment => "comment",
         .document => "document",
+        .fragment => "fragment",
         else => "unknown",
     };
 }
 
 /// [node_types] Check if node is of a specific type
-pub fn isElementType(node: *z.DomNode) bool {
+pub fn isTypeElement(node: *z.DomNode) bool {
     return getType(node) == .element;
 }
 
 /// [node_types] Check if node is a text node
-pub fn isTextType(node: *z.DomNode) bool {
+pub fn isTypeText(node: *z.DomNode) bool {
+    print("{any}\t", .{getType(node)});
     return getType(node) == .text;
 }
 
 /// [node_types] Check if node is a comment node
-pub fn isCommentType(node: *z.DomNode) bool {
+pub fn isTypeComment(node: *z.DomNode) bool {
     return getType(node) == .comment;
 }
 
 /// [node_types] Check if node is a document node
-pub fn isNodeDocumentType(node: *z.DomNode) bool {
+pub fn isTypeDocument(node: *z.DomNode) bool {
     return getType(node) == .document;
-}
-
-/// [node_types] Debug:  Walk the DOM tree and print node types with indentation:
-pub fn walkTreeWithTypes(node: *z.DomNode, depth: u32) void {
-    var child = z.firstChild(node);
-    while (child != null) {
-        // const name = z.getNodeName(child.?);
-        const node_type = z.getType(child.?);
-        // const type_name = z.getTypeName(child.?);
-
-        // Create indentation
-        var i: u32 = 0;
-        while (i < @min(depth, 10)) : (i += 1) {
-            print("  ", .{});
-        }
-
-        // print("{s} ({s})\n", .{ name, type_name });
-
-        // Only recurse into elements
-        if (node_type == .element) {
-            walkTreeWithTypes(child.?, depth + 1);
-        }
-
-        child = z.firstChild(child.?);
-    }
 }
 
 test "node type detection using getNodeName" {
@@ -106,6 +84,7 @@ test "node type detection using getNodeName" {
         \\  Some text content
         \\  <span>nested element</span>
         \\  More text
+        \\  <!-- comment --x
         \\  <em>  </em>
         \\</div>
     ;
@@ -116,23 +95,28 @@ test "node type detection using getNodeName" {
 
     // print("\n--- NODE TYPE ANALYSIS ---\n", .{});
 
-    const body = try z.getBodyElement(doc);
-    const body_node = z.elementToNode(body);
+    const body_node = try z.getBodyNode(doc);
 
     var child = z.firstChild(body_node);
     while (child != null) {
-        // const node_name = z.getNodeName(child.?);
-        // const node_type = z.getType(child.?);
-        // const type_name = z.getTypeName(child.?);
+        const node_name = z.getNodeName(child.?);
+        const node_type = z.getType(child.?);
+        const type_name = z.getTypeName(child.?);
 
-        // print("Node: '{s}' -> Type: {d} ({s})\n", .{ node_name, @intFromEnum(node_type), type_name });
+        if (std.mem.eql(u8, node_name, "DIV")) {
+            try testing.expect(@intFromEnum(node_type) == 1);
+            try testing.expectEqualStrings(type_name, "element");
+        }
+        if (std.mem.eql(u8, node_name, "#text")) {
+            try testing.expect(@intFromEnum(node_type) == 3);
+            try testing.expectEqualStrings(type_name, "text");
+        }
 
-        // // Test helper functions
-        // print("  isElement: {}, isText: {}, isComment: {}\n", .{ isElementType(child.?), isTextType(child.?), isCommentType(child.?) });
+        if (std.mem.eql(u8, node_name, "#comment")) {
+            try testing.expect(@intFromEnum(node_type) == 8);
+            try testing.expectEqualStrings(type_name, "comment");
+        }
 
         child = z.firstChild(child.?);
     }
-
-    // print("\n-- TREE WITH TYPES --\n", .{});
-    // walkTreeWithTypes(body_node, 0);
 }

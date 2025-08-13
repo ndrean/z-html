@@ -56,6 +56,7 @@ pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
 pub const firstChild = lxb.firstChild;
 pub const nextSibling = lxb.nextSibling;
+pub const previousSibling = lxb.previousSibling;
 pub const parentNode = lxb.parentNode;
 pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
@@ -66,9 +67,6 @@ pub const getNodeName = lxb.getNodeName;
 pub const getElementName = lxb.getElementName;
 pub const getNodeNameOwned = lxb.getNodeNameOwned;
 pub const getElementNameOwned = lxb.getElementNameOwned;
-
-// Node content functions
-pub const getNodeAllTextContent = lxb.getNodeAllTextContent;
 
 // DOM Creation and manipulation
 pub const createTextNode = lxb.createTextNode;
@@ -183,7 +181,8 @@ pub const getElementHTMLAsString = serialize.serializeElement;
 
 // Text content
 pub const getCommentTextContent = lxb.getCommentTextContent;
-pub const getNodeTextContentsOpts = lxb.getNodeTextContentsOpts;
+pub const getTextContent = lxb.getTextContent;
+pub const getTextContentsOpts = lxb.getTextContentOpts;
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 
@@ -192,10 +191,10 @@ pub const NodeType = Type.NodeType;
 pub const getType = Type.getType;
 pub const getTypeName = Type.getTypeName;
 
-pub const isElementType = Type.isElementType;
-pub const isCommentType = Type.isCommentType;
-pub const isTextType = Type.isTextType;
-pub const isNodeDocumentType = Type.isNodeDocumentType;
+pub const isTypeElement = Type.isTypeElement;
+pub const isTypeComment = Type.isTypeComment;
+pub const isTypeText = Type.isTypeText;
+pub const isTypeDocument = Type.isTypeDocument;
 
 // CSS selectors - unified top-level access
 pub const querySelectorAll = css.querySelectorAll;
@@ -247,9 +246,6 @@ pub const getElementNextAttribute =
 // UTILITY FUNCTIONS
 //=============================================================================
 
-// debug
-pub const walkTreeWithTypes = Type.walkTreeWithTypes;
-
 /// [zhtml] Debug: Get only element children (filter out text/comment nodes)
 pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomElement {
     var elements = std.ArrayList(*DomElement).init(allocator);
@@ -257,7 +253,7 @@ pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *D
 
     var child = firstChild(parent_node);
     while (child != null) {
-        if (isElementType(child.?)) {
+        if (isTypeElement(child.?)) {
             if (nodeToElement(child.?)) |element| {
                 try elements.append(element);
             }

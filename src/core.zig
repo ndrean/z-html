@@ -76,8 +76,8 @@ extern "c" fn lxb_html_document_create_element_noi(doc: *HtmlDocument, tag_name:
 
 extern "c" fn lxb_dom_document_create_text_node(doc: *HtmlDocument, text: [*]const u8, text_len: usize) ?*DomNode;
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *HtmlDocument) ?*DomNode;
-extern "c" fn lxb_dom_node_insert_before(parent: *DomNode, new_node: *DomNode, reference_node: ?*DomNode) void;
-extern "c" fn lxb_dom_node_insert_after(parent: *DomNode, new_node: *DomNode, reference_node: ?*DomNode) void;
+extern "c" fn lxb_dom_node_insert_before(to: *DomNode, node: *DomNode) void;
+extern "c" fn lxb_dom_node_insert_after(to: *DomNode, node: *DomNode) void;
 extern "c" fn lxb_dom_document_create_comment(doc: *HtmlDocument, data: [*]const u8, len: usize) ?*Comment;
 extern "c" fn lxb_dom_comment_interface_destroy(doc: *Comment) *Comment;
 extern "c" fn lxb_dom_node_insert_child(parent: *DomNode, child: *DomNode) void;
@@ -344,6 +344,20 @@ pub fn nextSibling(node: *DomNode) ?*DomNode {
     return lxb_dom_node_next_noi(node);
 }
 
+/// [core] Get previous sibling of node
+pub fn previousSibling(node: *DomNode) ?*DomNode {
+    const parent = z.parentNode(node) orelse return null;
+    var child = z.firstChild(parent);
+    var prev: ?*z.DomNode = null;
+
+    while (child != null) {
+        if (child.? == node) return prev;
+        prev = child;
+        child = z.nextSibling(child.?);
+    }
+    return null;
+}
+
 /// [core] Get first child of node
 pub fn firstChild(node: *DomNode) ?*DomNode {
     return lxb_dom_node_first_child_noi(node);
@@ -442,8 +456,9 @@ pub const TextOptions = struct {
 
 /// [core] Get text content as Zig string (copies to Zig-managed memory)
 ///
+/// Ir returns a concatenation of the text contents of all descendant text nodes.
 /// Caller needs to free the returned string
-pub fn getNodeAllTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
 
@@ -461,8 +476,11 @@ pub fn getNodeAllTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8
 /// If you need escaping, use `getNodeTextContentOpts` with `escape: true`.
 ///
 /// Caller must free the returned slice.
-pub fn getNodeTextContentsOpts(allocator: std.mem.Allocator, node: *DomNode, opts: TextOptions) ![]u8 {
-    const raw_text = try getNodeAllTextContent(allocator, node);
+pub fn getTextContentOpts(allocator: std.mem.Allocator, node: *DomNode, opts: TextOptions) ![]u8 {
+    const raw_text = try getTextContent(
+        allocator,
+        node,
+    );
     defer allocator.free(raw_text);
 
     if (opts.escape) {
@@ -490,7 +508,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []co
     if (inner_text_node == null) {
         try setTextContent(node, text);
     } else {
-        const current_text = try getNodeTextContentsOpts(
+        const current_text = try getTextContentOpts(
             allocator,
             node,
             .{},
@@ -511,7 +529,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []co
 ///
 /// Needs to be freed by caller
 pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![]u8 {
-    const inner_text = try getNodeTextContentsOpts(
+    const inner_text = try getTextContentOpts(
         allocator,
         commentToNode(comment),
         .{},
@@ -764,7 +782,7 @@ test "createTextNode and appendChild" {
     // Check that div has the text content
     const div_first_child = firstChild(elementToNode(div_from_tree));
     try testing.expect(div_first_child != null);
-    try testing.expect(z.isTextType(div_first_child.?));
+    try testing.expect(z.isTypeText(div_first_child.?));
 }
 
 test "createDocumentFragment" {
@@ -883,7 +901,7 @@ test "simple empty node" {
     try testing.expect(isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
-    const text = getNodeAllTextContent(allocator, p.?);
+    const text = getTextContent(allocator, p.?);
     try testing.expectError(Err.EmptyTextContent, text);
 }
 
@@ -897,7 +915,7 @@ test "node with whitespace like characters IS empty but contains characters" {
     try testing.expect(isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
-    const text = try getNodeAllTextContent(allocator, p.?);
+    const text = try getTextContent(allocator, p.?);
     defer allocator.free(text);
     try testing.expect(text.len == 2); // 2 characters: ' ' and '\n'
 }
@@ -921,7 +939,7 @@ test "node with an (empty text content) node is NOT empty" {
     try testing.expect(!isNodeEmpty(p.?));
 
     const allocator = testing.allocator;
-    const text = getNodeAllTextContent(allocator, p.?);
+    const text = getTextContent(allocator, p.?);
     try testing.expectError(Err.EmptyTextContent, text);
 }
 
@@ -957,7 +975,7 @@ test "isWhitespaceOnlyNode" {
     // inner text node is whitespace-only
     const inner_text_node = firstChild(p.?);
     try testing.expect(
-        z.isTextType(inner_text_node.?),
+        z.isTypeText(inner_text_node.?),
     );
 
     try testing.expect(
@@ -1007,7 +1025,7 @@ test "isWhitespaceOnlyElement" {
 
     // but its text content IS empty.
     const allocator = testing.allocator;
-    const txt = try getNodeTextContentsOpts(allocator, div, .{});
+    const txt = try getTextContentOpts(allocator, div, .{});
     defer allocator.free(txt);
     try testing.expect(isWhitespaceOnlyText(txt));
 }
@@ -1027,13 +1045,13 @@ test "setTextNodeData" {
     // try setTextContent(node, "Initial text");
     try setOrReplaceText(allocator, node, "Initial text");
 
-    const initial_text = try getNodeTextContentsOpts(allocator, node, .{});
+    const initial_text = try getTextContentOpts(allocator, node, .{});
     defer allocator.free(initial_text);
     try testing.expectEqualStrings("Initial text", initial_text);
 
     try setOrReplaceText(allocator, node, "Updated text");
 
-    const updated_text = try getNodeTextContentsOpts(allocator, node, .{});
+    const updated_text = try getTextContentOpts(allocator, node, .{});
     defer allocator.free(updated_text);
     try testing.expectEqualStrings("Updated text", updated_text);
 }
@@ -1137,7 +1155,7 @@ test "get & set NodeTextContent" {
 
     try setTextContent(node, "Hello, world!");
 
-    const text_content = try getNodeTextContentsOpts(
+    const text_content = try getTextContentOpts(
         allocator,
         node,
         .{},
@@ -1155,7 +1173,7 @@ test "gets all text elements from Fragment" {
     defer destroyDocument(doc);
     const body_element = try getBodyElement(doc);
     const body_node = elementToNode(body_element);
-    const text_content = try getNodeTextContentsOpts(allocator, body_node, .{});
+    const text_content = try getTextContentOpts(allocator, body_node, .{});
     defer allocator.free(text_content);
     try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
 }
@@ -1170,7 +1188,7 @@ test "text content" {
     const body = try getBodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = firstChild(body_node).?;
-    const text = try getNodeTextContentsOpts(
+    const text = try getTextContentOpts(
         allocator,
         p_node,
         .{},
@@ -1180,7 +1198,7 @@ test "text content" {
     try testing.expectEqualStrings("Hello World!", text);
     const text_node = firstChild(p_node);
     const strong_node = nextSibling(text_node.?);
-    const strong_text = try getNodeTextContentsOpts(
+    const strong_text = try getTextContentOpts(
         allocator,
         strong_node.?,
         .{},
@@ -1202,17 +1220,17 @@ test "getNodeTextContent" {
     const first_child = firstChild(body_node);
     const second_child = nextSibling(first_child.?);
 
-    const all_text = try getNodeTextContentsOpts(
+    const all_text = try getTextContentOpts(
         allocator,
         body_node,
         .{},
     );
-    const first_text = try getNodeTextContentsOpts(
+    const first_text = try getTextContentOpts(
         allocator,
         first_child.?,
         .{},
     );
-    const second_text = try getNodeTextContentsOpts(
+    const second_text = try getTextContentOpts(
         allocator,
         second_child.?,
         .{},
@@ -1331,7 +1349,7 @@ test "Append JS fragment" {
     // use the new lexbor-based approach for accurate HTML comparison
 
     // const start2 = try Instant.now();
-    const expected_html2 = try z.normalizeWhitespace(allocator, pretty_html);
+    const expected_html2 = try z.normalizeWhitespace(allocator, pretty_html, false);
     defer allocator.free(expected_html2);
     // const end2 = try Instant.now();
     // const elapsed2: f64 = @floatFromInt(end2.since(start2));
@@ -1472,7 +1490,7 @@ test "void vs empty element detection" {
                 // a non-void can be empty or not
                 if (is_empty) {
                     empty_nodes += 1;
-                    if (z.isTextType(child.?)) {
+                    if (z.isTypeText(child.?)) {
                         empty_text_nodes_count += 1;
                     } else {
                         empty_non_self_closing_non_text_nodes_count += 1;
@@ -1511,7 +1529,7 @@ test "class search functionality" {
         if (z.nodeToElement(child.?)) |element| {
             const element_name = z.getElementName(element);
             if (std.mem.eql(u8, element_name, "div")) {
-                const text_content = try z.getNodeAllTextContent(allocator, child.?);
+                const text_content = try z.getTextContent(allocator, child.?);
                 defer allocator.free(text_content);
                 if (std.mem.eql(u8, text_content, "First div")) {
                     // First div should have all three classes
@@ -1593,7 +1611,7 @@ test "CSS selector nth-child functionality" {
 
     if (second_li_results.len > 0) {
         const second_li_node = second_li_results[0];
-        const text_content = try z.getNodeAllTextContent(allocator, second_li_node);
+        const text_content = try z.getTextContent(allocator, second_li_node);
         defer allocator.free(text_content);
 
         // Should be "Second item"
@@ -1609,7 +1627,7 @@ test "CSS selector nth-child functionality" {
     // Test first li using querySelector (single result)
     const first_li_node = try engine.querySelector(body_node, "ul > li:first-child");
     if (first_li_node) |node| {
-        const text_content = try z.getNodeAllTextContent(allocator, node);
+        const text_content = try z.getTextContent(allocator, node);
         defer allocator.free(text_content);
         try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "First item"));
     } else {
