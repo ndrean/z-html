@@ -5,7 +5,7 @@ const z = @import("zhtml.zig");
 
 pub const HtmlParser = opaque {};
 
-const err = @import("errors.zig").LexborError;
+const Err = @import("errors.zig").LexborError;
 const testing = std.testing;
 const print = std.debug.print;
 
@@ -23,7 +23,7 @@ pub const ChunkParser = struct {
     parsing_active: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !ChunkParser {
-        const doc = z.createDocument() catch return err.DocCreateFailed;
+        const doc = z.createDocument() catch return Err.DocCreateFailed;
         return .{
             .doc = doc,
             .allocator = allocator,
@@ -41,22 +41,22 @@ pub const ChunkParser = struct {
 
     pub fn beginParsing(self: *ChunkParser) !void {
         if (self.parsing_active) {
-            return err.ChunkBeginFailed;
+            return Err.ChunkBeginFailed;
         }
 
         if (lxb_html_document_parse_chunk_begin(self.doc) != 0) {
-            return err.ChunkBeginFailed;
+            return Err.ChunkBeginFailed;
         }
         self.parsing_active = true;
         if (lxb_html_parser_init(self.parser) != z.LXB_STATUS_OK) {
-            return err.ParserInitFailed;
+            return Err.ParserInitFailed;
         }
         self.parsing_active = true;
     }
 
     pub fn processChunk(self: *ChunkParser, html_chunk: []const u8) !void {
         if (!self.parsing_active) {
-            return err.ChunkProcessFailed;
+            return Err.ChunkProcessFailed;
         }
 
         const html_ptr = try self.allocator.dupeZ(u8, html_chunk);
@@ -67,17 +67,17 @@ pub const ChunkParser = struct {
             html_ptr,
             html_chunk.len,
         ) != 0) {
-            return err.ChunkProcessFailed;
+            return Err.ChunkProcessFailed;
         }
     }
 
     pub fn endParsing(self: *ChunkParser) !void {
         if (!self.parsing_active) {
-            return err.ChunkEndFailed;
+            return Err.ChunkEndFailed;
         }
 
         if (lxb_html_document_parse_chunk_end(self.doc) != 0) {
-            return err.ChunkEndFailed;
+            return Err.ChunkEndFailed;
         }
         self.parsing_active = false;
     }
@@ -222,12 +222,12 @@ test "chunk parsing error handling" {
 
     // Test processing without beginning
     const result = chunk_parser.processChunk("<div>test</div>");
-    try testing.expectError(err.ChunkProcessFailed, result);
+    try testing.expectError(Err.ChunkProcessFailed, result);
 
     // Test double begin
     try chunk_parser.beginParsing();
     const result2 = chunk_parser.beginParsing();
-    try testing.expectError(err.ChunkBeginFailed, result2);
+    try testing.expectError(Err.ChunkBeginFailed, result2);
 
     // Clean up
     try chunk_parser.endParsing();

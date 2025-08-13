@@ -3,7 +3,7 @@
 const std = @import("std");
 const z = @import("zhtml.zig");
 
-const err = @import("errors.zig").LexborError;
+const Err = @import("errors.zig").LexborError;
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -68,22 +68,22 @@ pub const CssSelectorEngine = struct {
 
     /// Initialize CSS selector engine
     pub fn init(allocator: std.mem.Allocator) !Self {
-        const parser = lxb_css_parser_create() orelse return err.CssParserCreateFailed;
+        const parser = lxb_css_parser_create() orelse return Err.CssParserCreateFailed;
 
         if (lxb_css_parser_init(parser, null) != z.LXB_STATUS_OK) {
             _ = lxb_css_parser_destroy(parser, true);
-            return err.CssParserInitFailed;
+            return Err.CssParserInitFailed;
         }
 
         const selectors = lxb_selectors_create() orelse {
             _ = lxb_css_parser_destroy(parser, true);
-            return err.CssSelectorsCreateFailed;
+            return Err.CssSelectorsCreateFailed;
         };
 
         if (lxb_selectors_init(selectors) != z.LXB_STATUS_OK) {
             _ = lxb_selectors_destroy(selectors, true);
             _ = lxb_css_parser_destroy(parser, true);
-            return err.CssSelectorsInitFailed;
+            return Err.CssSelectorsInitFailed;
         }
 
         // set options for unique results and root matching
@@ -112,13 +112,13 @@ pub const CssSelectorEngine = struct {
         root_node: *z.DomNode,
         selector: []const u8,
     ) !?*z.DomNode {
-        if (!self.initialized) return err.CssEngineNotInitialized;
+        if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
             self.parser,
             selector.ptr,
             selector.len,
-        ) orelse return err.CssSelectorParseFailed;
+        ) orelse return Err.CssSelectorParseFailed;
 
         defer lxb_css_selector_list_destroy_memory(selector_list);
 
@@ -134,7 +134,7 @@ pub const CssSelectorEngine = struct {
 
         // Accept both success and our early stopping code
         if (status != z.LXB_STATUS_OK and status != 0x7FFFFFFF) {
-            return err.CssSelectorFindFailed;
+            return Err.CssSelectorFindFailed;
         }
 
         return context.first_node;
@@ -159,7 +159,7 @@ pub const CssSelectorEngine = struct {
     /// [selectors] Match a single node against a CSS selector
     /// Check if a specific node matches a selector (with type safety)
     pub fn matchNode(self: *Self, node: *z.DomNode, selector: []const u8) !bool {
-        if (!self.initialized) return err.CssEngineNotInitialized;
+        if (!self.initialized) return Err.CssEngineNotInitialized;
 
         // CSS selectors only work on element nodes
         if (!z.isElementType(node)) {
@@ -170,7 +170,7 @@ pub const CssSelectorEngine = struct {
             self.parser,
             selector.ptr,
             selector.len,
-        ) orelse return err.CssSelectorParseFailed;
+        ) orelse return Err.CssSelectorParseFailed;
 
         defer lxb_css_selector_list_destroy_memory(selector_list);
 
@@ -186,7 +186,7 @@ pub const CssSelectorEngine = struct {
         );
 
         if (status != z.LXB_STATUS_OK) {
-            return err.CssSelectorMatchFailed;
+            return Err.CssSelectorMatchFailed;
         }
 
         return context.results.items.len > 0;
@@ -196,13 +196,13 @@ pub const CssSelectorEngine = struct {
     ///
     /// Caller needs to free the slice
     pub fn querySelectorAll(self: *Self, root_node: *z.DomNode, selector: []const u8) ![]*z.DomNode {
-        if (!self.initialized) return err.CssEngineNotInitialized;
+        if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
             self.parser,
             selector.ptr,
             selector.len,
-        ) orelse return err.CssSelectorParseFailed;
+        ) orelse return Err.CssSelectorParseFailed;
 
         defer lxb_css_selector_list_destroy_memory(selector_list);
 
@@ -217,7 +217,7 @@ pub const CssSelectorEngine = struct {
             &context,
         );
         if (status != z.LXB_STATUS_OK) {
-            return err.CssSelectorFindFailed;
+            return Err.CssSelectorFindFailed;
         }
 
         return context.results.toOwnedSlice();
@@ -227,13 +227,13 @@ pub const CssSelectorEngine = struct {
     ///
     /// /// Caller needs to free the slice
     pub fn queryAll(self: *Self, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
-        if (!self.initialized) return err.CssEngineNotInitialized;
+        if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
             self.parser,
             selector.ptr,
             selector.len,
-        ) orelse return err.CssSelectorParseFailed;
+        ) orelse return Err.CssSelectorParseFailed;
 
         defer lxb_css_selector_list_destroy_memory(selector_list);
 
@@ -250,7 +250,7 @@ pub const CssSelectorEngine = struct {
                 &context,
             );
             if (status != z.LXB_STATUS_OK) {
-                return err.CssSelectorFindFailed;
+                return Err.CssSelectorFindFailed;
             }
         }
 
@@ -260,13 +260,13 @@ pub const CssSelectorEngine = struct {
     /// Filter: Keep only nodes that match the selector themselves
     /// Equivalent to C++ filter()
     pub fn filter(self: *Self, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
-        if (!self.initialized) return err.CssEngineNotInitialized;
+        if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
             self.parser,
             selector.ptr,
             selector.len,
-        ) orelse return err.CssSelectorParseFailed;
+        ) orelse return Err.CssSelectorParseFailed;
         defer lxb_css_selector_list_destroy_memory(selector_list);
 
         var context = FindContext.init(self.allocator);
@@ -283,7 +283,7 @@ pub const CssSelectorEngine = struct {
                     &context,
                 );
                 if (status != z.LXB_STATUS_OK) {
-                    return err.CssSelectorMatchFailed;
+                    return Err.CssSelectorMatchFailed;
                 }
             }
         }
@@ -736,10 +736,12 @@ test "debug what classes lexbor sees" {
     const body_node = try z.getBodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const container_div_element = z.nodeToElement(container_div);
-    const class = try z.classList(
+    const class_result = try z.classList(
         allocator,
         container_div_element.?,
+        .string,
     );
+    const class = class_result.string;
 
     defer if (class) |c| allocator.free(c);
     try testing.expectEqualStrings("container", class.?);

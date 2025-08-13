@@ -9,12 +9,11 @@
 
 We expose a significant subset of all available functions.
 
-
 We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
 
 **Features:**
 
-- document and fragment parsing 
+- document and fragment parsing
 - chunk parsing with the "chunk_parser" engine
 - node/element/fragment/document serialization
 - DOM to DOM_tree and return: tuple and (todo) JSON format
@@ -23,6 +22,164 @@ We opted to use `Zig` allocators instead of using `lexbor` internals for most fu
 - HTML attributes and search
 - DOM node manipulation
 - Search by attribute with collections.
+
+## Quick start
+
+The API closely follows JavaScript DOM conventions.
+
+### Insert a document fragment and serialization
+
+```c
+const z = @import("zhtml.zig");
+
+test "Append JS fragment" {
+  const allocator = testing.allocator;
+
+  const doc = try parseFromString("<html><body></body></html>");
+  defer z.destroyDocument(doc);
+
+  const body_node = try getBodyNode(doc);
+
+
+  const fragment = try z.createDocumentFragment(doc);
+
+  const div = try z.createElement(
+      doc,
+      "div",
+      &.{.{ .name = "class", .value = "container-list" }},
+  );
+
+  const div_node = elementToNode(div);
+
+  const ul = try z.createElement(doc, "ul", &.{});
+  const ul_node = elementToNode(ul);
+
+  for (1..4) |i| {
+    // Convert integer to ASCII digit
+    const digit_char = @as(u8, @intCast(i)) + '0';
+    const value_str = &[_]u8{digit_char};
+
+   const li = try z.createElement(
+      doc,
+      "li",
+       &.{.{ .name = "data-id", .value = value_str }},
+    );
+
+    const li_node = elementToNode(li);
+
+    const text_content = try std.fmt.allocPrint(
+      testing.allocator,
+      "Item {d}",
+      .{i},
+    );
+    defer allocator.free(text_content);
+
+    const text_node = try z.createTextNode(doc, text_content);
+    z.appendChild(li_node, text_node);
+    z.appendChild(ul_node, li_node);
+  }
+
+  z.appendChild(div_node, ul_node);
+  z.appendChild(fragment, div_node);
+
+  // batch it into the DOM
+  z.appendFragment(body_node, fragment);
+
+  const fragment_txt = try z.serializeTree(allocator, div_node);
+
+  defer allocator.free(fragment_txt);
+
+  const expected =
+    "<div class=\"container-list\"><ul><li data-id=\"1\">Item 1</li><li data-id=\"2\">Item 2</li><li data-id=\"3\">Item 3</li></ul></div>";
+
+
+  try testing.expectEqualStrings(expected,fragment_txt);
+}
+```
+
+### DOM structure
+
+```c
+  // continue
+  try z.printDocumentStructure(doc)
+```
+
+```txt
+--- DOCUMENT STRUCTURE ----
+DIV
+  UL
+    LI
+      #text
+    LI
+      #text
+    LI
+      #text
+```
+
+### DOM tree
+
+```c
+  // continue
+  const tree = try z.documentToTree(allocator, doc);
+  defer z.freeHtmlTree(allocator, tree);
+
+  for (tree, 0..) |node, i| {
+    print("[{}]: ", .{i});
+    z.printNode(node, 0);
+  }
+```
+
+```txt
+[
+  {
+    "DIV", 
+    [{"class", "container-list"}], 
+    [
+      {"UL", [], 
+        [
+          {"LI", [{"data-id", "1"}], ["Item 1"]}, 
+          {"LI", [{"data-id", "2"}], ["Item 2"]},
+          {"LI", [{"data-id", "3"}], ["Item 3"]}
+        ]
+      }
+    ]
+  }
+]
+```
+
+### CSS selectors and attributes
+
+```c
+  // continuation
+  var engine = try z.CssSelectorEngine.init(allocator);
+  defer engine.deinit();
+
+  // Find the second li element using nth-child
+  const second_li_results = try engine.querySelectorAll(
+      body_node,
+      "ul > li:nth-child(2)",
+  );
+  defer allocator.free(second_li_results);
+
+  try testing.expect(second_li_results.len == 1);
+
+  const attribute = try z.getAttributes(
+      allocator,
+      nodeToElement(second_li_results[0]).?,
+  );
+  defer {
+    for (attribute) |attr| {
+        allocator.free(attr.name);
+        allocator.free(attr.value);
+    }
+    allocator.free(attribute);
+  }
+    
+
+  try testing.expectEqualStrings(attribute[0].name, "data-id");
+  try testing.expectEqualStrings(attribute[0].value, "2");
+}
+```
 
 ## File structure
 
@@ -41,7 +198,8 @@ We opted to use `Zig` allocators instead of using `lexbor` internals for most fu
     - css_selectors.zig
     - attributes.zig
     - collection.zig
-    - serialize.zig
+    - dom_cleaner.zig
+    - serializer.zig
     - tree.zig
     - title.zig (TODO?)
 
@@ -61,44 +219,6 @@ It imports all the submodules and run the tests.
 ```sh
  zig build test --summary all -Doptimize=Debug
  ```
-
-## Quick start
-
-```c
-const z = @import("zhtml.zig");
-const allocator = std.heap.c_allocator;
-
-const doc = try z.parseFromString("<p>Hello <!-- emphasis plz --><strong>world</strong></p>");
-defer z.destryoDocument(doc);
-
-z.printDocumentStructure(doc);
-```
-
-gives you:
-
-```txt
---- DOCUMENT STRUCTURE ----
-HTML
-  HEAD
-  BODY
-    P
-      #text
-      #comment
-      STRONG
-        #text
-```
-
-```c
-try z.cleanDomTree(
-  allocator,
-  body_node.?,
-  .{ .remove_comments = true },
-);
-```
-
-```txt
-
-
 
 ## Examples
 
