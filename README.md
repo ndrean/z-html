@@ -198,12 +198,15 @@ DIV
     - css_selectors.zig
     - attributes.zig
     - collection.zig
-    - dom_cleaner.zig
+    - cleaner.zig
     - serializer.zig
     - tree.zig
     - title.zig (TODO?)
+    - head ?
 
-  - _main.zig_ (demo TODO?)
+  - main.zig (demo TODO?)
+  - examples
+    - todo
 
 ## `lexbor` built with static linking
 
