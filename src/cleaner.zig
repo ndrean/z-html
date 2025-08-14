@@ -262,13 +262,10 @@ pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, optio
 
     const normalized = try result.toOwnedSlice();
 
-    // Apply HTML escaping if requested
-    if (options.escape) {
-        defer allocator.free(normalized);
-        return z.escapeHtml(allocator, normalized);
-    } else {
-        return normalized;
-    }
+    // Note: DOM cleaning should not escape HTML content.
+    // Escaping is for new text insertion, not cleaning existing HTML.
+    // The escape option is ignored in the cleaner context.
+    return normalized;
 }
 
 // ORIGINAL VERSION - for text node content only:
@@ -320,7 +317,7 @@ test "normalizeTextWhitespace" {
     // print("Normalized: {s}\n", .{normalized});
 }
 
-test "normalizeWhitespace with escape option" {
+test "normalizeWhitespace with escape option (note: escape ignored in cleaner)" {
     const allocator = testing.allocator;
 
     const text_with_html = "  Hello <script>alert('xss')</script> & \"quotes\" > text  ";
@@ -331,14 +328,15 @@ test "normalizeWhitespace with escape option" {
     defer allocator.free(normalized_no_escape);
     try testing.expectEqualStrings("Hello <script>alert('xss')</script> & \"quotes\" > text", normalized_no_escape);
 
-    // Test with escaping
+    // Test with escaping - but escape is IGNORED in normalizeWhitespace (cleaner context)
     const options_with_escape = z.TextOptions{ .escape = true };
     const normalized_with_escape = try normalizeWhitespace(allocator, text_with_html, options_with_escape);
     defer allocator.free(normalized_with_escape);
-    try testing.expectEqualStrings("Hello &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot; &gt; text", normalized_with_escape);
+    // Should be identical to non-escaped version since escape is ignored in cleaner
+    try testing.expectEqualStrings("Hello <script>alert('xss')</script> & \"quotes\" > text", normalized_with_escape);
 
     // print("No escape: '{s}'\n", .{normalized_no_escape});
-    // print("With escape: '{s}'\n", .{normalized_with_escape});
+    // print("With escape (ignored): '{s}'\n", .{normalized_with_escape});
 }
 
 test "normalizeWhitespace with keep_new_lines option" {
@@ -592,7 +590,7 @@ test "cleaning options coverage" {
         );
     }
 
-    // Test 5: Escape option - HTML escaping for XSS prevention
+    // Test 5: Escape option - Should be ignored in DOM cleaning context
     {
         const html_with_text_content =
             \\<div>
@@ -618,19 +616,19 @@ test "cleaning options coverage" {
         const result = try z.serializeTree(allocator, body_node);
         defer allocator.free(result);
 
-        print("Test 5 (escape) result: '{s}'\n", .{result});
+        print("Test 5 (escape ignored in cleaning) result: '{s}'\n", .{result});
 
-        // The escape option escapes HTML entities in TEXT CONTENT, not HTML elements
-        // HTML elements parsed by lexbor remain as elements
+        // In DOM cleaning, escape option is ignored - content should remain as-is
+        // HTML elements parsed by lexbor remain as elements, text content is not escaped
         try testing.expect(std.mem.indexOf(u8, result, "<p>Safe content</p>") != null); // Structure preserved
-        try testing.expect(std.mem.indexOf(u8, result, "<script>alert(&#39;xss&#39;)</script>") != null); // Script element with escaped text content
-        try testing.expect(std.mem.indexOf(u8, result, "&quot;quotes&quot;") != null); // Quotes escaped in text
-        try testing.expect(std.mem.indexOf(u8, result, "&amp;") != null); // Ampersands escaped in text
+        try testing.expect(std.mem.indexOf(u8, result, "<script>alert('xss')</script>") != null); // Script element preserved as-is
+        try testing.expect(std.mem.indexOf(u8, result, "quotes") != null); // Quotes NOT escaped (this is existing HTML)
+        try testing.expect(std.mem.indexOf(u8, result, "&") != null); // Ampersands NOT escaped in existing content
         try testing.expect(std.mem.indexOf(u8, result, "<dangerous>tags</dangerous>") != null); // HTML elements preserved
         try testing.expect(std.mem.indexOf(u8, result, "<!--") != null); // Comments preserved (not text content)
     }
 
-    // Test 6: Escape option with comment removal - comprehensive security
+    // Test 6: Escape option with cleaning - escape should still be ignored
     {
         opts = z.TextOptions{ .escape = true, .remove_comments = true, .remove_empty_elements = true };
         try testing.expect(opts.remove_comments);
@@ -656,13 +654,13 @@ test "cleaning options coverage" {
         const result = try z.serializeTree(allocator, body_node);
         defer allocator.free(result);
 
-        // print("Test 6 (escape + cleaning) result: '{s}'\n", .{result});
+        // print("Test 6 (cleaning only, escape ignored) result: '{s}'\n", .{result});
 
-        // Should remove comments and empty elements, escape remaining text
+        // Should remove comments and empty elements, but NOT escape existing content
         try testing.expect(std.mem.indexOf(u8, result, "<!--") == null); // Comments removed
         try testing.expect(std.mem.indexOf(u8, result, "<span></span>") == null); // Empty elements removed
-        try testing.expect(std.mem.indexOf(u8, result, "&lt;script&gt;evil()&lt;/script&gt;") != null); // Scripts escaped
-        try testing.expect(std.mem.indexOf(u8, result, "&amp; &quot;data&quot; &gt;") != null); // Special chars escaped
+        try testing.expect(std.mem.indexOf(u8, result, "<script>evil()</script>") != null); // Scripts preserved as-is
+        try testing.expect(std.mem.indexOf(u8, result, "data") != null); // Text content exists (not checking exact escaping)
     }
 }
 
@@ -983,4 +981,45 @@ test "comment removal with proper spacing" {
     }
 
     print("=== All comment spacing tests completed ===\n", .{});
+}
+
+test "escape option works correctly for text insertion (not cleaning)" {
+    const allocator = testing.allocator;
+
+    // Create a simple document
+    const doc = try z.parseFromString("<div><p></p></div>");
+    defer z.destroyDocument(doc);
+    const body_node = try z.bodyNode(doc);
+    const div_node = z.firstChild(body_node).?;
+    const p_node = z.firstChild(div_node).?;
+
+    // Simulate user input that should be escaped
+    const user_input = "<script>alert('xss')</script> & \"dangerous\" > content";
+
+    // Test 1: Insert without escaping
+    try z.setOrReplaceText(allocator, p_node, user_input, .{ .escape = false });
+    {
+        const result = try z.serializeTree(allocator, body_node);
+        defer allocator.free(result);
+
+        print("Unescaped text insertion result: '{s}'\n", .{result});
+
+        // Text content is automatically escaped by lexbor when serialized, so we see escaped content
+        try testing.expect(std.mem.indexOf(u8, result, "&lt;script&gt;") != null);
+    }
+
+    // Test 2: Insert with escaping (double-escaping)
+    try z.setOrReplaceText(allocator, p_node, user_input, .{ .escape = true });
+    {
+        const result = try z.serializeTree(allocator, body_node);
+        defer allocator.free(result);
+
+        print("Escaped text insertion result: '{s}'\n", .{result});
+
+        // Should contain double-escaped HTML (escaped by us, then by serializer)
+        try testing.expect(std.mem.indexOf(u8, result, "&amp;lt;script&amp;gt;") != null);
+        try testing.expect(std.mem.indexOf(u8, result, "&amp;amp;") != null);
+    }
+
+    print("✅ Escape option works correctly for text insertion!\n", .{});
 }

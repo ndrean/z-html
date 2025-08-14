@@ -785,22 +785,30 @@ pub fn setTextContent(node: *DomNode, content: []const u8) !void {
 /// [core] set or replace text data on a text node
 ///
 /// If the inner text node is empty, it will be created.
+/// If options.escape is true, the text will be HTML-escaped before insertion.
 pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []const u8, options: z.TextOptions) !void {
+    // Apply HTML escaping if requested (for new user input)
+    const final_text = if (options.escape)
+        try escapeHtml(allocator, text)
+    else
+        text;
+    defer if (options.escape) allocator.free(final_text);
+
     const inner_text_node = firstChild(node) orelse null;
     if (inner_text_node == null) {
-        return try setTextContent(node, text);
+        return try setTextContent(node, final_text);
     }
 
     const current_text = try getTextContentOpts(
         allocator,
         node,
-        options,
+        .{}, // Don't escape when reading existing content
     );
     defer allocator.free(current_text);
     const status = lxb_dom_character_data_replace(
         inner_text_node.?,
-        text.ptr,
-        text.len,
+        final_text.ptr,
+        final_text.len,
         0, // Start at beginning
         current_text.len,
     );
@@ -1505,7 +1513,7 @@ test "get & set NodeTextContent and escape option" {
     const new_escaped_text = try getTextContentOpts(
         allocator,
         node,
-        options,
+        .{}, // Don't escape when reading - it was already escaped during insertion
     );
     defer allocator.free(new_escaped_text);
     try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
