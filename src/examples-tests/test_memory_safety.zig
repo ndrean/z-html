@@ -9,15 +9,15 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
     const doc = try z.parseFromString("<div><span>content</span></div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const div = z.firstElementChild(body).?;
 
     // ❌ UNSAFE: Borrowing lexbor's memory
-    const unsafe_tag = z.getElementName(div);
+    const unsafe_tag = z.tagName(div);
     std.debug.print("Unsafe tag (borrowing): {s}\n", .{unsafe_tag});
 
     // ✅ SAFE: Copying to Zig-owned memory
-    const safe_tag = try z.getElementNameOwned(allocator, div);
+    const safe_tag = try z.tagNameOwned(allocator, div);
     defer allocator.free(safe_tag);
     std.debug.print("Safe tag (owned): {s}\n", .{safe_tag});
 
@@ -33,8 +33,8 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
     try std.testing.expectEqualStrings("DIV", safe_tag);
 
     std.debug.print("=== Key Takeaways ===\n", .{});
-    std.debug.print("• getElementName(): Fast but unsafe for storage\n", .{});
-    std.debug.print("• getElementNameOwned(): Safe but requires allocation\n", .{});
+    std.debug.print("• tagName(): Fast but unsafe for storage\n", .{});
+    std.debug.print("• tagNameOwned(): Safe but requires allocation\n", .{});
     std.debug.print("• Use unsafe version for immediate comparisons\n", .{});
     std.debug.print("• Use owned version when storing tag names\n", .{});
 }
@@ -44,7 +44,7 @@ test "Practical usage patterns" {
     const doc = try z.parseFromString("<div><p>para</p><span>text</span></div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const div = z.firstElementChild(body).?;
 
     std.debug.print("\n=== Practical Usage Patterns ===\n", .{});
@@ -54,7 +54,7 @@ test "Practical usage patterns" {
     var count: u32 = 0;
     var child = z.firstElementChild(div);
     while (child) |element| {
-        const tag = z.getElementName(element); // Safe for immediate use
+        const tag = z.tagName(element); // Safe for immediate use
         std.debug.print("  Found: {s}\n", .{tag});
         if (std.mem.eql(u8, tag, "P")) {
             count += 1;
@@ -75,7 +75,7 @@ test "Practical usage patterns" {
 
     child = z.firstElementChild(div);
     while (child) |element| {
-        const owned_tag = try z.getElementNameOwned(allocator, element);
+        const owned_tag = try z.tagNameOwned(allocator, element);
         try tag_names.append(owned_tag);
         child = z.nextElementSibling(element);
     }

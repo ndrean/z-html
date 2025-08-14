@@ -327,7 +327,7 @@ test "element / attribute  name & value" {
     const html = "<div class='test' id='my-id' data-value='123' title='tooltip' hidden>Content</div>";
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
@@ -358,7 +358,7 @@ test "collect  attributes" {
     const html = "<div class='test' id='my-id' data-value='123' title='tooltip' hidden>Content</div>";
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div = z.firstChild(body_node).?;
     const div_elt = z.nodeToElement(div).?;
 
@@ -398,7 +398,7 @@ test "named attribute operations" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
@@ -441,7 +441,7 @@ test "attribute modification" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const p_node = z.firstChild(body_node).?;
     const p_element = z.nodeToElement(p_node).?;
 
@@ -497,7 +497,7 @@ test "attribute iteration" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node);
     const div_element = z.nodeToElement(div_node.?).?;
 
@@ -533,7 +533,7 @@ test "ID and CLASS attribute getters" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const section_node = z.firstChild(body_node);
     const section_element = z.nodeToElement(section_node.?).?;
 
@@ -558,7 +558,7 @@ test "attribute edge cases" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
@@ -608,7 +608,7 @@ test "elementHasNamedAttribute - isolated test" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
@@ -642,7 +642,7 @@ test "attribute error handling" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 

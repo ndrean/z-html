@@ -11,7 +11,7 @@ pub fn main() !void {
     const doc = try z.parse(allocator, html);
     defer z.deinitDocument(doc);
 
-    const body = z.getBodyElement(doc);
+    const body = z.bodyElement(doc);
     const div = z.firstElementChild(body).?;
 
     std.debug.print("=== Using forEach traversal ===\n");
@@ -39,7 +39,7 @@ pub fn main() !void {
 }
 
 fn printElementInfo(element: *z.DomElement) bool {
-    const tag = z.getElementName(element);
+    const tag = z.tagName(element);
     const text = z.getElementText(std.heap.page_allocator, element) catch "no text";
     defer if (!std.mem.eql(u8, text, "no text")) std.heap.page_allocator.free(text);
 
@@ -55,7 +55,7 @@ fn pElementCollector(element: *z.DomElement) ?*z.DomElement {
 }
 
 fn testMatchers(element: *z.DomElement) bool {
-    const tag = z.getElementName(element);
+    const tag = z.tagName(element);
 
     std.debug.print("Testing element: {s}\n", .{tag});
     std.debug.print("  Is P tag? {}\n", .{z.matchesTagName(element, "P")});

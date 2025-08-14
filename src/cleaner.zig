@@ -3,20 +3,13 @@ const std = @import("std");
 const z = @import("zhtml.zig");
 const print = std.debug.print;
 
-pub const DomCleanOptions = struct {
-    remove_comments: bool = false,
-    // Remove elements with no content (not just text nodes)
-    remove_empty_elements: bool = false,
-    keep_new_lines: bool = false,
-};
-
 /// [core] Clean DOM tree according to HTML standards + optional extras
-pub fn cleanDomTree(allocator: std.mem.Allocator, root: *z.DomNode, options: DomCleanOptions) !void {
+pub fn cleanDomTree(allocator: std.mem.Allocator, root: *z.DomNode, options: z.TextOptions) !void {
     try cleanNodeRecursive(allocator, root, options);
 }
 
-fn cleanNodeRecursive(allocator: std.mem.Allocator, node: *z.DomNode, options: DomCleanOptions) !void {
-    const node_type = z.getType(node);
+fn cleanNodeRecursive(allocator: std.mem.Allocator, node: *z.DomNode, options: z.TextOptions) !void {
+    const node_type = z.nodeType(node);
 
     var node_was_removed = false;
     switch (node_type) {
@@ -63,7 +56,7 @@ fn cleanNodeRecursive(allocator: std.mem.Allocator, node: *z.DomNode, options: D
     }
 }
 
-fn cleanElementNode(allocator: std.mem.Allocator, node: *z.DomNode, options: DomCleanOptions) !bool {
+fn cleanElementNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.TextOptions) !bool {
     const element = z.nodeToElement(node) orelse return false;
 
     const size = try cleanElementAttributes(allocator, element);
@@ -130,15 +123,15 @@ fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.DomElement) 
     return attr_list.len;
 }
 
-fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, options: DomCleanOptions) !bool {
+fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.TextOptions) !bool {
     const text = try z.getTextContentsOpts(
         allocator,
         node,
-        .{},
+        options,
     );
     defer allocator.free(text);
 
-    if (z.isWhitespaceOnlyText(text) and options.remove_empty_elements) { //<-------- CHANGED ???
+    if (z.isWhitespaceOnlyText(text) and options.remove_empty_elements) {
         z.removeNode(node);
         return true;
     }
@@ -147,14 +140,14 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
     const cleaned = try normalizeWhitespace(
         allocator,
         text,
-        options.keep_new_lines,
+        options,
     );
     defer allocator.free(cleaned);
 
     // Only update if content actually changed
     if (!std.mem.eql(u8, text, cleaned)) {
         // try setTextContent(node, cleaned);
-        try z.setOrReplaceText(allocator, node, cleaned);
+        try z.setOrReplaceText(allocator, node, cleaned, options);
     }
     return false;
 }
@@ -162,7 +155,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
     if (z.nodeToElement(parent)) |parent_element| {
-        const tag_name = z.getElementName(parent_element);
+        const tag_name = z.tagName(parent_element);
 
         // TODO: change this to enum comparison <----------------------------
         // leave these elements unchanged
@@ -187,7 +180,7 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
                 return;
             };
             defer allocator.free(txt);
-            
+
             if (txt.len > 0) {
                 const result = try std.fmt.allocPrint(
                     allocator,
@@ -196,11 +189,7 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
                 );
 
                 // Set the text content (this function handles memory management)
-                try z.setOrReplaceText(
-                    allocator,
-                    prev,
-                    result,
-                );
+                try z.setOrReplaceText(allocator, prev, result, .{});
 
                 // Free our temporary string since setOrReplaceText copies it
                 allocator.free(result);
@@ -217,15 +206,18 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
 ///
 /// Removes whitespace between HTML elements but preserves whitespace within text content.
 /// If keep_new_lines is true, preserves newline characters in text content.
+/// If escape is true, HTML-escapes the result after whitespace normalization.
 ///
 /// Caller needs to free the slice
-pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, keep_new_lines: bool) ![]u8 {
+pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, options: z.TextOptions) ![]u8 {
     // Trim leading and trailing whitespace
     const trimmed = std.mem.trim(
         u8,
         text,
         &std.ascii.whitespace,
     );
+
+    const maybe_keep_new_lines = options.keep_new_lines;
 
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
@@ -254,7 +246,7 @@ pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, keep_
                 continue;
             } else {
                 // Handle newlines based on keep_new_lines option
-                if (keep_new_lines and std.mem.indexOfScalar(u8, trimmed[whitespace_start..i], '\n') != null) {
+                if (maybe_keep_new_lines and std.mem.indexOfScalar(u8, trimmed[whitespace_start..i], '\n') != null) {
                     // Preserve newline if keep_new_lines is true and there was a newline in the whitespace
                     try result.append('\n');
                 } else {
@@ -268,7 +260,15 @@ pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, keep_
         }
     }
 
-    return result.toOwnedSlice();
+    const normalized = try result.toOwnedSlice();
+
+    // Apply HTML escaping if requested
+    if (options.escape) {
+        defer allocator.free(normalized);
+        return z.escapeHtml(allocator, normalized);
+    } else {
+        return normalized;
+    }
 }
 
 // ORIGINAL VERSION - for text node content only:
@@ -302,52 +302,6 @@ pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, keep_
 //     return result.toOwnedSlice();
 // }
 
-/// [cleaner] Parse HTML and serialize it back compactly (lexbor-based approach)
-///
-/// This approach combines the best of both worlds:
-/// 1. Parse the HTML string into a DOM tree (lexbor handles correctness)
-/// 2. Handle both full documents and fragments
-/// 3. Serialize it back using lexbor's serialization
-/// 4. Apply whitespace normalization to get compact output
-/// 5. Much more robust than character-by-character processing alone
-///
-/// Caller needs to free the slice
-pub fn normalizeHtmlWithLexbor(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
-    const zhtml = @import("zhtml.zig");
-
-    // Parse the HTML into a DOM tree
-    const doc = try zhtml.parseFromString(html);
-    defer zhtml.destroyDocument(doc);
-
-    // Check if this looks like a full document (has doctype or html tag)
-    const is_full_document = std.mem.indexOf(u8, html, "<!DOCTYPE") != null or
-        std.mem.indexOf(u8, html, "<html") != null or
-        std.mem.indexOf(u8, html, "<HTML") != null;
-
-    const serialized = if (is_full_document) blk: {
-        // For full documents, serialize the entire document
-        const root = zhtml.documentRoot(doc) orelse return allocator.dupe(u8, "");
-        break :blk try zhtml.serializeTree(allocator, root);
-    } else blk: {
-        // For fragments, get content from body
-        const body_element = try zhtml.getBodyElement(doc);
-        const body_node = zhtml.elementToNode(body_element);
-
-        const first_child = zhtml.firstChild(body_node);
-        if (first_child == null) {
-            return allocator.dupe(u8, "");
-        }
-
-        break :blk try zhtml.serializeTree(allocator, first_child.?);
-    };
-
-    defer allocator.free(serialized);
-
-    // Apply our existing HTML-aware whitespace normalization to make it compact
-    // Default to not keeping new lines for backward compatibility
-    return try normalizeWhitespace(allocator, serialized, false);
-}
-
 // ========================================================================
 // === TESTS ===
 // ========================================================================
@@ -356,13 +310,35 @@ const testing = std.testing;
 
 test "normalizeTextWhitespace" {
     const allocator = testing.allocator;
+    const options = z.TextOptions{ .keep_new_lines = false };
 
     const messy_text = "  Hello   \t  World!  \n\n  ";
-    const normalized = try normalizeWhitespace(allocator, messy_text, false);
+    const normalized = try normalizeWhitespace(allocator, messy_text, options);
     defer allocator.free(normalized);
 
     try testing.expectEqualStrings("Hello World!", normalized);
     // print("Normalized: {s}\n", .{normalized});
+}
+
+test "normalizeWhitespace with escape option" {
+    const allocator = testing.allocator;
+
+    const text_with_html = "  Hello <script>alert('xss')</script> & \"quotes\" > text  ";
+
+    // Test without escaping (default)
+    const options_no_escape = z.TextOptions{ .escape = false };
+    const normalized_no_escape = try normalizeWhitespace(allocator, text_with_html, options_no_escape);
+    defer allocator.free(normalized_no_escape);
+    try testing.expectEqualStrings("Hello <script>alert('xss')</script> & \"quotes\" > text", normalized_no_escape);
+
+    // Test with escaping
+    const options_with_escape = z.TextOptions{ .escape = true };
+    const normalized_with_escape = try normalizeWhitespace(allocator, text_with_html, options_with_escape);
+    defer allocator.free(normalized_with_escape);
+    try testing.expectEqualStrings("Hello &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot; &gt; text", normalized_with_escape);
+
+    // print("No escape: '{s}'\n", .{normalized_no_escape});
+    // print("With escape: '{s}'\n", .{normalized_with_escape});
 }
 
 test "normalizeWhitespace with keep_new_lines option" {
@@ -371,12 +347,14 @@ test "normalizeWhitespace with keep_new_lines option" {
     const text_with_newlines = "Hello\n\nWorld\nTest";
 
     // Test with keep_new_lines = false (default behavior)
-    const normalized_collapsed = try normalizeWhitespace(allocator, text_with_newlines, false);
+    const options_collapsed = z.TextOptions{ .keep_new_lines = false };
+    const normalized_collapsed = try normalizeWhitespace(allocator, text_with_newlines, options_collapsed);
     defer allocator.free(normalized_collapsed);
     try testing.expectEqualStrings("Hello World Test", normalized_collapsed);
 
     // Test with keep_new_lines = true (preserve newlines)
-    const normalized_preserved = try normalizeWhitespace(allocator, text_with_newlines, true);
+    const options_preserved = z.TextOptions{ .keep_new_lines = true };
+    const normalized_preserved = try normalizeWhitespace(allocator, text_with_newlines, options_preserved);
     defer allocator.free(normalized_preserved);
     try testing.expectEqualStrings("Hello\nWorld\nTest", normalized_preserved);
 
@@ -390,7 +368,7 @@ test "cleanElementAttributes" {
     const doc = try z.parseFromString("<div><p>No attrs</p><span id='test' class='demo'>With attrs</span></div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
 
@@ -417,10 +395,10 @@ test "cleanElementAttributes" {
     try testing.expect(elements_with_attrs == 1); // only <span> has attributes
 }
 
-test "comprehensive cleaning options coverage" {
+test "cleaning options coverage" {
     const allocator = testing.allocator;
 
-    // Test case with truly empty elements (no attributes, no content)
+    // with truly empty elements (no attributes, no content)
     const html =
         \\<div>
         \\    <p>Content</p>
@@ -434,19 +412,21 @@ test "comprehensive cleaning options coverage" {
         \\    line2
         \\
         \\    <strong>Text</strong>
+        \\    <script>alert('test');</script>
         \\</div>
     ;
 
-    var opts = DomCleanOptions{};
+    var opts = z.TextOptions{};
     try testing.expect(!opts.remove_comments);
     try testing.expect(!opts.remove_empty_elements);
     try testing.expect(!opts.keep_new_lines);
+    try testing.expect(!opts.escape);
 
     // Test 1: No options === default options
     {
         const doc = try z.parseFromString(html);
         defer z.destroyDocument(doc);
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
 
         try cleanDomTree(allocator, body_node, .{});
         const result = try z.serializeTree(allocator, body_node);
@@ -484,7 +464,7 @@ test "comprehensive cleaning options coverage" {
 
         const doc = try z.parseFromString(html);
         defer z.destroyDocument(doc);
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
 
         try cleanDomTree(allocator, body_node, opts);
 
@@ -515,7 +495,7 @@ test "comprehensive cleaning options coverage" {
 
         const doc = try z.parseFromString(html);
         defer z.destroyDocument(doc);
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
 
         const before_empty = try z.serializeTree(allocator, body_node);
         defer allocator.free(before_empty);
@@ -573,7 +553,7 @@ test "comprehensive cleaning options coverage" {
 
         const doc = try z.parseFromString(html);
         defer z.destroyDocument(doc);
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
 
         try cleanDomTree(allocator, body_node, opts);
 
@@ -612,12 +592,77 @@ test "comprehensive cleaning options coverage" {
         );
     }
 
+    // Test 5: Escape option - HTML escaping for XSS prevention
     {
-        opts = .{
-            .remove_comments = true,
-            .remove_empty_elements = true,
-            .keep_new_lines = true,
-        };
+        const html_with_text_content =
+            \\<div>
+            \\    <p>Safe content</p>
+            \\    <span>User typed: <script>alert('xss')</script></span>
+            \\    <div>Input: "quotes" & <dangerous>tags</div>
+            \\    <!-- This comment has <script> tags -->
+            \\</div>
+        ;
+
+        opts = .{ .escape = true };
+        try testing.expect(!opts.remove_comments);
+        try testing.expect(!opts.remove_empty_elements);
+        try testing.expect(!opts.keep_new_lines);
+        try testing.expect(opts.escape);
+
+        const doc = try z.parseFromString(html_with_text_content);
+        defer z.destroyDocument(doc);
+        const body_node = try z.bodyNode(doc);
+
+        try cleanDomTree(allocator, body_node, opts);
+
+        const result = try z.serializeTree(allocator, body_node);
+        defer allocator.free(result);
+
+        print("Test 5 (escape) result: '{s}'\n", .{result});
+
+        // The escape option escapes HTML entities in TEXT CONTENT, not HTML elements
+        // HTML elements parsed by lexbor remain as elements
+        try testing.expect(std.mem.indexOf(u8, result, "<p>Safe content</p>") != null); // Structure preserved
+        try testing.expect(std.mem.indexOf(u8, result, "<script>alert(&#39;xss&#39;)</script>") != null); // Script element with escaped text content
+        try testing.expect(std.mem.indexOf(u8, result, "&quot;quotes&quot;") != null); // Quotes escaped in text
+        try testing.expect(std.mem.indexOf(u8, result, "&amp;") != null); // Ampersands escaped in text
+        try testing.expect(std.mem.indexOf(u8, result, "<dangerous>tags</dangerous>") != null); // HTML elements preserved
+        try testing.expect(std.mem.indexOf(u8, result, "<!--") != null); // Comments preserved (not text content)
+    }
+
+    // Test 6: Escape option with comment removal - comprehensive security
+    {
+        opts = z.TextOptions{ .escape = true, .remove_comments = true, .remove_empty_elements = true };
+        try testing.expect(opts.remove_comments);
+        try testing.expect(opts.remove_empty_elements);
+        try testing.expect(!opts.keep_new_lines);
+        try testing.expect(opts.escape);
+
+        const html_malicious =
+            \\<div>
+            \\    <p>Hello <script>evil()</script> world</p>
+            \\    <span></span>
+            \\    <!-- <script>alert('hidden')</script> -->
+            \\    <em>Text & "data" > here</em>
+            \\</div>
+        ;
+
+        const doc = try z.parseFromString(html_malicious);
+        defer z.destroyDocument(doc);
+        const body_node = try z.bodyNode(doc);
+
+        try cleanDomTree(allocator, body_node, opts);
+
+        const result = try z.serializeTree(allocator, body_node);
+        defer allocator.free(result);
+
+        // print("Test 6 (escape + cleaning) result: '{s}'\n", .{result});
+
+        // Should remove comments and empty elements, escape remaining text
+        try testing.expect(std.mem.indexOf(u8, result, "<!--") == null); // Comments removed
+        try testing.expect(std.mem.indexOf(u8, result, "<span></span>") == null); // Empty elements removed
+        try testing.expect(std.mem.indexOf(u8, result, "&lt;script&gt;evil()&lt;/script&gt;") != null); // Scripts escaped
+        try testing.expect(std.mem.indexOf(u8, result, "&amp; &quot;data&quot; &gt;") != null); // Special chars escaped
     }
 }
 
@@ -641,7 +686,7 @@ test "keep_new_lines option comprehensive test" {
     {
         const doc = try z.parseFromString(html_with_newlines);
         defer z.destroyDocument(doc);
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
 
         const child_nodes = try z.getChildNodes(allocator, body_node);
         defer allocator.free(child_nodes);
@@ -679,7 +724,7 @@ test "keep_new_lines option comprehensive test" {
     {
         const doc = try z.parseFromString(html_with_newlines);
         defer z.destroyDocument(doc);
-        const body = try z.getBodyElement(doc);
+        const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
         const before_newlines = try z.serializeTree(allocator, body_node);
@@ -735,7 +780,7 @@ test "complete DOM cleaning with proper node removal" {
     const doc = try z.parseFromString(messy_html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     // print("\n=== Complete DOM Cleaning Test ===\n", .{});
@@ -791,7 +836,7 @@ test "comment removal between text nodes concatenation issue" {
 
     const doc = try z.parseFromString(html_with_text_comment_text);
     defer z.destroyDocument(doc);
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     const before = try z.serializeTree(allocator, body_node);
@@ -828,7 +873,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
 
     const doc = try z.parseFromString(html_with_comments);
     defer z.destroyDocument(doc);
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node).?;
     const txt = try z.getTextContentsOpts(allocator, div_node, .{});
     defer allocator.free(txt);
@@ -840,7 +885,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
     print("\n=== Testing isWhitespaceOnlyNode on comments ===\n", .{});
 
     while (child != null) {
-        const node_type = z.getType(child.?);
+        const node_type = z.nodeType(child.?);
         if (node_type == .comment) {
             comment_count += 1;
             const is_whitespace_only = z.isWhitespaceOnlyNode(child.?);
@@ -914,7 +959,7 @@ test "comment removal with proper spacing" {
         const doc = try z.parseFromString(test_case.html);
         defer z.destroyDocument(doc);
 
-        const body = try z.getBodyElement(doc);
+        const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
         const before = try z.serializeTree(allocator, body_node);

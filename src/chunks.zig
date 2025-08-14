@@ -117,7 +117,7 @@ test "chunks1" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const children = try z.getChildren(
         allocator,
         body,
@@ -126,11 +126,11 @@ test "chunks1" {
 
     try testing.expect(children.len > 0);
     try testing.expectEqualStrings(
-        z.getElementName(children[0]),
+        z.tagName(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        z.getElementName(children[1]),
+        z.tagName(children[1]),
         "P",
     );
 
@@ -174,7 +174,7 @@ test "chunk parsing comprehensive" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
 
     const children = try z.getChildren(
         allocator,
@@ -186,16 +186,16 @@ test "chunk parsing comprehensive" {
 
     // Check element names
     try testing.expectEqualStrings(
-        z.getElementName(children[0]),
+        z.tagName(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        z.getElementName(children[1]),
+        z.tagName(children[1]),
         "P",
     );
 
     try testing.expectEqualStrings(
-        z.getElementName(children[2]),
+        z.tagName(children[2]),
         "SPAN",
     );
 

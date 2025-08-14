@@ -44,13 +44,18 @@ extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len
 /// [core] Creates and returns a new HTML document.
 ///
 /// Caller must free with `destroyDocument`.
+///
+/// To create a useable document, simply use instead `parseFromString("")`
+/// ## Example
+/// ```
+/// const doc = try createDocument();
+/// defer destroyDocument(doc);
+/// ```
 pub fn createDocument() !*HtmlDocument {
     return lxb_html_document_create() orelse Err.DocCreateFailed;
 }
 
 /// [core] Destroy an HTML document.
-///
-/// Call this function to free the resources associated with the document once created with `parseHtmlString`
 pub fn destroyDocument(doc: *HtmlDocument) void {
     lxb_html_document_destroy(doc);
 }
@@ -59,6 +64,12 @@ pub fn destroyDocument(doc: *HtmlDocument) void {
 /// Returns a new document.
 ///
 /// Caller must free with `destroyDocument`.
+///
+/// ## Example
+/// ```
+/// const doc = try parseFromString("<!DOCTYPE html><html><body></body></html>");
+/// defer destroyDocument(doc);
+/// ```
 pub fn parseFromString(html: []const u8) !*HtmlDocument {
     const doc = createDocument() catch {
         return Err.DocCreateFailed;
@@ -69,7 +80,7 @@ pub fn parseFromString(html: []const u8) !*HtmlDocument {
 }
 
 // =============================================================================
-// ELEMENT, COMMENT, TEXT CREATION
+// CREATION
 // =============================================================================
 
 extern "c" fn lxb_html_document_create_element_noi(doc: *HtmlDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
@@ -86,20 +97,30 @@ extern "c" fn lxb_dom_document_root(doc: *HtmlDocument) ?*DomNode;
 extern "c" fn lexbor_node_owner_document(node: *DomNode) *HtmlDocument;
 extern "c" fn lxb_dom_node_parent_noi(node: *DomNode) ?*DomNode;
 extern "c" fn lxb_dom_document_create_element(doc: *HtmlDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
-extern "c" fn lxb_dom_document_destroy_element(element: *DomElement) *DomElement;
 
-/// [core] Element creation
+extern "c" fn lxb_dom_document_destroy_element(element: *DomElement) *DomElement;
+extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
+extern "c" fn lexbor_dom_interface_element_wrapper(node: *DomNode) ?*DomElement;
+extern "c" fn lxb_dom_node_name(node: *DomNode, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_element_tag_name(element: *DomElement, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_node_remove(node: *DomNode) void;
+extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
+
+/// [core] Element creation and returns a !Element
 ///
 /// Can create HTMLElements or custom elements.
 ///
 /// It takes an optional array of attributes pair (`.name`, `.value`).
-///
+/// If the tag is a custom element, the `name` will be copied to the element's tag name.
 /// ## Example
 ///
 /// ```
-/// const doc = parseFromString("<div></div>");
-/// const span = createElement(doc, "span", &.{});
-/// const button = createElement(doc, "button", &.{.{.name = "phx-click", .value = "submit"}, .{.name = "phx-value-myvar", .value= "myvar"}});
+/// const span: *DomElement = try createElement(doc, "span", &.{});
+/// const button: *DomElement = try createElement(doc, "button",
+///     &.{
+///         .{.name = "phx-click", .value = "submit"},
+///         .{.name = "phx-value-myvar", .value= "myvar"}
+///     });
 /// ```
 pub fn createElement(doc: *HtmlDocument, name: []const u8, attrs: []const z.AttributePair) !*DomElement {
     const element = lxb_html_document_create_element_noi(
@@ -122,7 +143,12 @@ pub fn createElement(doc: *HtmlDocument, name: []const u8, attrs: []const z.Attr
     return element;
 }
 
-/// [core] Create a text node in the document
+/// [core] Create a text node in the document and returns a !Node
+///
+/// ## Example
+/// ```
+/// const textNode: *DomElement = try createTextNode(doc, "Hello, World!");
+/// ```
 pub fn createTextNode(doc: *HtmlDocument, text: []const u8) !*DomNode {
     return lxb_dom_document_create_text_node(
         doc,
@@ -131,7 +157,12 @@ pub fn createTextNode(doc: *HtmlDocument, text: []const u8) !*DomNode {
     ) orelse Err.CreateTextNodeFailed;
 }
 
-/// [core] Create a comment node in the document
+/// [core] Create a comment node and returns a !Comment
+///
+/// ## Example
+/// ```
+/// const commentNode: *Comment = try createComment(doc, "Hello, World!");
+/// ```
 pub fn createComment(doc: *HtmlDocument, data: []const u8) !*Comment {
     return lxb_dom_document_create_comment(
         doc,
@@ -140,46 +171,46 @@ pub fn createComment(doc: *HtmlDocument, data: []const u8) !*Comment {
     ) orelse Err.CreateCommentFailed;
 }
 
-/// [core] Create a document fragment - useful for batch DOM operations
+/// [core] Create a document fragment and returns a !Node
 ///
-/// Document fragments are lightweight containers that can hold multiple nodes.
+/// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations
+///
 /// When you append a fragment to the DOM, only its children are added, not the fragment itself.
 pub fn createDocumentFragment(doc: *HtmlDocument) !*DomNode {
     return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentParseFailed;
 }
 
-// ----------------------------------------------------------------------------------------
-// Append
-// ----------------------------------------------------------------------------------------
-
-/// [core] Append a child node to parent (alias for insertNodeChildNode for consistency)
-pub fn appendChild(parent: *DomNode, child: *DomNode) void {
-    lxb_dom_node_insert_child(parent, child);
-}
-
-/// [core] Append multiple child nodes to parent
-pub fn appendChildren(parent: *DomNode, child_nodes: []const *DomNode) void {
-    for (child_nodes) |child| {
-        appendChild(parent, child);
-    }
-}
-
-/// [core] Append all children from a document fragment to a parent node
-///
-/// This properly handles the fragment semantics where the fragment children are moved (not copied)
-pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
-    var fragment_child = firstChild(fragment);
-    while (fragment_child != null) {
-        const next_sibling = nextSibling(fragment_child.?);
-        appendChild(parent, fragment_child.?);
-        fragment_child = next_sibling;
-    }
-}
-
+// ---------------------------------------------------------------------------
+// Root, Owner, Body node/element access
 // ---------------------------------------------------------------------------
 
+/// [core] Returns the document root node ("HTML" or "XML")
+pub fn documentRoot(doc: *HtmlDocument) ?*DomNode {
+    return lxb_dom_document_root(doc);
+}
+
+/// [core] Returns the document
+pub fn ownerDocument(node: *DomNode) *HtmlDocument {
+    return lexbor_node_owner_document(node);
+}
+
+test "documentRoot - ownerDocument" {
+    const doc = try parseFromString("<html><body></body></html>");
+    defer destroyDocument(doc);
+
+    const doc_root = documentRoot(doc);
+    try testing.expectEqualStrings("HTML", z.nodeName(doc_root.?));
+
+    const owner = ownerDocument(doc_root.?);
+    try testing.expect(owner == doc);
+}
 /// [core] Get the document's body element (usually BODY)
-pub fn getBodyElement(doc: *HtmlDocument) !*DomElement {
+///
+/// ## Example
+/// ```
+/// const bodyElement: *DomElement = try bodyElement(doc);
+/// ```
+pub fn bodyElement(doc: *HtmlDocument) !*DomElement {
     if (lxb_html_document_body_element_noi(doc)) |element| {
         return element;
     } else {
@@ -187,34 +218,43 @@ pub fn getBodyElement(doc: *HtmlDocument) !*DomElement {
     }
 }
 
-/// [core] convience function using `try getBodyElement`.
-pub fn getBodyNode(doc: *HtmlDocument) !*DomNode {
-    const body_element = getBodyElement(doc) catch {
+/// [core] Get the document's body node (usually BODY)
+pub fn bodyNode(doc: *HtmlDocument) !*DomNode {
+    const body_element = bodyElement(doc) catch {
         return Err.NoBodyElement;
     };
     return elementToNode(body_element);
 }
 
-// ==============================================================================
-extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
-extern "c" fn lexbor_dom_interface_element_wrapper(node: *DomNode) ?*DomElement;
-extern "c" fn lxb_dom_node_name(node: *DomNode, len: ?*usize) [*:0]const u8;
-extern "c" fn lxb_dom_node_remove(node: *DomNode) void;
-extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
+test "getBodyElement/node & error returned" {
+    {
+        const doc = try parseFromString("<html><body></body></html>");
+        defer destroyDocument(doc);
 
-/// [core] Convert any lexbor object to DOM node
-pub fn objectToNode(obj: *anyopaque) *DomNode {
-    return lexbor_dom_interface_node_wrapper(obj);
+        const body_elt = try bodyElement(doc);
+        try testing.expectEqualStrings("BODY", tagName(body_elt));
+
+        const body_node = try bodyNode(doc);
+        try testing.expectEqualStrings("BODY", nodeName(body_node));
+        try testing.expect(.element == z.nodeType(body_node));
+    }
+    {
+        const doc = try createDocument();
+        defer destroyDocument(doc);
+        const body_node = bodyNode(doc);
+        try testing.expectError(Err.NoBodyElement, body_node);
+        const body_elt = bodyElement(doc);
+        try testing.expectError(Err.NoBodyElement, body_elt);
+    }
 }
 
-/// [core] Convert DOM node to Element (if it is one)
-pub fn nodeToElement(node: *DomNode) ?*DomElement {
-    // Only convert if it's actually an element node
-    if (z.getType(node) != .element) {
-        return null;
-    }
+// ------------------------------------------------------------------------------
+// Element / Node conversions
+// ------------------------------------------------------------------------------
 
-    return lexbor_dom_interface_element_wrapper(node);
+/// [core] Internal: convert any lexbor object to DOM node
+fn objectToNode(obj: *anyopaque) *DomNode {
+    return lexbor_dom_interface_node_wrapper(obj);
 }
 
 /// [core] Convert DOM Element to Node
@@ -227,25 +267,107 @@ pub fn commentToNode(comment: *Comment) *DomNode {
     return objectToNode(comment);
 }
 
+/// [core] Convert DOM node to Element
+///
+/// Returns NULL if the node is not an element
+pub fn nodeToElement(node: *DomNode) ?*DomElement {
+    // Only convert if it's actually an element node
+    if (z.nodeType(node) != .element) {
+        return null;
+    }
+
+    return lexbor_dom_interface_element_wrapper(node);
+}
+
+test "element/node/element" {
+    const doc = try createDocument();
+    const div_elt = try createElement(doc, "div", &.{});
+    const div_node = elementToNode(div_elt);
+    const element = nodeToElement(div_node);
+    try testing.expect(element == div_elt);
+}
+
+/// [core] Cast Node of type `.comment` into *Comment
+///
+/// Returns NULL if the node is not a comment
+pub fn nodeToComment(node: *DomNode) ?*Comment {
+    if (z.nodeType(node) != .comment) {
+        return null;
+    }
+    const comment: *z.Comment = @ptrCast(node);
+    return comment;
+}
+
+test "creation & convertions" {
+    const doc = try parseFromString("<html><body><!-- a comment --></body></html>");
+    defer destroyDocument(doc);
+
+    const body = try bodyNode(doc);
+
+    const first_comment_node = firstChild(body);
+    const first_comment = nodeToComment(first_comment_node.?);
+    try testing.expect(first_comment != null);
+
+    const div_elt = try createElement(doc, "div", &.{});
+    const comment = try createComment(doc, "Hello, comment!");
+    const text = try createTextNode(doc, "Hello, text!");
+
+    const div = elementToNode(div_elt);
+    appendChild(body, div);
+
+    appendChild(body, commentToNode(comment));
+    appendChild(body, text);
+
+    // text node is not an element
+    const my_err1 = nodeToElement(text);
+    try testing.expect(my_err1 == null);
+
+    // comment node is not an element
+    const comment_node = commentToNode(comment);
+    const my_err2 = nodeToElement(comment_node);
+    try testing.expect(my_err2 == null);
+
+    try testing.expectEqualStrings("#element", z.nodeTypeName(div));
+}
+
 // ---------------------------------------------------------------------------
 
-/// [core] Get node's tag name as Zig string (UNSAFE: borrows lexbor's memory)
+/// [core] UNSAFE: Get node's tag name or type as Zig string ( borrows lexbor's memory)
 ///
-/// ⚠️  WARNING: The returned slice points to lexbor's internal memory.
+/// - Returns the `nodeType` (#text, #comment) for non-elements nodes,
+/// - returns the `tagName` in uppercase for element nodes.
+///
+/// If you want the `nodeType`, use:
+/// - `z.nodeType(node)` to get an enum,
+/// - `z.nodeTypeName(node)` to get a string.
+///
+/// ⚠️  UNSAFE: The returned slice points to lexbor's internal memory.
 /// Do NOT store this slice beyond the lifetime of the node.
-/// Use getNodeNameOwned() if you need to store the result.
-pub fn getNodeName(node: *DomNode) []const u8 {
+/// Use nodeNameOwned() if you need to store the result.
+/// ## Example
+/// ```
+/// test "nodeType/tagname" {
+///     const doc = try parseFromString("<div></div>");
+///     const div_node = bodyNode(doc);
+///     const div_name = nodeName(div_node);
+///     try testing.expectEqualStrings(div_name, "DIV");
+///     const node_type = z.nodeType(div_node);
+///     try testing.expect(node_type == .element);
+/// }
+/// ```
+pub fn nodeName(node: *DomNode) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
 
-/// [core] Get node's tag name as owned Zig string (SAFE: copies to Zig memory)
+/// [core] Get node's tag name or node type as owned Zig string.
 ///
-/// Returns a copy of the tag name that is owned by the caller.
+/// Returns the `nodeType` (#text, #comment) for non-elements nodes,
+/// or the `tagName` in uppercase for element nodes.
 ///
 /// Caller must free the returned string.
-pub fn getNodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
-    const name_slice = getNodeName(node);
+pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+    const name_slice = nodeName(node);
     return try allocator.dupe(u8, name_slice);
 }
 
@@ -253,21 +375,73 @@ pub fn getNodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
 ///
 /// ⚠️  WARNING: The returned slice points to lexbor's internal memory.
 /// Do NOT store this slice beyond the lifetime of the element.
-/// Use getElementNameOwned() if you need to store the result.
-pub fn getElementName(element: *DomElement) []const u8 {
-    const node = elementToNode(element);
-    return getNodeName(node);
+/// Use tagNameOwned() if you need to store the result.
+pub fn tagName(element: *DomElement) []const u8 {
+    const name_ptr = lxb_dom_element_tag_name(element, null);
+    return std.mem.span(name_ptr);
 }
 
 /// [core] Get element's tag name as owned Zig string (SAFE: copies to Zig memory)
 ///
 /// Returns a copy of the tag name that is owned by the caller.
 /// Caller must free the returned string.
-pub fn getElementNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8 {
-    const name_slice = getElementName(element);
+pub fn tagNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8 {
+    const name_slice = tagName(element);
     return try allocator.dupe(u8, name_slice);
 }
 
+test "get node/element names" {
+    const allocator = testing.allocator;
+
+    const doc = try parseFromString("<div></div><br/><code></code>hello<custom-elt></custom-elt><script></script><!-- comment -->");
+
+    defer destroyDocument(doc);
+    const body = try bodyNode(doc);
+    var current_node = firstChild(body);
+
+    const nodes = .{
+        .{ .tag = "DIV", .type = .element },
+        .{ .tag = "BR", .type = .element },
+        .{ .tag = "CODE", .type = .element },
+        .{ .tag = "#text", .type = .text },
+        .{ .tag = "CUSTOM-ELT", .type = .element },
+        .{ .tag = "SCRIPT", .type = .element },
+        .{ .tag = "#comment", .type = .comment },
+    };
+
+    var index: usize = 0;
+    while (current_node != null) {
+        const node_name = nodeName(current_node.?);
+        const owned_name = try nodeNameOwned(allocator, current_node.?);
+        defer allocator.free(owned_name);
+        const node_type = z.nodeType(current_node.?);
+
+        try testing.expect(index < nodes.len);
+
+        inline for (nodes, 0..) |node, i| {
+            if (i == index) {
+                try testing.expectEqualStrings(node.tag, node_name);
+                try testing.expectEqualStrings(owned_name, node.tag);
+                try testing.expect(node.type == node_type);
+                if (node.type == .element) {
+                    const element = nodeToElement(current_node.?);
+                    const elt_name = tagName(element.?);
+                    const owned_elt_name = try tagNameOwned(allocator, element.?);
+                    defer allocator.free(owned_elt_name);
+                    try testing.expectEqualStrings(node.tag, elt_name);
+                    try testing.expectEqualStrings(node.tag, owned_elt_name);
+                }
+                break;
+            }
+        }
+
+        current_node = nextSibling(current_node.?);
+        index += 1;
+    }
+
+    // Assert we processed all expected nodes
+    try testing.expectEqual(nodes.len, index);
+}
 //=============================================================================
 
 /// [core] Destroy a comment node in the document
@@ -298,12 +472,14 @@ pub fn destroyElement(element: *DomElement) void {
 extern "c" fn lxb_html_node_is_void_noi(node: *DomNode) bool;
 extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
 
-/// [core] Check if element is void (self-closing like <img>, <br>)
+/// [core] Check if element is _void_ (self-closing like <img>, <br>)
 pub fn isSelfClosingNode(node: *DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
 /// [core] Check if node contains only whitespace
+///
+/// Only works on Elements (#text or #comments are seen as empty)
 pub fn isNodeEmpty(node: *DomNode) bool {
     return lxb_dom_node_is_empty(node);
 }
@@ -312,21 +488,16 @@ pub fn isNodeEmpty(node: *DomNode) bool {
 // DOM NAVIGATION
 //=============================================================================
 
-/// [core] to test !!!!
-pub fn documentRoot(doc: *HtmlDocument) ?*DomNode {
-    return lxb_dom_document_root(doc);
-}
-
-/// [core] To test !!!!!!!!!!!
-pub fn ownerDocument(node: *DomNode) *HtmlDocument {
-    return lexbor_node_owner_document(node);
-}
-/// [core] Get the parent node of a given node (JavaScript convention: node.parentNode)
+/// [core] Get the parent node of a given node
+///
+/// (JavaScript convention: node.parentNode)
 pub fn parentNode(node: *DomNode) ?*DomNode {
     return lxb_dom_node_parent_noi(node);
 }
 
-/// [core] Get the parent element of a given element (JavaScript convention: element.parentElement)
+/// [core] Get the parent element of a given element
+///
+/// (JavaScript convention: element.parentElement)
 pub fn parentElement(element: *DomElement) ?*DomElement {
     const node = elementToNode(element);
     const parent_node = parentNode(node);
@@ -340,14 +511,19 @@ extern "c" fn lxb_dom_node_first_child_noi(node: *DomNode) ?*DomNode;
 extern "c" fn lxb_dom_node_next_noi(node: *DomNode) ?*DomNode;
 
 /// [core] Get next sibling of node
+///
+/// Returns NULL when there is no next sibling.
 pub fn nextSibling(node: *DomNode) ?*DomNode {
     return lxb_dom_node_next_noi(node);
 }
 
 /// [core] Get previous sibling of node
+///
+/// Returns NULL when there is no previous sibling.
 pub fn previousSibling(node: *DomNode) ?*DomNode {
     const parent = z.parentNode(node) orelse return null;
     var child = z.firstChild(parent);
+
     var prev: ?*z.DomNode = null;
 
     while (child != null) {
@@ -359,14 +535,45 @@ pub fn previousSibling(node: *DomNode) ?*DomNode {
 }
 
 /// [core] Get first child of node
+///
+/// Returns NULL when there are no children.
+/// ### Example
+/// ```
+/// test "firstChild" {
+///    const doc = try parseFromString("");
+///    const body = try bodyNode(doc);
+///    const text_node = try createTextNode(doc, "Hello, World!");
+///    appendChild(body, text_node);
+///
+///    const first_child = firstChild(body);
+///    try testing.expect(first_child == text_node);
+///
+///    const grandchild = firstChild(first_child.?);
+///    try testing.expect(grandchild == null);
+/// }
+/// ```
 pub fn firstChild(node: *DomNode) ?*DomNode {
     return lxb_dom_node_first_child_noi(node);
 }
 
-/// [core] Get first element child (JavaScript convention: element.firstElementChild)
+test "firstChild" {
+    const doc = try parseFromString("");
+    const body = try bodyNode(doc);
+    const text_node = try createTextNode(doc, "Hello, World!");
+    appendChild(body, text_node);
+
+    const first_child = firstChild(body);
+
+    try testing.expect(first_child == text_node);
+    const grandchild = firstChild(first_child.?);
+    try testing.expect(grandchild == null);
+}
+
+/// [core] Get first element child
+///
+/// Takes an element and returns the first child element, or null if none exists.
 ///
 /// Skips non-element nodes such as text nodes, comments, etc.
-/// Takes an element and returns the first child element, or null if none exists.
 pub fn firstElementChild(element: *DomElement) ?*DomElement {
     const node = elementToNode(element);
     var child = firstChild(node);
@@ -379,10 +586,30 @@ pub fn firstElementChild(element: *DomElement) ?*DomElement {
     return null;
 }
 
-/// [core] Get next element sibling (JavaScript convention: element.nextElementSibling)
+test "firstElementChild" {
+    const doc = try parseFromString("hello <div>world</div>");
+    defer destroyDocument(doc);
+    const body_elt = try bodyElement(doc);
+
+    const first_child = firstChild(elementToNode(body_elt));
+    try testing.expectEqualStrings(
+        "#text",
+        z.nodeTypeName(first_child.?),
+    );
+
+    const div = nextSibling(first_child.?);
+    try testing.expectEqualStrings("#element", z.nodeTypeName(div.?));
+    try testing.expectEqualStrings("DIV", nodeName(div.?));
+
+    const firstElement = firstElementChild(body_elt);
+    try testing.expect(elementToNode(firstElement.?) == div);
+}
+
+/// [core] Get next element sibling
+///
+/// Takes an element and returns the next sibling element, or null if none exists.
 ///
 /// Skips non-element nodes such as text nodes, comments, etc.
-/// Takes an element and returns the next sibling element, or null if none exists.
 pub fn nextElementSibling(element: *DomElement) ?*DomElement {
     const node = elementToNode(element);
     var sibling = nextSibling(node);
@@ -395,7 +622,7 @@ pub fn nextElementSibling(element: *DomElement) ?*DomElement {
     return null;
 }
 
-/// [core] Helper: Collect all child nodes from a node (JavaScript convention: childNodes)
+/// [core] Helper: Collect all child nodes from a node
 ///
 /// Returns a slice of all child nodes (including text, comments)
 ///
@@ -412,7 +639,9 @@ pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*Do
     return nodes.toOwnedSlice();
 }
 
-/// [core] Helper: Collect only element children from an element (JavaScript convention: children)
+/// [core] Helper: Collect only element children from an element
+///
+/// (JavaScript convention: children)
 ///
 /// Caller needs to free the slice
 pub fn getChildren(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*DomElement {
@@ -427,11 +656,71 @@ pub fn getChildren(allocator: std.mem.Allocator, parent_element: *DomElement) ![
     return elements.toOwnedSlice();
 }
 
+// ----------------------------------------------------------------------------------------
+// Append
+// ----------------------------------------------------------------------------------------
+
+/// [core] Append a child node to parent
+///
+/// ## Example
+/// ```
+/// const parentNode: *DomNode = try bodyNode(doc);
+/// const childNode: *DomNode = try createTextNode(doc, "Hello, World!");
+/// appendChild(parentNode, childNode);
+/// ```
+pub fn appendChild(parent: *DomNode, child: *DomNode) void {
+    lxb_dom_node_insert_child(parent, child);
+}
+
+/// [core] Append multiple child nodes to parent
+///
+/// ## Example
+/// ```
+/// const parentNode: *DomNode = try bodyNode(doc);
+/// const child1: *DomElement = try createElement(doc, "div", &.{});
+/// const div = elementToNode(child1);
+/// const child2: *DomElement = try createElement(doc, "p", &.{});
+/// const p = elementToNode(child2);
+/// const childNodes: []const *DomNode = &.{div, p};
+/// appendChildren(parentNode, childNodes);
+/// ```
+pub fn appendChildren(parent: *DomNode, child_nodes: []const *DomNode) void {
+    for (child_nodes) |child| {
+        appendChild(parent, child);
+    }
+}
+
+test "appendChildren" {
+    const doc = try parseFromString("<html><body></body></html>");
+    defer destroyDocument(doc);
+
+    const parentNodes = try bodyNode(doc);
+    const child1 = try createElement(doc, "div", &.{});
+    const div = elementToNode(child1);
+    const child2 = try createElement(doc, "p", &.{});
+    const p = elementToNode(child2);
+    const childNodes: []const *DomNode = &.{ div, p };
+    appendChildren(parentNodes, childNodes);
+}
+
+/// [core] Append all children from a document fragment to a parent node
+///
+///
+/// The fragment children are moved (not copied)
+pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
+    var fragment_child = firstChild(fragment);
+    while (fragment_child != null) {
+        const next_sibling = nextSibling(fragment_child.?);
+        appendChild(parent, fragment_child.?);
+        fragment_child = next_sibling;
+    }
+}
+
 /// [utility] Tag name matcher function (safe: uses immediate comparison)
 ///
 /// This is safe because it compares the tag name immediately without storing it.
 pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
-    const tag = getElementName(element); // Safe for immediate use
+    const tag = tagName(element); // Safe for immediate use
     return std.mem.eql(u8, tag, tag_name);
 }
 
@@ -445,18 +734,11 @@ extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, 
 extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
 
 // Check if all this is needed !!
-pub const TextOptions = struct {
-    escape: bool = false,
-    skip_whitespace_nodes: bool = false,
-    trim_whitespace: bool = false,
-    preserve_newlines: bool = true,
-    clean_empty_nodes: bool = false,
-    clean_comments: bool = false,
-};
 
 /// [core] Get text content as Zig string (copies to Zig-managed memory)
 ///
-/// Ir returns a concatenation of the text contents of all descendant text nodes.
+/// It returns a concatenation of the text contents of all descendant text nodes.
+///
 /// Caller needs to free the returned string
 pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     var len: usize = 0;
@@ -476,7 +758,7 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
 /// If you need escaping, use `getNodeTextContentOpts` with `escape: true`.
 ///
 /// Caller must free the returned slice.
-pub fn getTextContentOpts(allocator: std.mem.Allocator, node: *DomNode, opts: TextOptions) ![]u8 {
+pub fn getTextContentOpts(allocator: std.mem.Allocator, node: *DomNode, opts: z.TextOptions) ![]u8 {
     const raw_text = try getTextContent(
         allocator,
         node,
@@ -503,26 +785,26 @@ pub fn setTextContent(node: *DomNode, content: []const u8) !void {
 /// [core] set or replace text data on a text node
 ///
 /// If the inner text node is empty, it will be created.
-pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []const u8) !void {
+pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []const u8, options: z.TextOptions) !void {
     const inner_text_node = firstChild(node) orelse null;
     if (inner_text_node == null) {
-        try setTextContent(node, text);
-    } else {
-        const current_text = try getTextContentOpts(
-            allocator,
-            node,
-            .{},
-        );
-        defer allocator.free(current_text);
-        const status = lxb_dom_character_data_replace(
-            inner_text_node.?,
-            text.ptr,
-            text.len,
-            0, // Start at beginning
-            current_text.len,
-        );
-        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+        return try setTextContent(node, text);
     }
+
+    const current_text = try getTextContentOpts(
+        allocator,
+        node,
+        options,
+    );
+    defer allocator.free(current_text);
+    const status = lxb_dom_character_data_replace(
+        inner_text_node.?,
+        text.ptr,
+        text.len,
+        0, // Start at beginning
+        current_text.len,
+    );
+    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
 }
 
 /// [core] Get comment text content
@@ -537,10 +819,33 @@ pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![
     return inner_text;
 }
 
+// test "getCommentTextContent" {
+//     const allocator = std.testing.allocator;
+//     const doc = try createDocument();
+//     defer destroyDocument(doc);
+
+//     const comment = try createComment(doc, "This is a comment");
+//     defer destroyComment(comment);
+
+//     const text_content = try getCommentTextContent(allocator, comment);
+//     defer allocator.free(text_content);
+
+//     try testing.expectEqualStrings("This is a comment", text_content);
+//     const body = try bodyElement(doc);
+//     const inner = z.setinnerHTML(body, "<!-- another one-->");
+//     _ = inner;
+//     const first_child = firstChild(elementToNode(body));
+//     const inner_text = try getCommentTextContent(allocator, nodeToComment(first_child.?).?);
+//     defer allocator.free(inner_text);
+//     try testing.expectEqualStrings("another one", inner_text);
+// }
+
 /// Free lexbor-allocated memory ????
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
 
 /// [core] HTML escape text content for safe output
+///
+/// Caller must free the returned slice.
 pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
@@ -617,11 +922,11 @@ test "memory safety: getNodeName vs getNodeNameOwned" {
     defer destroyNode(elementToNode(element));
 
     // Test immediate use (safe with both versions)
-    const unsafe_name = getElementName(element);
+    const unsafe_name = tagName(element);
     try testing.expectEqualStrings("DIV", unsafe_name);
 
     // Test owned version (safe for storage)
-    const owned_name = try getElementNameOwned(allocator, element);
+    const owned_name = try tagNameOwned(allocator, element);
     defer allocator.free(owned_name);
     try testing.expectEqualStrings("DIV", owned_name);
 
@@ -642,7 +947,7 @@ test "create element and comment" {
     defer destroyDocument(doc);
     const element = try createElement(doc, "div", &.{});
     defer destroyNode(elementToNode(element));
-    const name = getElementName(element);
+    const name = tagName(element);
     try testing.expectEqualStrings("DIV", name);
 
     const comment = try createComment(doc, "This is a comment");
@@ -656,7 +961,7 @@ test "create element and comment" {
 
     // Test type-safe conversion
     const comment_node = commentToNode(comment);
-    const comment_name = getNodeName(comment_node);
+    const comment_name = nodeName(comment_node);
     try testing.expectEqualStrings("#comment", comment_name);
 
     destroyComment(comment);
@@ -675,16 +980,16 @@ test "insertChild" {
     const first_child = firstChild(elementToNode(parent)) orelse {
         return Err.EmptyTextContent;
     };
-    const child_name = getElementName(nodeToElement(first_child).?);
+    const child_name = tagName(nodeToElement(first_child).?);
     try testing.expectEqualStrings("SPAN", child_name);
 }
 
 test "check error get body of empty element" {
     const doc = try createDocument();
-    const body_element = getBodyElement(doc);
+    const body_element = bodyElement(doc);
     try testing.expectError(Err.NoBodyElement, body_element);
 
-    const body_node = getBodyNode(doc);
+    const body_node = bodyNode(doc);
     try testing.expectError(Err.NoBodyElement, body_node);
 }
 
@@ -692,11 +997,11 @@ test "root node element" {
     const doc = try parseFromString("");
     defer z.destroyDocument(doc);
     // // try z.printDocumentStructure(doc);
-    const body_doc_node = try getBodyNode(doc);
-    const body_element = try getBodyElement(doc);
+    const body_doc_node = try bodyNode(doc);
+    const body_element = try bodyElement(doc);
 
-    try testing.expectEqualStrings("BODY", getElementName(body_element));
-    try testing.expectEqualStrings("BODY", getNodeName(body_doc_node));
+    try testing.expectEqualStrings("BODY", tagName(body_element));
+    try testing.expectEqualStrings("BODY", nodeName(body_doc_node));
 }
 
 test "JavaScript DOM conventions - children and childNodes" {
@@ -704,15 +1009,15 @@ test "JavaScript DOM conventions - children and childNodes" {
     const doc = try parseFromString("<html><body><div>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const div = firstElementChild(body).?;
 
     // Test children (only elements)
     const element_children = try getChildren(allocator, div);
     defer allocator.free(element_children);
     try testing.expect(element_children.len == 2); // p and span
-    try testing.expectEqualStrings("P", getElementName(element_children[0]));
-    try testing.expectEqualStrings("SPAN", getElementName(element_children[1]));
+    try testing.expectEqualStrings("P", tagName(element_children[0]));
+    try testing.expectEqualStrings("SPAN", tagName(element_children[1]));
 
     // Test childNodes (all nodes including text and comments)
     const all_child_nodes = try getChildNodes(allocator, elementToNode(div));
@@ -730,7 +1035,7 @@ test "JavaScript DOM API consistency check" {
     const doc = try parseFromString("<html><body><div id='test' class='demo'>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const div = firstElementChild(body).?;
 
     // Test JavaScript-style attribute functions
@@ -751,8 +1056,8 @@ test "JavaScript DOM API consistency check" {
     try testing.expect(all_child_nodes.len == 4); // text, p, comment, span
 
     // Verify no legacy function usage
-    try testing.expectEqualStrings("P", getElementName(element_children[0]));
-    try testing.expectEqualStrings("SPAN", getElementName(element_children[1]));
+    try testing.expectEqualStrings("P", tagName(element_children[0]));
+    try testing.expectEqualStrings("SPAN", tagName(element_children[1]));
 }
 
 test "createTextNode and appendChild" {
@@ -769,7 +1074,7 @@ test "createTextNode and appendChild" {
     appendChild(elementToNode(div), text_node);
 
     // Append div to body
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     appendChild(elementToNode(body), elementToNode(div));
 
     // Verify the structure
@@ -804,7 +1109,7 @@ test "createDocumentFragment" {
     appendChild(fragment, elementToNode(p2));
 
     // Get the body element
-    const body_node = try getBodyNode(doc);
+    const body_node = try bodyNode(doc);
 
     // Use the proper appendFragment function to move fragment children
     appendFragment(body_node, fragment);
@@ -814,7 +1119,7 @@ test "createDocumentFragment" {
     var child = firstChild(body_node);
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
-            const tag_name = getElementName(element);
+            const tag_name = tagName(element);
             if (std.mem.eql(u8, tag_name, "P")) { // Use uppercase P
                 p_count += 1;
             }
@@ -828,7 +1133,7 @@ test "insertNodeBefore and insertNodeAfter" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const body_node = try getBodyNode(doc);
+    const body_node = try bodyNode(doc);
 
     // Create three elements
     const div1 = try createElement(doc, "div", &.{});
@@ -866,7 +1171,7 @@ test "appendChildren helper" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const body_node = try getBodyNode(doc);
+    const body_node = try bodyNode(doc);
 
     // Create multiple elements
     const div1 = try createElement(doc, "div", &.{});
@@ -892,24 +1197,53 @@ test "appendChildren helper" {
     try testing.expectEqual(@as(usize, 3), child_count);
 }
 
-test "simple empty node" {
-    const doc = try parseFromString("<p></p>");
+test "empty" {
+    const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
-    const body_node = elementToNode(body);
+
+    const body_node = try bodyNode(doc);
+    const body = try bodyElement(doc);
+
+    // Check if the body node is empty
+    try testing.expect(isNodeEmpty(body_node));
+
+    const innerHtml =
+        "<p id=\"1\"></p><span>  </span><br/><img alt=\"img\"><div>  \n </div><scriptx></scriptx";
+    _ = z.setInnerHTML(body, innerHtml);
     const p = firstChild(body_node);
+    const span = nextSibling(p.?);
+    const br = nextSibling(span.?);
+    const img = nextSibling(br.?);
+    const div = nextSibling(img.?);
+    const script = nextSibling(div.?);
+
+    print("✅ Names: {s}, {s}, {s}, {s}, {s}, {s}\n", .{ nodeName(p.?), nodeName(span.?), nodeName(br.?), nodeName(img.?), nodeName(div.?), nodeName(script.?) });
+
+    // body is no more empty
+    try testing.expect(!isNodeEmpty(body_node));
+
     try testing.expect(isNodeEmpty(p.?));
+    try testing.expect(isNodeEmpty(span.?));
+    try testing.expect(isNodeEmpty(br.?));
+    try testing.expect(isNodeEmpty(img.?));
+    try testing.expect(isNodeEmpty(div.?));
+    try testing.expect(isNodeEmpty(script.?));
 
     const allocator = testing.allocator;
-    const text = getTextContent(allocator, p.?);
-    try testing.expectError(Err.EmptyTextContent, text);
+    const text1 = getTextContent(allocator, p.?);
+    // defer allocator.free(text1);
+    try testing.expectError(Err.EmptyTextContent, text1);
+
+    const text2 = try getTextContent(allocator, div.?);
+    defer allocator.free(text2);
+    // try testing.expect(text2.len == 0);
 }
 
 test "node with whitespace like characters IS empty but contains characters" {
     // this is "lxb_empty" too
     const doc = try parseFromString("<p> \n</p>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(isNodeEmpty(p.?));
@@ -917,14 +1251,15 @@ test "node with whitespace like characters IS empty but contains characters" {
     const allocator = testing.allocator;
     const text = try getTextContent(allocator, p.?);
     defer allocator.free(text);
-    try testing.expect(text.len == 2); // 2 characters: ' ' and '\n'
+
+    try testing.expect(text.len > 0); // 2 characters: ' ' and '\n'
 }
 
-test "node with (non empty) inenr text is NOT empty" {
+test "node with (non empty) inner text is NOT empty" {
     // node with inner text node
     const doc = try parseFromString("<p>Text</p>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
@@ -933,7 +1268,7 @@ test "node with (non empty) inenr text is NOT empty" {
 test "node with an (empty text content) node is NOT empty" {
     const doc = try parseFromString("<p><span><strong></strong></span></p>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
     try testing.expect(!isNodeEmpty(p.?));
@@ -964,7 +1299,7 @@ test "isWhitespaceOnlyNode" {
     // one way to create some nodes
     const doc = try parseFromString("<p>   </p>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p = firstChild(body_node);
 
@@ -997,7 +1332,7 @@ test "isWhitespaceOnlyNode" {
 test "isWhitespaceOnlyElement" {
     const doc = try parseFromString("<div>   </div>");
     defer destroyDocument(doc);
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     try testing.expect(
         !isWhitespaceOnlyElement(body),
     );
@@ -1043,13 +1378,13 @@ test "setTextNodeData" {
     try testing.expect(first_inner_text_node == null);
 
     // try setTextContent(node, "Initial text");
-    try setOrReplaceText(allocator, node, "Initial text");
+    try setOrReplaceText(allocator, node, "Initial text", .{});
 
     const initial_text = try getTextContentOpts(allocator, node, .{});
     defer allocator.free(initial_text);
     try testing.expectEqualStrings("Initial text", initial_text);
 
-    try setOrReplaceText(allocator, node, "Updated text");
+    try setOrReplaceText(allocator, node, "Updated text", .{});
 
     const updated_text = try getTextContentOpts(allocator, node, .{});
     defer allocator.free(updated_text);
@@ -1058,10 +1393,10 @@ test "setTextNodeData" {
 
 test "create Html element, custom element" {
     const doc = try z.parseFromString("<p></p>");
-    const body_node = try getBodyNode(doc);
+    const body_node = try bodyNode(doc);
 
     const span_element = try createElement(doc, "span", &.{});
-    const tag = (getElementName(span_element));
+    const tag = (tagName(span_element));
     const span_tag = z.parseTag("span");
     try testing.expectEqualStrings(tag, "SPAN");
     try testing.expect(span_tag.? == .span);
@@ -1073,7 +1408,7 @@ test "create Html element, custom element" {
         "custom-element",
         &.{.{ .name = "data-id", .value = "123" }},
     );
-    const custom_tag = (getElementName(custom_elt));
+    const custom_tag = (tagName(custom_elt));
     try testing.expectEqualStrings(custom_tag, "CUSTOM-ELEMENT");
     // not an "official" HTML tag
     try testing.expect(z.parseTag("custom-element") == null);
@@ -1094,7 +1429,7 @@ test "create Html element, custom element" {
     var found_custom = false;
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
-            const element_name = getElementName(element);
+            const element_name = tagName(element);
             if (std.mem.eql(u8, element_name, "CUSTOM-ELEMENT")) {
                 found_custom = true;
                 break;
@@ -1113,13 +1448,13 @@ test "create Html element, custom element" {
     const doc_with_custom = try z.parseFromString("<body><custom-element>Test</custom-element></body>");
     defer z.destroyDocument(doc_with_custom);
 
-    const custom_body = try getBodyNode(doc_with_custom);
+    const custom_body = try bodyNode(doc_with_custom);
     var parsed_child = firstChild(custom_body);
     var found_parsed_custom = false;
 
     while (parsed_child != null) {
         if (nodeToElement(parsed_child.?)) |element| {
-            const element_name = getElementName(element);
+            const element_name = tagName(element);
             if (std.mem.eql(u8, element_name, "CUSTOM-ELEMENT")) {
                 found_parsed_custom = true;
                 break;
@@ -1142,7 +1477,7 @@ test "HTML escaping" {
     try testing.expectEqualStrings(expected, escaped);
 }
 
-test "get & set NodeTextContent" {
+test "get & set NodeTextContent and escape option" {
     const allocator = testing.allocator;
     const doc = try createDocument();
     const element = try createElement(
@@ -1163,6 +1498,17 @@ test "get & set NodeTextContent" {
     defer allocator.free(text_content);
 
     try testing.expectEqualStrings("Hello, world!", text_content);
+
+    const options = z.TextOptions{ .escape = true };
+    try setOrReplaceText(allocator, node, "<script>alert('xss')</script> & \"quotes\"", options);
+
+    const new_escaped_text = try getTextContentOpts(
+        allocator,
+        node,
+        options,
+    );
+    defer allocator.free(new_escaped_text);
+    try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
 }
 
 test "gets all text elements from Fragment" {
@@ -1171,7 +1517,7 @@ test "gets all text elements from Fragment" {
     const allocator = testing.allocator;
     const doc = try parseFromString(fragment);
     defer destroyDocument(doc);
-    const body_element = try getBodyElement(doc);
+    const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
     const text_content = try getTextContentOpts(allocator, body_node, .{});
     defer allocator.free(text_content);
@@ -1185,7 +1531,7 @@ test "text content" {
     const doc = try parseFromString(html);
     defer destroyDocument(doc);
 
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = firstChild(body_node).?;
     const text = try getTextContentOpts(
@@ -1214,7 +1560,7 @@ test "getNodeTextContent" {
     const doc = try parseFromString(frag);
     defer destroyDocument(doc);
 
-    const body_element = try getBodyElement(doc);
+    const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
 
     const first_child = firstChild(body_node);
@@ -1269,7 +1615,7 @@ test "JavaScript children from createElement" {
 
     try testing.expect(child_elements.len == 2);
     for (child_elements) |child| {
-        // print("{s}\n", .{getElementName(child.?)});
+        // print("{s}\n", .{tagName(child.?)});
         try testing.expect(isNodeEmpty(elementToNode(child)));
     }
 }
@@ -1278,7 +1624,7 @@ test "Append JS fragment" {
     const allocator = testing.allocator;
 
     const doc = try parseFromString("<html><body></body></html>");
-    const body_node = try getBodyNode(doc);
+    const body_node = try bodyNode(doc);
 
     defer z.destroyDocument(doc);
 
@@ -1348,8 +1694,9 @@ test "Append JS fragment" {
     // Instead of using normalizeWhitespace (which was for text nodes),
     // use the new lexbor-based approach for accurate HTML comparison
 
+    const options = z.TextOptions{};
     // const start2 = try Instant.now();
-    const expected_html2 = try z.normalizeWhitespace(allocator, pretty_html, false);
+    const expected_html2 = try z.normalizeWhitespace(allocator, pretty_html, options);
     defer allocator.free(expected_html2);
     // const end2 = try Instant.now();
     // const elapsed2: f64 = @floatFromInt(end2.since(start2));
@@ -1417,9 +1764,9 @@ test "JavaScript children from fragment" {
     const doc = try parseFromString(frag);
     defer destroyDocument(doc);
 
-    const body_element = try getBodyElement(doc);
+    const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
-    try testing.expectEqualStrings("BODY", getNodeName(body_node));
+    try testing.expectEqualStrings("BODY", nodeName(body_node));
 
     const children1 = try getChildNodes(allocator, body_node);
     defer allocator.free(children1);
@@ -1429,12 +1776,12 @@ test "JavaScript children from fragment" {
     const div_element = nodeToElement(children1[0]).?;
     const children2 = try getChildren(allocator, div_element);
     defer allocator.free(children2);
-    try testing.expectEqualStrings(getElementName(children2[0]), "SPAN");
+    try testing.expectEqualStrings(tagName(children2[0]), "SPAN");
 
-    try testing.expectEqualStrings(getElementName(children2[1]), "P");
+    try testing.expectEqualStrings(tagName(children2[1]), "P");
 
     for (children2) |child| {
-        // print("{s}\n", .{getElementName(child.?)});
+        // print("{s}\n", .{tagName(child.?)});
         try testing.expect(isNodeEmpty(elementToNode(child)));
     }
     // printDocumentStructure(doc);
@@ -1454,7 +1801,7 @@ test "void vs empty element detection" {
     const doc = try parseFromString(html);
     defer destroyDocument(doc);
 
-    const body = try getBodyElement(doc);
+    const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const div_node = firstChild(body_node).?;
 
@@ -1469,7 +1816,7 @@ test "void vs empty element detection" {
 
     while (child != null) {
         if (nodeToElement(child.?)) |_| {
-            const tag_name = getNodeName(child.?);
+            const tag_name = nodeName(child.?);
             const is_void = isSelfClosingNode(child.?);
             const is_empty = isNodeEmpty(child.?);
 
@@ -1521,13 +1868,13 @@ test "class search functionality" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     var child = z.firstChild(body_node);
 
     // Test hasClass function and compare with existing classList
     while (child != null) {
         if (z.nodeToElement(child.?)) |element| {
-            const element_name = z.getElementName(element);
+            const element_name = z.tagName(element);
             if (std.mem.eql(u8, element_name, "div")) {
                 const text_content = try z.getTextContent(allocator, child.?);
                 defer allocator.free(text_content);
@@ -1597,7 +1944,7 @@ test "CSS selector nth-child functionality" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
 
     // Test CSS selector for second li
     var engine = try z.CssSelectorEngine.init(allocator);

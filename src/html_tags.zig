@@ -210,7 +210,7 @@ test "elementTag" {
     // Test creating elements from enum
     const div_elt = try z.createElement(doc, "div", &.{});
 
-    const node_name = z.getNodeName(z.elementToNode(div_elt));
+    const node_name = z.nodeName(z.elementToNode(div_elt));
     const expected_name = HtmlTag.div.toString();
 
     // Note: DOM names are typically uppercase
@@ -224,7 +224,7 @@ test "elementTag" {
         &.{},
     );
 
-    const custom_node_name = z.getNodeName(z.elementToNode(custom_elt));
+    const custom_node_name = z.nodeName(z.elementToNode(custom_elt));
     const custom_expected_name = "custom-element";
 
     // Note: DOM names are typically uppercase
@@ -267,7 +267,7 @@ test "lexbor NODENAME and self.toString" {
 
     for (tags) |tag| {
         const element = try z.createElement(doc, tag.toString(), &.{});
-        const node_name = z.getNodeName(z.elementToNode(element));
+        const node_name = z.nodeName(z.elementToNode(element));
         const expected_name = tag.toString();
 
         // Note: DOM names are typically uppercase
@@ -301,7 +301,7 @@ test "mixing enum and string creation" {
     );
 
     // Verify they work
-    try testing.expectEqualStrings("DIV", z.getNodeName(z.elementToNode(div)));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.getNodeName(z.elementToNode(custom)));
-    try testing.expectEqualStrings("X-WIDGET", z.getNodeName(z.elementToNode(web_component)));
+    try testing.expectEqualStrings("DIV", z.nodeName(z.elementToNode(div)));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName(z.elementToNode(custom)));
+    try testing.expectEqualStrings("X-WIDGET", z.nodeName(z.elementToNode(web_component)));
 }

@@ -23,6 +23,13 @@ pub var default_collection_capacity: u8 = 10;
 // pub const lxb_char_t = u8;
 // pub const lxb_status_t = usize;
 
+pub const TextOptions = struct {
+    escape: bool = false,
+    remove_comments: bool = false,
+    remove_empty_elements: bool = false,
+    keep_new_lines: bool = false,
+};
+
 // CSS selectors
 pub const CssSelectorEngine = css.CssSelectorEngine;
 
@@ -47,13 +54,16 @@ pub const destroyDocument = lxb.destroyDocument;
 pub const parseFromString = lxb.parseFromString;
 pub const createElement = lxb.createElement;
 
-// DOM access and navigation
+// DOM access
 pub const ownerDocument = lxb.ownerDocument;
-pub const getBodyElement = lxb.getBodyElement;
-pub const getBodyNode = lxb.getBodyNode;
+pub const bodyElement = lxb.bodyElement;
+pub const bodyNode = lxb.bodyNode;
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
+pub const nodeToComment = lxb.nodeToComment;
+
+// DOM navigation
 pub const firstChild = lxb.firstChild;
 pub const nextSibling = lxb.nextSibling;
 pub const previousSibling = lxb.previousSibling;
@@ -61,12 +71,6 @@ pub const parentNode = lxb.parentNode;
 pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
 pub const parentElement = lxb.parentElement;
-
-// Node and Element name functions (both safe and unsafe versions)
-pub const getNodeName = lxb.getNodeName;
-pub const getElementName = lxb.getElementName;
-pub const getNodeNameOwned = lxb.getNodeNameOwned;
-pub const getElementNameOwned = lxb.getElementNameOwned;
 
 // DOM Creation and manipulation
 pub const createTextNode = lxb.createTextNode;
@@ -169,26 +173,33 @@ pub const serializeTree = serialize.serializeTree;
 pub const serializeNode = serialize.serializeNode;
 pub const serializeElement = serialize.serializeElement;
 
+// Inner / outer HTML manipulation
+pub const innerHTML = serialize.innerHTML;
+pub const setInnerHTML = serialize.setInnerHTML;
+pub const outerHTML = serialize.outerHTML;
+
 pub const cleanDomTree = cleaner.cleanDomTree;
 pub const normalizeWhitespace = cleaner.normalizeWhitespace;
-pub const normalizeHtmlWithLexbor = cleaner.normalizeHtmlWithLexbor;
-
-// InnerHTML manipulation
-pub const innerHTML = serialize.innerHtml;
-pub const setInnerHTML = serialize.setInnerHtml;
-pub const getElementHTMLAsString = serialize.serializeElement;
 
 // Text content
+
 pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getTextContent = lxb.getTextContent;
 pub const getTextContentsOpts = lxb.getTextContentOpts;
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
+pub const escapeHtml = lxb.escapeHtml;
+
+// Node and Element name functions (both safe and unsafe versions)
+pub const nodeName = lxb.nodeName;
+pub const tagName = lxb.tagName;
+pub const nodeNameOwned = lxb.nodeNameOwned;
+pub const tagNameOwned = lxb.tagNameOwned;
 
 // NodeTypes
 pub const NodeType = Type.NodeType;
-pub const getType = Type.getType;
-pub const getTypeName = Type.getTypeName;
+pub const nodeType = Type.nodeType;
+pub const nodeTypeName = Type.nodeTypeName;
 
 pub const isTypeElement = Type.isTypeElement;
 pub const isTypeComment = Type.isTypeComment;

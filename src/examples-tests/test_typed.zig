@@ -17,7 +17,7 @@ test "typed nodes with HtmlTag enum" {
     const doc = try z.parseHtml(allocator, html);
     defer z.destroyDocument(doc);
 
-    const body = z.getBodyElement(doc).?;
+    const body = z.bodyElement(doc).?;
     const div_element = z.firstChildElement(z.elementToNode(body)).?;
 
     // Test typed tree conversion

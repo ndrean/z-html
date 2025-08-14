@@ -9,7 +9,9 @@
 
 We expose a significant subset of all available functions.
 
-We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
+The function naming follows mostly the `JavaScript` convention.
+
+> We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
 
 **Features:**
 
@@ -38,7 +40,7 @@ test "Append JS fragment" {
   const doc = try parseFromString("<html><body></body></html>");
   defer z.destroyDocument(doc);
 
-  const body_node = try getBodyNode(doc);
+  const body_node = try bodyNode(doc);
 
 
   const fragment = try z.createDocumentFragment(doc);

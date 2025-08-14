@@ -77,13 +77,13 @@ pub const JsonTree = []JsonNode;
 
 /// [tree] Convert DOM node to HtmlNode recursively
 pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
-    const node_type = z.getType(node);
+    const node_type = z.nodeType(node);
 
     switch (node_type) {
         .element => {
             const element = z.nodeToElement(node).?;
             // Use the owned version for safety
-            const tag_name = try z.getNodeNameOwned(allocator, node);
+            const tag_name = try z.nodeNameOwned(allocator, node);
 
             const elt_attrs = try z.getAttributes(allocator, element);
 
@@ -138,12 +138,12 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
 
 /// [json] Convert DOM node to JSON-friendly format
 pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
-    const node_type = z.getType(node);
+    const node_type = z.nodeType(node);
 
     switch (node_type) {
         .element => {
             const element = z.nodeToElement(node).?;
-            const tag_name = try z.getNodeNameOwned(allocator, node);
+            const tag_name = try z.nodeNameOwned(allocator, node);
 
             // Convert attributes to proper format for JSON
             const elt_attrs = try z.getAttributes(allocator, element);
@@ -315,7 +315,7 @@ pub fn printNode(node: HtmlNode, indent: usize) void {
 ///
 /// Caller must free the returned HtmlTree slice
 pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlTree {
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
 
     var tree_list = std.ArrayList(HtmlNode).init(allocator);
     defer tree_list.deinit();
@@ -334,9 +334,9 @@ pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !
 /// [tree] Convert entire document including HTML element (for full document structure)
 pub fn fulldocumentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlNode {
     // Try to get HTML element if it exists
-    const html_element = z.getBodyElement(doc) catch {
+    const html_element = z.bodyElement(doc) catch {
         // Fallback to body if no HTML element found
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
         return try domNodeToTree(allocator, body_node);
     };
 
@@ -349,7 +349,7 @@ pub fn fulldocumentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocumen
 
 /// [json] Convert entire DOM document to JsonTree
 pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonTree {
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
 
     var tree_list = std.ArrayList(JsonNode).init(allocator);
     defer tree_list.deinit();
@@ -367,9 +367,9 @@ pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !J
 /// [json] Convert entire document including HTML element to JSON format
 pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonNode {
     // Try to get HTML element if it exists
-    const html_element = z.getBodyElement(doc) catch {
+    const html_element = z.bodyElement(doc) catch {
         // Fallback to body if no HTML element found
-        const body_node = try z.getBodyNode(doc);
+        const body_node = try z.bodyNode(doc);
         return try domNodeToJson(allocator, body_node);
     };
 
@@ -655,7 +655,7 @@ pub fn roundTripConversion(allocator: std.mem.Allocator, html: []const u8) ![]u8
 pub fn walkTree(node: *z.DomNode, depth: u32) void {
     var child = z.firstChild(node);
     while (child != null) {
-        const name = z.getNodeName(child.?);
+        const name = z.nodeName(child.?);
         const indent = switch (@min(depth, 10)) {
             0 => "",
             1 => "  ",
@@ -675,7 +675,7 @@ pub fn walkTree(node: *z.DomNode, depth: u32) void {
 /// [tree] Debug: print document structure (for debugging)
 pub fn printDocumentStructure(doc: *z.HtmlDocument) !void {
     print("\n--- DOCUMENT STRUCTURE ----\n", .{});
-    const root = try z.getBodyNode(doc);
+    const root = try z.bodyNode(doc);
     walkTree(root, 0);
 }
 
@@ -1096,7 +1096,7 @@ test "complex HTML structure" {
     );
     defer freeHtmlNode(allocator, full_tree);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     try z.cleanDomTree(
         allocator,
         body_node,

@@ -4,7 +4,7 @@
 
 ```zig
 // UNSAFE: Returns a slice pointing to lexbor's internal memory
-pub fn getElementName(element: *DomElement) []const u8 {
+pub fn tagName(element: *DomElement) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);  // C function returns [*:0]const u8
     return std.mem.span(name_ptr);                   // Converts to []const u8 but doesn't copy!
 }
@@ -20,7 +20,7 @@ pub fn getElementName(element: *DomElement) []const u8 {
 
 ```zig
 const element = try createElement(doc, "div", &.{});
-const tag_name = getElementName(element);  // Points to lexbor's memory
+const tag_name = tagName(element);  // Points to lexbor's memory
 destroyNode(elementToNode(element));       // lexbor frees its memory
 // tag_name is now a dangling pointer! 💥
 println("{s}", .{tag_name}); // Undefined behavior
@@ -34,20 +34,20 @@ We now provide **both safe and unsafe versions**:
 
 ```zig
 /// ⚠️ WARNING: Borrows lexbor's memory - use immediately, don't store
-pub fn getElementName(element: *DomElement) []const u8
+pub fn tagName(element: *DomElement) []const u8
 ```
 
 **Use when:**
 
-- Immediate comparisons: `if (std.mem.eql(u8, getElementName(elem), "DIV"))`
-- Immediate printing: `print("Tag: {s}", .{getElementName(elem)})`
+- Immediate comparisons: `if (std.mem.eql(u8, tagName(elem), "DIV"))`
+- Immediate printing: `print("Tag: {s}", .{tagName(elem)})`
 - Short-lived operations within the same function
 
 ### Safe (Allocating) - For Storage
 
 ```zig
 /// ✅ SAFE: Copies to Zig-owned memory - caller must free
-pub fn getElementNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8
+pub fn tagNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8
 ```
 
 **Use when:**
@@ -63,7 +63,7 @@ pub fn getElementNameOwned(allocator: std.mem.Allocator, element: *DomElement) !
 ```zig
 var child = firstElementChild(parent);
 while (child) |element| {
-    const tag = getElementName(element);  // Safe: immediate use
+    const tag = tagName(element);  // Safe: immediate use
     if (std.mem.eql(u8, tag, "P")) {
         count += 1;
     }
@@ -82,7 +82,7 @@ defer {
 
 var child = firstElementChild(parent);
 while (child) |element| {
-    const owned_tag = try getElementNameOwned(allocator, element);
+    const owned_tag = try tagNameOwned(allocator, element);
     try tag_names.append(owned_tag);
     child = nextElementSibling(element);
 }
@@ -94,7 +94,7 @@ while (child) |element| {
 
 ```zig
 pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
-    const tag = getElementName(element);  // Safe: immediate comparison
+    const tag = tagName(element);  // Safe: immediate comparison
     return std.mem.eql(u8, tag, tag_name);
 }
 ```
@@ -103,10 +103,10 @@ pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
 
 | Function | Safety | Performance | Use Case |
 |----------|--------|-------------|----------|
-| `getNodeName()` | ⚠️ Unsafe | Fast | Immediate use only |
-| `getElementName()` | ⚠️ Unsafe | Fast | Immediate use only |
-| `getNodeNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
-| `getElementNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
+| `nodeName()` | ⚠️ Unsafe | Fast | Immediate use only |
+| `tagName()` | ⚠️ Unsafe | Fast | Immediate use only |
+| `nodeNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
+| `tagNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
 
 ## Key Takeaways
 

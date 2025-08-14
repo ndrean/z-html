@@ -12,6 +12,7 @@ pub const LexborError = error{
     NotAnElement,
     NoNode,
     NoBodyElement,
+    NoFirstChild,
     EmptyTextContent,
     SetTextContentFailed,
     ChunkBeginFailed,

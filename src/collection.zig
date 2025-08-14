@@ -221,7 +221,7 @@ pub fn iterator(collection: *z.DomCollection) CollectionIterator {
 /// Caller is responsible for freeing the collection with `destroyCollection`
 pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.DomCollection {
     // Start from the body element but also check the body itself
-    const root = try z.getBodyElement(doc);
+    const root = try z.bodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
 
     if (collectElementsByTagName(root, collection, tag_name)) {
@@ -235,7 +235,7 @@ pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.Dom
 /// [collection] Helper function to recursively collect elements with a specific tag name
 fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection, tag_name: []const u8) bool {
     // Check if current element matches the tag name
-    const element_tag_name = z.getElementName(element);
+    const element_tag_name = z.tagName(element);
     if (std.mem.eql(u8, element_tag_name, tag_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
         if (status != 0) return false;
@@ -273,7 +273,7 @@ pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollect
 ///
 /// If you want to detect multiple IDs, use `getElementsByAttributePair`.
 pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
-    const root = try z.getBodyElement(doc);
+    const root = try z.bodyElement(doc);
 
     const collection = createSingleElementCollection(doc) orelse return Err.CollectionFailed;
     defer destroyCollection(collection);
@@ -307,7 +307,7 @@ pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
 ///
 /// Caller is responsible for freeing the return collection with `destroyCollection`
 pub fn getElementsByAttributePair(doc: *z.HtmlDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
-    const root = try z.getBodyElement(doc);
+    const root = try z.bodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return null;
     const name = attr.name;
     const value = attr.value;
@@ -372,7 +372,7 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 /// ```
 ///
 pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
-    const root = try z.getBodyElement(doc);
+    const root = try z.bodyElement(doc);
     const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
     if (collectElementsWithAttribute(root, collection, attr_name)) {
@@ -904,7 +904,7 @@ test "elementHasAnyAttribute performance demonstration" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const first_child = z.firstChild(z.elementToNode(body)) orelse return error.NoChild;
     const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
 
@@ -1142,7 +1142,7 @@ test "getElementsByTagName functionality" {
         // Verify all found elements are indeed paragraphs
         for (0..getCollectionLength(paragraphs)) |i| {
             const element = getCollectionElementAt(paragraphs, i).?;
-            const tag_name = z.getElementName(element);
+            const tag_name = z.tagName(element);
             try testing.expect(std.mem.eql(u8, tag_name, "P"));
         }
     }

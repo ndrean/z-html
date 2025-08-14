@@ -377,7 +377,7 @@ pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HtmlDocument, sele
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     const nodes = try css_engine.querySelectorAll(body_node, selector);
@@ -403,7 +403,7 @@ pub fn querySelector(allocator: std.mem.Allocator, doc: *z.HtmlDocument, selecto
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     const node = try css_engine.querySelector(body_node, selector);
@@ -437,7 +437,7 @@ test "CSS selector basic functionality" {
     // print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
     try testing.expect(id_elements.len == 1);
 
-    const element_name = z.getNodeName(z.elementToNode(id_elements[0]));
+    const element_name = z.nodeName(z.elementToNode(id_elements[0]));
     // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
 }
@@ -462,7 +462,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(first_target != null);
 
     if (first_target) |element| {
-        const tag_name = z.getElementName(element);
+        const tag_name = z.tagName(element);
         try testing.expectEqualStrings("P", tag_name); // Should be the first <p>
     }
 
@@ -476,7 +476,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(unique_element != null);
 
     if (unique_element) |element| {
-        const tag_name = z.getElementName(element);
+        const tag_name = z.tagName(element);
         try testing.expectEqualStrings("P", tag_name);
     }
 
@@ -507,7 +507,7 @@ test "CssSelectorEngine querySelector (low-level) functionality" {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     // Test 1: Engine querySelector should return first matching node
@@ -520,7 +520,7 @@ test "CssSelectorEngine querySelector (low-level) functionality" {
         try testing.expect(element != null);
 
         if (element) |el| {
-            const tag_name = z.getElementName(el);
+            const tag_name = z.tagName(el);
             try testing.expectEqualStrings("P", tag_name);
         }
     }
@@ -577,8 +577,8 @@ test "querySelector performance vs querySelectorAll[0]" {
     try testing.expect(target1.? == target2);
 
     // Test that querySelector actually stops early (both should work, but querySelector is more efficient)
-    const tag_name1 = z.getElementName(target1.?);
-    const tag_name2 = z.getElementName(target2);
+    const tag_name1 = z.tagName(target1.?);
+    const tag_name2 = z.tagName(target2);
     try testing.expectEqualStrings(tag_name1, tag_name2);
     try testing.expectEqualStrings("P", tag_name1);
 }
@@ -590,7 +590,7 @@ test "CSS selector engine reuse" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     // Create engine once, use multiple times
@@ -623,7 +623,7 @@ test "challenging CSS selectors - lexbor example" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.getBodyElement(doc);
+    const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
     var css_engine = try CssSelectorEngine.init(allocator);
@@ -653,12 +653,12 @@ test "challenging CSS selectors - lexbor example" {
 
     // Verify the results
     // for (first_results, 0..) |node, i| {
-    //     const node_name = z.getNodeName(node);
+    //     const node_name = z.nodeName(node);
     //     print("First result {d}: {s}\n", .{ i, node_name });
     // }
 
     // for (second_results, 0..) |node, i| {
-    //     const node_name = z.getNodeName(node);
+    //     const node_name = z.nodeName(node);
     //     print("Second result {d}: {s}\n", .{ i, node_name });
     // }
 }
@@ -709,7 +709,7 @@ test "CSS selector edge cases" {
         const doc = try z.parseFromString(test_case.html);
         defer z.destroyDocument(doc);
 
-        const body = try z.getBodyElement(doc);
+        const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
         const results = try css_engine.querySelectorAll(body_node, test_case.selector);
@@ -733,7 +733,7 @@ test "debug what classes lexbor sees" {
     const collection = z.createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
     defer z.destroyCollection(collection);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const container_div_element = z.nodeToElement(container_div);
     const class_result = try z.classList(
@@ -802,7 +802,7 @@ test "CSS selector matchNode vs find vs matches" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const red_box = z.firstChild(container_div).?;
     const blue_box = z.nextSibling(red_box).?;
@@ -878,7 +878,7 @@ test "query vs filter behavior" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const box_div = z.firstChild(container_div).?;
     const paragraph = z.nextSibling(box_div).?;

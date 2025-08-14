@@ -13,7 +13,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
     const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
 
     const html = try z.serializeTree(
         allocator,
@@ -53,7 +53,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 
 //     for (elements) |element| {
 //         _ = element;
-//         // print("{s}\n", .{z.getElementName(element)});
+//         // print("{s}\n", .{z.tagName(element)});
 //     }
 
 //     // for (elements) |element| {
@@ -63,12 +63,12 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 //     //         // const value = try z.getAttributeValue(allocator, attribute);
 //     //         // defer allocator.free(value);
 //     //         // print("Element: {s}, Attribute: {s} = {s}\n", .{
-//     //         //     z.getElementName(element),
+//     //         //     z.tagName(element),
 //     //         //     name,
 //     //         //     value,
 //     //         // });
 //     //     } else {
-//     //         // print("Element: {s} has no attributes\n", .{z.getElementName(element)});
+//     //         // print("Element: {s} has no attributes\n", .{z.tagName(element)});
 //     //     }
 //     // }
 // }
@@ -76,7 +76,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 fn demonstrateAttributes(html: []const u8) !void {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
-    const body_node = try z.getBodyNode(doc);
+    const body_node = try z.bodyNode(doc);
     const div = z.firstChild(body_node).?;
 
     try writer.print("Demonstrating attribute iteration:\n", .{});
