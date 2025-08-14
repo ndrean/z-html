@@ -110,10 +110,9 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
         },
 
         .text => {
-            const text_content = try z.getTextContentsOpts(
+            const text_content = try z.getTextContent(
                 allocator,
                 node,
-                .{}, // options, e.g.: .{ .escape = true },
             );
             return HtmlNode{ .text = text_content };
         },
@@ -186,10 +185,9 @@ pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
         },
 
         .text => {
-            const text_content = try z.getTextContentsOpts(
+            const text_content = try z.getTextContent(
                 allocator,
                 node,
-                .{},
             );
             return JsonNode{
                 .text = .{

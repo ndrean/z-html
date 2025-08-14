@@ -28,6 +28,7 @@ pub const TextOptions = struct {
     remove_comments: bool = false,
     remove_empty_elements: bool = false,
     keep_new_lines: bool = false,
+    allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
 
 // CSS selectors
@@ -175,7 +176,8 @@ pub const serializeElement = serialize.serializeElement;
 
 // Inner / outer HTML manipulation
 pub const innerHTML = serialize.innerHTML;
-pub const setInnerHTML = serialize.setInnerHTML;
+pub const setInnerHTML = serialize.setInnerHTML; // Security-first API with TextOptions
+// pub const setInnerHTMLUnsafe = serialize.setInnerHTMLUnsafe; // Direct lexbor access
 pub const outerHTML = serialize.outerHTML;
 
 pub const cleanDomTree = cleaner.cleanDomTree;
@@ -185,7 +187,6 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 
 pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getTextContent = lxb.getTextContent;
-pub const getTextContentsOpts = lxb.getTextContentOpts;
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;

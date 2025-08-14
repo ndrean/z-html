@@ -25,34 +25,35 @@ The function naming follows mostly the `JavaScript` convention.
 - DOM node manipulation
 - Search by attribute with collections.
 
-## Quick start
+## Examples
 
 The API closely follows JavaScript DOM conventions.
 
-### Insert a document fragment and serialization
+### Build a fragment, inject it and serialization
+
+Use `JavaScript` semantics on the server!
 
 ```c
+const std = @import("std");
 const z = @import("zhtml.zig");
 
 test "Append JS fragment" {
-  const allocator = testing.allocator;
+  const allocator = std.testing.allocator;
 
-  const doc = try parseFromString("<html><body></body></html>");
+  // create the skeleton <html><body></body></html>
+  const doc = try parseFromString("");
   defer z.destroyDocument(doc);
 
   const body_node = try bodyNode(doc);
 
-
   const fragment = try z.createDocumentFragment(doc);
 
-  const div = try z.createElement(
-      doc,
-      "div",
+  // create with attributes
+  const div = try z.createElement(doc,"div",
       &.{.{ .name = "class", .value = "container-list" }},
   );
 
   const div_node = elementToNode(div);
-
   const comment_node = try z.createComment(doc, "a comment");
   z.appendChild(div_node, commentToNode(comment_node));
 
@@ -60,38 +61,29 @@ test "Append JS fragment" {
   const ul_node = elementToNode(ul);
 
   for (1..4) |i| {
-    // Convert integer to ASCII digit
-    const digit_char = @as(u8, @intCast(i)) + '0';
-    const value_str = &[_]u8{digit_char};
+    // we use alternatively `innerHTML`
+    const content = try std.fmt.allocPrint(allocator,
+            "<li data-id=\"{d}\">Item {d}</li>",
+            .{ i, i },
+      );
+    defer allocator.free(content);
 
-   const li = try z.createElement(
-      doc,
-      "li",
-       &.{.{ .name = "data-id", .value = value_str }},
-    );
+    const temp_elt = try createElement(doc, "div", &.{});
+    const temp_div = elementToNode(temp_elt);
 
-    const li_node = elementToNode(li);
+    _ = try z.setInnerHTML(allocator, temp_elt, content,.{});
 
-    const text_content = try std.fmt.allocPrint(
-      testing.allocator,
-      "Item {d}",
-      .{i},
-    );
-    defer allocator.free(text_content);
-
-    const text_node = try z.createTextNode(doc, text_content);
-    z.appendChild(li_node, text_node);
-    z.appendChild(ul_node, li_node);
+    if (firstChild(temp_div)) |li_node| 
+          appendChild(ul_node, li_node);
+      
+    destroyNode(temp_div);
   }
 
   z.appendChild(div_node, ul_node);
   z.appendChild(fragment, div_node);
-
-  // batch it into the DOM
   z.appendFragment(body_node, fragment);
 
   const fragment_txt = try z.serializeTree(allocator, div_node);
-
   defer allocator.free(fragment_txt);
 
   const pretty_expected =
@@ -105,8 +97,8 @@ test "Append JS fragment" {
         \\</div>
     ;
 
-  const expected = try z.normalizeWhitespace(allocator, pretty_html);
-  defer allocator.free(expected_html);
+  const expected = try z.normalizeWhitespace(allocator, pretty_expected);
+  defer allocator.free(expected);
   
   try testing.expectEqualStrings(expected,fragment_txt);
 }
@@ -116,7 +108,7 @@ test "Append JS fragment" {
 
 ```c
   // continue
-  try z.printDocumentStructure(doc)
+  try z.debugDocumentStructure(doc)
 ```
 
 ```txt

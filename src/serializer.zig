@@ -107,10 +107,34 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     return result.toOwnedSlice();
 }
 
-/// [Serialize] Sets / replaces element's inner HTML.
+/// [Serialize] Sets / replaces element's inner HTML with security controls.
 ///
-/// Returns the updated element
-pub fn setInnerHTML(element: *z.DomElement, inner: []const u8) *z.DomElement {
+/// If options.allow_html is true: parses content as HTML (DANGEROUS - only for trusted content)
+/// If options.allow_html is false: treats content as safe text (escapes HTML if options.escape is true)
+///
+/// Returns the updated element or error if escaping fails
+pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.DomElement, content: []const u8, options: z.TextOptions) !*z.DomElement {
+    if (options.allow_html) {
+        // Developer explicitly allowed HTML parsing - use at your own risk
+        return lxb_html_element_inner_html_set(element, content.ptr, content.len);
+    } else {
+        // Safe path: treat as text content only
+        const final_content = if (options.escape)
+            try z.escapeHtml(allocator, content)
+        else
+            content;
+        defer if (options.escape) allocator.free(final_content);
+
+        try z.setTextContent(z.elementToNode(element), final_content);
+        return element;
+    }
+}
+
+/// [Serialize] UNSAFE: Sets element's inner HTML directly without safety checks.
+///
+/// Only use when you're certain the content is safe HTML.
+/// For user content, use setInnerHTML() with TextOptions instead.
+fn setInnerHTMLUnsafe(element: *z.DomElement, inner: []const u8) *z.DomElement {
     return lxb_html_element_inner_html_set(
         element,
         inner.ptr,
@@ -135,7 +159,7 @@ test "innerHTML" {
     var div = try z.createElement(doc, "div", &.{});
 
     // test 1 --------------
-    div = setInnerHTML(div, "<p id=\"1\">Hello <strong>World</strong></p>");
+    div = setInnerHTMLUnsafe(div, "<p id=\"1\">Hello <strong>World</strong></p>");
     const inner1 = try innerHTML(allocator, div);
     defer allocator.free(inner1);
 
@@ -156,7 +180,7 @@ test "innerHTML" {
     ;
 
     // test 2 --------------
-    div = setInnerHTML(div, complex_html);
+    div = setInnerHTMLUnsafe(div, complex_html);
 
     const inner2 = try innerHTML(allocator, div);
     defer allocator.free(inner2);
@@ -215,7 +239,7 @@ test "set innerHTML" {
         "<div><span>blah-blah-blah</span></div>",
     );
 
-    const element = setInnerHTML(div_elt.?, inner);
+    const element = setInnerHTMLUnsafe(div_elt.?, inner);
     const serialized = try serializeElement(allocator, element);
     defer allocator.free(serialized);
 
@@ -224,7 +248,7 @@ test "set innerHTML" {
         "<div><ul><li>1</li><li>2</li><li>3</li></ul></div>",
     );
 
-    const set_new_body = setInnerHTML(
+    const set_new_body = setInnerHTMLUnsafe(
         body,
         "<p>New body content</p>",
     );
@@ -367,6 +391,71 @@ test "behaviour of serializeNode" {
     }
 }
 
+test "setInnerHTML security model" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const div = try z.createElement(doc, "div", &.{});
+
+    // Test 1: Malicious content treated as safe text (default behavior)
+    const malicious_content = "<script>alert('XSS')</script><p>Safe text</p>";
+
+    _ = try setInnerHTML(allocator, div, malicious_content, .{ .allow_html = false });
+
+    const safe_result = try innerHTML(allocator, div);
+    defer allocator.free(safe_result);
+
+    print("\nTest 1 (safe text): {s}\n", .{safe_result});
+
+    // Should NOT contain parsed script tag - should be HTML-escaped text
+    try testing.expect(std.mem.indexOf(u8, safe_result, "<script>") == null);
+    try testing.expect(std.mem.indexOf(u8, safe_result, "&lt;script&gt;") != null);
+
+    // Test 2: With explicit escaping enabled
+    _ = try setInnerHTML(
+        allocator,
+        div,
+        malicious_content,
+        .{ .escape = true, .allow_html = false },
+    );
+
+    const escaped_result = try innerHTML(allocator, div);
+    defer allocator.free(escaped_result);
+
+    print("Test 2 (escaped): {s}\n", .{escaped_result});
+
+    // Should be double-escaped text (& becomes &amp;)
+    try testing.expect(std.mem.indexOf(u8, escaped_result, "&amp;lt;script&amp;gt;") != null);
+
+    // Test 3: Developer explicitly allows HTML (dangerous but intentional)
+    const trusted_content = "<p class=\"safe\">This is trusted template content</p>";
+
+    _ = try setInnerHTML(allocator, div, trusted_content, .{ .allow_html = true });
+
+    const html_result = try innerHTML(allocator, div);
+    defer allocator.free(html_result);
+
+    print("Test 3 (trusted HTML): {s}\n", .{html_result});
+
+    // Should contain parsed HTML since developer explicitly allowed it
+    try testing.expect(std.mem.indexOf(u8, html_result, "<p class=\"safe\">") != null);
+    try testing.expect(std.mem.indexOf(u8, html_result, "trusted template") != null);
+
+    // Test 4: Even with allow_html=true, developer should be cautious
+    _ = try setInnerHTML(allocator, div, malicious_content, .{ .allow_html = true });
+
+    const dangerous_result = try innerHTML(allocator, div);
+    defer allocator.free(dangerous_result);
+
+    print("Test 4 (DANGEROUS - allow_html=true): {s}\n", .{dangerous_result});
+
+    // This WILL contain script tag - developer responsibility!
+    try testing.expect(std.mem.indexOf(u8, dangerous_result, "<script>") != null);
+
+    print("✅ Security model tests passed!\n", .{});
+}
 test "serializeNode vs serializeTree comparison" {
     const allocator = testing.allocator;
 

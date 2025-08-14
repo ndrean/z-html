@@ -753,25 +753,6 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     return result;
 }
 
-/// [core] Get text content with option to escape (default behavior is `.{.escape = false}`)
-///
-/// If you need escaping, use `getNodeTextContentOpts` with `escape: true`.
-///
-/// Caller must free the returned slice.
-pub fn getTextContentOpts(allocator: std.mem.Allocator, node: *DomNode, opts: z.TextOptions) ![]u8 {
-    const raw_text = try getTextContent(
-        allocator,
-        node,
-    );
-    defer allocator.free(raw_text);
-
-    if (opts.escape) {
-        return escapeHtml(allocator, raw_text);
-    } else {
-        return allocator.dupe(u8, raw_text);
-    }
-}
-
 /// [core] Set text content on empty node from Zig string
 pub fn setTextContent(node: *DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
@@ -799,10 +780,9 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []co
         return try setTextContent(node, final_text);
     }
 
-    const current_text = try getTextContentOpts(
+    const current_text = try getTextContent(
         allocator,
         node,
-        .{}, // Don't escape when reading existing content
     );
     defer allocator.free(current_text);
     const status = lxb_dom_character_data_replace(
@@ -819,10 +799,9 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []co
 ///
 /// Needs to be freed by caller
 pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![]u8 {
-    const inner_text = try getTextContentOpts(
+    const inner_text = try getTextContent(
         allocator,
         commentToNode(comment),
-        .{},
     );
     return inner_text;
 }
@@ -912,10 +891,6 @@ pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
     const node = elementToNode(element);
     return isWhitespaceOnlyNode(node);
 }
-
-// =============================================================================
-// DOM CLEANING : HTML aware version
-// =============================================================================
 
 // =====================================================================
 // Tests
@@ -1012,7 +987,7 @@ test "root node element" {
     try testing.expectEqualStrings("BODY", nodeName(body_doc_node));
 }
 
-test "JavaScript DOM conventions - children and childNodes" {
+test "children and childNodes" {
     const allocator = testing.allocator;
     const doc = try parseFromString("<html><body><div>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
@@ -1038,7 +1013,7 @@ test "JavaScript DOM conventions - children and childNodes" {
     try testing.expect(legacy_children.len == element_children.len);
 }
 
-test "JavaScript DOM API consistency check" {
+test "consistency check" {
     const allocator = testing.allocator;
     const doc = try parseFromString("<html><body><div id='test' class='demo'>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
@@ -1072,27 +1047,18 @@ test "createTextNode and appendChild" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    // Create a div element
     const div = try createElement(doc, "div", &.{});
-
-    // Create a text node
     const text_node = try createTextNode(doc, "Hello, World!");
-
-    // Append text to div
     appendChild(elementToNode(div), text_node);
-
-    // Append div to body
     const body = try bodyElement(doc);
     appendChild(elementToNode(body), elementToNode(div));
 
-    // Verify the structure
     const body_node = elementToNode(body);
     const first_child = firstChild(body_node).?;
     const div_from_tree = nodeToElement(first_child).?;
 
     try testing.expect(div == div_from_tree);
 
-    // Check that div has the text content
     const div_first_child = firstChild(elementToNode(div_from_tree));
     try testing.expect(div_first_child != null);
     try testing.expect(z.isTypeText(div_first_child.?));
@@ -1102,10 +1068,7 @@ test "createDocumentFragment" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    // Create a document fragment
     const fragment = try createDocumentFragment(doc);
-
-    // Create multiple elements and add them to the fragment
     const p1 = try createElement(doc, "p", &.{});
     const p2 = try createElement(doc, "p", &.{});
     const text1 = try createTextNode(doc, "First paragraph");
@@ -1116,19 +1079,15 @@ test "createDocumentFragment" {
     appendChild(fragment, elementToNode(p1));
     appendChild(fragment, elementToNode(p2));
 
-    // Get the body element
     const body_node = try bodyNode(doc);
-
-    // Use the proper appendFragment function to move fragment children
     appendFragment(body_node, fragment);
 
-    // Count P elements in the body
     var p_count: usize = 0;
     var child = firstChild(body_node);
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
             const tag_name = tagName(element);
-            if (std.mem.eql(u8, tag_name, "P")) { // Use uppercase P
+            if (std.mem.eql(u8, tag_name, "P")) {
                 p_count += 1;
             }
         }
@@ -1143,18 +1102,14 @@ test "insertNodeBefore and insertNodeAfter" {
 
     const body_node = try bodyNode(doc);
 
-    // Create three elements
     const div1 = try createElement(doc, "div", &.{});
     const div2 = try createElement(doc, "div", &.{});
     const div3 = try createElement(doc, "div", &.{});
 
-    // Since insertNodeBefore/After don't work in current Lexbor version,
-    // let's test that basic appendChild works correctly for multiple elements
     appendChild(body_node, elementToNode(div1));
     appendChild(body_node, elementToNode(div2));
     appendChild(body_node, elementToNode(div3));
 
-    // Verify that all three elements were added
     var element_count: usize = 0;
     var child = firstChild(body_node);
     while (child != null) {
@@ -1166,7 +1121,7 @@ test "insertNodeBefore and insertNodeAfter" {
 
     try testing.expectEqual(@as(usize, 3), element_count);
 
-    // Verify we can access them in order
+    // Verify order
     const first_child = z.firstChild(body_node).?;
     const second_child = nextSibling(first_child).?;
     const third_child = nextSibling(second_child).?;
@@ -1181,17 +1136,14 @@ test "appendChildren helper" {
 
     const body_node = try bodyNode(doc);
 
-    // Create multiple elements
     const div1 = try createElement(doc, "div", &.{});
     const div2 = try createElement(doc, "p", &.{});
     const div3 = try createElement(doc, "span", &.{});
 
     const child_nodes = [_]*DomNode{ elementToNode(div1), elementToNode(div2), elementToNode(div3) };
 
-    // Append all children at once
     appendChildren(body_node, child_nodes[0..]);
 
-    // Verify all children were added
     var child_count: usize = 0;
     var child = firstChild(body_node);
 
@@ -1205,19 +1157,19 @@ test "appendChildren helper" {
     try testing.expectEqual(@as(usize, 3), child_count);
 }
 
-test "empty" {
+test "what is empty?" {
+    const allocator = testing.allocator;
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const body_node = try bodyNode(doc);
     const body = try bodyElement(doc);
 
-    // Check if the body node is empty
     try testing.expect(isNodeEmpty(body_node));
 
     const innerHtml =
         "<p id=\"1\"></p><span>  </span><br/><img alt=\"img\"><div>  \n </div><scriptx></scriptx";
-    _ = z.setInnerHTML(body, innerHtml);
+    _ = try z.setInnerHTML(allocator, body, innerHtml, .{});
     const p = firstChild(body_node);
     const span = nextSibling(p.?);
     const br = nextSibling(span.?);
@@ -1225,11 +1177,7 @@ test "empty" {
     const div = nextSibling(img.?);
     const script = nextSibling(div.?);
 
-    print("✅ Names: {s}, {s}, {s}, {s}, {s}, {s}\n", .{ nodeName(p.?), nodeName(span.?), nodeName(br.?), nodeName(img.?), nodeName(div.?), nodeName(script.?) });
-
-    // body is no more empty
     try testing.expect(!isNodeEmpty(body_node));
-
     try testing.expect(isNodeEmpty(p.?));
     try testing.expect(isNodeEmpty(span.?));
     try testing.expect(isNodeEmpty(br.?));
@@ -1237,30 +1185,13 @@ test "empty" {
     try testing.expect(isNodeEmpty(div.?));
     try testing.expect(isNodeEmpty(script.?));
 
-    const allocator = testing.allocator;
     const text1 = getTextContent(allocator, p.?);
-    // defer allocator.free(text1);
     try testing.expectError(Err.EmptyTextContent, text1);
 
+    // DIv is empty but contains whotespace like characters.
     const text2 = try getTextContent(allocator, div.?);
     defer allocator.free(text2);
-    // try testing.expect(text2.len == 0);
-}
-
-test "node with whitespace like characters IS empty but contains characters" {
-    // this is "lxb_empty" too
-    const doc = try parseFromString("<p> \n</p>");
-    defer destroyDocument(doc);
-    const body = try bodyElement(doc);
-    const body_node = elementToNode(body);
-    const p = firstChild(body_node);
-    try testing.expect(isNodeEmpty(p.?));
-
-    const allocator = testing.allocator;
-    const text = try getTextContent(allocator, p.?);
-    defer allocator.free(text);
-
-    try testing.expect(text.len > 0); // 2 characters: ' ' and '\n'
+    try testing.expect(text2.len == 4); // 3 ' ' and 1 '\n'
 }
 
 test "node with (non empty) inner text is NOT empty" {
@@ -1368,7 +1299,7 @@ test "isWhitespaceOnlyElement" {
 
     // but its text content IS empty.
     const allocator = testing.allocator;
-    const txt = try getTextContentOpts(allocator, div, .{});
+    const txt = try getTextContent(allocator, div);
     defer allocator.free(txt);
     try testing.expect(isWhitespaceOnlyText(txt));
 }
@@ -1388,23 +1319,23 @@ test "setTextNodeData" {
     // try setTextContent(node, "Initial text");
     try setOrReplaceText(allocator, node, "Initial text", .{});
 
-    const initial_text = try getTextContentOpts(allocator, node, .{});
+    const initial_text = try getTextContent(allocator, node);
     defer allocator.free(initial_text);
     try testing.expectEqualStrings("Initial text", initial_text);
 
     try setOrReplaceText(allocator, node, "Updated text", .{});
 
-    const updated_text = try getTextContentOpts(allocator, node, .{});
+    const updated_text = try getTextContent(allocator, node);
     defer allocator.free(updated_text);
     try testing.expectEqualStrings("Updated text", updated_text);
 }
 
-test "create Html element, custom element" {
+test "create Html element, parseTag, custom element" {
     const doc = try z.parseFromString("<p></p>");
     const body_node = try bodyNode(doc);
 
     const span_element = try createElement(doc, "span", &.{});
-    const tag = (tagName(span_element));
+    const tag = tagName(span_element);
     const span_tag = z.parseTag("span");
     try testing.expectEqualStrings(tag, "SPAN");
     try testing.expect(span_tag.? == .span);
@@ -1498,10 +1429,9 @@ test "get & set NodeTextContent and escape option" {
 
     try setTextContent(node, "Hello, world!");
 
-    const text_content = try getTextContentOpts(
+    const text_content = try getTextContent(
         allocator,
         node,
-        .{},
     );
     defer allocator.free(text_content);
 
@@ -1510,10 +1440,9 @@ test "get & set NodeTextContent and escape option" {
     const options = z.TextOptions{ .escape = true };
     try setOrReplaceText(allocator, node, "<script>alert('xss')</script> & \"quotes\"", options);
 
-    const new_escaped_text = try getTextContentOpts(
+    const new_escaped_text = try getTextContent(
         allocator,
         node,
-        .{}, // Don't escape when reading - it was already escaped during insertion
     );
     defer allocator.free(new_escaped_text);
     try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
@@ -1527,7 +1456,7 @@ test "gets all text elements from Fragment" {
     defer destroyDocument(doc);
     const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
-    const text_content = try getTextContentOpts(allocator, body_node, .{});
+    const text_content = try getTextContent(allocator, body_node);
     defer allocator.free(text_content);
     try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
 }
@@ -1542,20 +1471,18 @@ test "text content" {
     const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = firstChild(body_node).?;
-    const text = try getTextContentOpts(
+    const text = try getTextContent(
         allocator,
         p_node,
-        .{},
     );
     defer allocator.free(text);
 
     try testing.expectEqualStrings("Hello World!", text);
     const text_node = firstChild(p_node);
     const strong_node = nextSibling(text_node.?);
-    const strong_text = try getTextContentOpts(
+    const strong_text = try getTextContent(
         allocator,
         strong_node.?,
-        .{},
     );
     defer allocator.free(strong_text);
     // print("Strong text: {s}\n", .{strong_text});
@@ -1574,20 +1501,17 @@ test "getNodeTextContent" {
     const first_child = firstChild(body_node);
     const second_child = nextSibling(first_child.?);
 
-    const all_text = try getTextContentOpts(
+    const all_text = try getTextContent(
         allocator,
         body_node,
-        .{},
     );
-    const first_text = try getTextContentOpts(
+    const first_text = try getTextContent(
         allocator,
         first_child.?,
-        .{},
     );
-    const second_text = try getTextContentOpts(
+    const second_text = try getTextContent(
         allocator,
         second_child.?,
-        .{},
     );
 
     defer allocator.free(all_text);
@@ -1990,6 +1914,107 @@ test "CSS selector nth-child functionality" {
     }
 }
 
+test "show" {
+    const allocator = testing.allocator;
+
+    const doc = try parseFromString("");
+    defer z.destroyDocument(doc);
+
+    const body_node = try bodyNode(doc);
+
+    const fragment = try z.createDocumentFragment(doc);
+
+    const div = try z.createElement(
+        doc,
+        "div",
+        &.{.{ .name = "class", .value = "container-list" }},
+    );
+
+    const div_node = elementToNode(div);
+
+    const comment_node = try z.createComment(doc, "a comment");
+    z.appendChild(div_node, commentToNode(comment_node));
+
+    const ul = try z.createElement(doc, "ul", &.{});
+    const ul_node = elementToNode(ul);
+
+    for (1..4) |i| {
+        const inner_content = try std.fmt.allocPrint(
+            allocator,
+            "<li data-id=\"{d}\">Item {d}</li>",
+            .{ i, i },
+        );
+        defer allocator.free(inner_content);
+
+        const temp_div_elt = try createElement(doc, "div", &.{});
+        const temp_div = elementToNode(temp_div_elt);
+
+        _ = try z.setInnerHTML(
+            allocator,
+            temp_div_elt,
+            inner_content,
+            .{},
+        );
+
+        // Move the LI element to the UL
+        if (firstChild(temp_div)) |li_node|
+            appendChild(ul_node, li_node);
+
+        destroyNode(temp_div);
+    }
+
+    // for (1..4) |i| {
+    // Convert integer to ASCII digit
+    //     const digit_char = @as(u8, @intCast(i)) + '0';
+    //     const value_str = &[_]u8{digit_char};
+
+    //    const li = try z.createElement(
+    //       doc,
+    //       "li",
+    //        &.{.{ .name = "data-id", .value = value_str }},
+    //     );
+
+    //     const li_node = elementToNode(li);
+
+    //     const text_content = try std.fmt.allocPrint(
+    //       testing.allocator,
+    //       "Item {d}",
+    //       .{i},
+    //     );
+    //     defer allocator.free(text_content);
+
+    //     const text_node = try z.createTextNode(doc, text_content);
+    //     z.appendChild(li_node, text_node);
+    //     z.appendChild(ul_node, li_node);
+    // }
+
+    z.appendChild(div_node, ul_node);
+    z.appendChild(fragment, div_node);
+
+    // batch it into the DOM
+    z.appendFragment(body_node, fragment);
+
+    const fragment_txt = try z.serializeTree(allocator, div_node);
+
+    defer allocator.free(fragment_txt);
+
+    const pretty_expected =
+        \\<div class="container-list">
+        \\  <!--a comment-->
+        \\  <ul>
+        \\      <li data-id="1">Item 1</li>
+        \\      <li data-id="2">Item 2</li>
+        \\      <li data-id="3">Item 3</li>
+        \\  </ul>
+        \\</div>
+    ;
+
+    const expected = try z.normalizeWhitespace(allocator, pretty_expected, .{});
+    defer allocator.free(expected);
+
+    try testing.expectEqualStrings(expected, fragment_txt);
+}
+
 test "Performance comparison: Character-based vs Lexbor-based HTML normalization" {
     // const allocator = testing.allocator;
 
@@ -2143,4 +2168,104 @@ test "Performance comparison: Character-based vs Lexbor-based HTML normalization
         \\</html>
     ;
     _ = complex_html;
+}
+
+test "practical string-to-DOM scenarios" {
+    const allocator = testing.allocator;
+
+    print("\n=== Practical String-to-DOM Scenarios ===\n", .{});
+
+    // Scenario 1: Full page parsing with parseFromString
+    print("\n1. Full HTML Document Parsing:\n", .{});
+    const full_page =
+        \\<!DOCTYPE html>
+        \\<html>
+        \\<head><title>My Page</title></head>
+        \\<body>
+        \\  <h1>Welcome</h1>
+        \\  <p>Content here</p>
+        \\</body>
+        \\</html>
+    ;
+
+    const doc = try parseFromString(full_page);
+    defer destroyDocument(doc);
+
+    const body = try bodyElement(doc);
+    const page_content = try z.serializeElement(allocator, body);
+    defer allocator.free(page_content);
+
+    print("   Use case: Loading complete HTML documents\n", .{});
+    print("   Result: '{s}'\n", .{page_content});
+
+    // Scenario 2: Template fragment insertion with setInnerHTML
+    print("\n2. Dynamic Content Insertion:\n", .{});
+    const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
+    defer destroyDocument(template_doc);
+
+    const content_div = try z.getElementById(template_doc, "content");
+
+    // Simulate user data
+    const user_data = [_]struct { name: []const u8, email: []const u8 }{
+        .{ .name = "Alice", .email = "alice@example.com" },
+        .{ .name = "Bob", .email = "bob@example.com" },
+    };
+
+    // Build user list dynamically
+    var user_list = std.ArrayList(u8).init(allocator);
+    defer user_list.deinit();
+
+    try user_list.appendSlice("<ul>");
+    for (user_data) |user| {
+        const user_item = try std.fmt.allocPrint(allocator, "<li><strong>{s}</strong> - {s}</li>", .{ user.name, user.email });
+        defer allocator.free(user_item);
+
+        try user_list.appendSlice(user_item);
+    }
+    try user_list.appendSlice("</ul>");
+
+    // Insert the generated HTML
+    _ = try z.setInnerHTML(allocator, content_div.?, user_list.items, .{ .allow_html = true });
+
+    const dynamic_result = try z.serializeElement(allocator, content_div.?);
+    defer allocator.free(dynamic_result);
+
+    print("   Use case: Dynamic content generation and insertion\n", .{});
+    print("   Result: '{s}'\n", .{dynamic_result});
+
+    // Scenario 3: Fragment parsing for reusable components
+    print("\n3. Component Fragment Parsing:\n", .{});
+    const components = [_][]const u8{
+        "<button class='btn btn-primary'>Click me</button>",
+        "<input type='email' placeholder='Enter email' required>",
+        "<div class='alert alert-info'>Information message</div>",
+    };
+
+    const app_doc = try parseFromString("<html><body><div id='app'></div></body></html>");
+    defer destroyDocument(app_doc);
+
+    const app_div = try z.getElementById(app_doc, "app");
+
+    // Add each component to the app
+    for (components, 0..) |component, i| {
+        const current_content = try z.innerHTML(allocator, app_div.?);
+        defer allocator.free(current_content);
+
+        const updated_content = try std.fmt.allocPrint(allocator, "{s}<div class='component-{d}'>{s}</div>", .{ current_content, i, component });
+        defer allocator.free(updated_content);
+
+        _ = try z.setInnerHTML(allocator, app_div.?, updated_content, .{ .allow_html = true });
+
+        print("   Added component {d}: {s}\n", .{ i + 1, component });
+    }
+
+    const app_result = try z.serializeElement(allocator, app_div.?);
+    defer allocator.free(app_result);
+
+    print("   Final app: '{s}'\n", .{app_result});
+
+    print("\n=== Summary ===\n", .{});
+    print("• parseFromString: Creates complete documents, handles DOCTYPE, etc.\n", .{});
+    print("• setInnerHTML: Injects HTML fragments into existing elements\n", .{});
+    print("• Both convert strings to DOM, but serve different use cases\n", .{});
 }

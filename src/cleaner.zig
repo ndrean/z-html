@@ -124,10 +124,9 @@ fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.DomElement) 
 }
 
 fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.TextOptions) !bool {
-    const text = try z.getTextContentsOpts(
+    const text = try z.getTextContent(
         allocator,
         node,
-        options,
     );
     defer allocator.free(text);
 
@@ -174,7 +173,7 @@ fn shouldPreserveWhitespace(node: *z.DomNode) bool {
 fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNode) !void {
     if (z.previousSibling(comment_node)) |prev| {
         if (z.isTypeText(prev)) {
-            const txt = z.getTextContentsOpts(allocator, prev, .{}) catch {
+            const txt = z.getTextContent(allocator, prev) catch {
                 z.removeNode(comment_node);
                 z.destroyNode(comment_node);
                 return;
@@ -873,7 +872,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
     defer z.destroyDocument(doc);
     const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node).?;
-    const txt = try z.getTextContentsOpts(allocator, div_node, .{});
+    const txt = try z.getTextContent(allocator, div_node);
     defer allocator.free(txt);
     print("-------------{s}\n", .{txt});
 
@@ -889,7 +888,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
             const is_whitespace_only = z.isWhitespaceOnlyNode(child.?);
 
             // Get comment content for debugging (handle empty comments)
-            const comment_text = z.getTextContentsOpts(allocator, child.?, .{}) catch |err| switch (err) {
+            const comment_text = z.getTextContent(allocator, child.?) catch |err| switch (err) {
                 error.EmptyTextContent => try allocator.dupe(u8, ""),
                 else => return err,
             };
