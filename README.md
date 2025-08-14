@@ -1,25 +1,25 @@
-# z-html
+# z-html: `lexbor` in `Zig`
 
 > [!WARNING]
 > Work in progress
 
-`zhtml` is a `Zig` wrapper for the `C` library [lexbor](https://github.com/lexbor/lexbor).
+`zhtml` is a - thin -  wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor).
 
 `lexbor` follows <https://dom.spec.whatwg.org/>.
 
 We expose a significant subset of all available functions.
 
-The function naming follows mostly the `JavaScript` convention.
+The naming follows mostly the `JavaScript` convention.
 
-> We opted to use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This trades some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
+> We use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This probably trades a bit some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
 
 **Features:**
 
 - document and fragment parsing
-- chunk parsing with the "chunk_parser" engine
+- chunk parsing with `lexbor`'s "chunk_parser" engine
 - node/element/fragment/document serialization
 - DOM to DOM_tree and return: tuple and (todo) JSON format
-- DOM cleaning with HTML aware manipulation:
+- DOM cleaning with options (remove comments, whitespace, empty nodes)
 - CSS selectors using `lexbor`'s "css_parser" engine
 - HTML attributes and search
 - DOM node manipulation
@@ -27,11 +27,9 @@ The function naming follows mostly the `JavaScript` convention.
 
 ## Examples
 
-The API closely follows JavaScript DOM conventions.
+Use `JavaScript` semantics on the server!
 
 ### Build a fragment, inject it and serialization
-
-Use `JavaScript` semantics on the server!
 
 ```c
 const std = @import("std");
@@ -44,21 +42,24 @@ test "Append JS fragment" {
   const doc = try parseFromString("");
   defer z.destroyDocument(doc);
 
-  const body_node = try bodyNode(doc);
+  const body = try bodyNode(doc);
 
   const fragment = try z.createDocumentFragment(doc);
+  defer destroyNode(fragment);
 
   // create with attributes
-  const div = try z.createElement(doc,"div",
+  const div_elt = try z.createElement(doc,"div",
       &.{.{ .name = "class", .value = "container-list" }},
   );
 
-  const div_node = elementToNode(div);
-  const comment_node = try z.createComment(doc, "a comment");
-  z.appendChild(div_node, commentToNode(comment_node));
+  const div = elementToNode(div_elt);
+  defer destroyNode(div);
+  const comment = try z.createComment(doc, "a comment");
+  defer destroyComment(comment)
+  z.appendChild(div, commentToNode(comment));
 
-  const ul = try z.createElement(doc, "ul", &.{});
-  const ul_node = elementToNode(ul);
+  const ul_elt = try z.createElement(doc, "ul", &.{});
+  const ul = elementToNode(ul);
 
   for (1..4) |i| {
     // we use alternatively `innerHTML`
@@ -73,17 +74,17 @@ test "Append JS fragment" {
 
     _ = try z.setInnerHTML(allocator, temp_elt, content,.{});
 
-    if (firstChild(temp_div)) |li_node| 
-          appendChild(ul_node, li_node);
+    if (firstChild(temp_div)) |li| 
+          appendChild(ul, li);
       
     destroyNode(temp_div);
   }
 
-  z.appendChild(div_node, ul_node);
-  z.appendChild(fragment, div_node);
-  z.appendFragment(body_node, fragment);
+  z.appendChild(div, ul);
+  z.appendChild(fragment, div);
+  z.appendFragment(body, fragment);
 
-  const fragment_txt = try z.serializeTree(allocator, div_node);
+  const fragment_txt = try z.serializeTree(allocator, div);
   defer allocator.free(fragment_txt);
 
   const pretty_expected =

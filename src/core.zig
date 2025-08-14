@@ -1923,20 +1923,24 @@ test "show" {
     const body_node = try bodyNode(doc);
 
     const fragment = try z.createDocumentFragment(doc);
+    defer destroyNode(fragment);
 
-    const div = try z.createElement(
+    const div_elt = try z.createElement(
         doc,
         "div",
         &.{.{ .name = "class", .value = "container-list" }},
     );
 
-    const div_node = elementToNode(div);
+    const div = elementToNode(div_elt);
+    defer destroyNode(div);
 
     const comment_node = try z.createComment(doc, "a comment");
-    z.appendChild(div_node, commentToNode(comment_node));
+    defer destroyComment(comment_node);
+    z.appendChild(div, commentToNode(comment_node));
 
-    const ul = try z.createElement(doc, "ul", &.{});
-    const ul_node = elementToNode(ul);
+    const ul_elt = try z.createElement(doc, "ul", &.{});
+    const ul = elementToNode(ul_elt);
+    defer destroyNode(ul);
 
     for (1..4) |i| {
         const inner_content = try std.fmt.allocPrint(
@@ -1948,6 +1952,7 @@ test "show" {
 
         const temp_div_elt = try createElement(doc, "div", &.{});
         const temp_div = elementToNode(temp_div_elt);
+        defer destroyNode(temp_div);
 
         _ = try z.setInnerHTML(
             allocator,
@@ -1957,10 +1962,9 @@ test "show" {
         );
 
         // Move the LI element to the UL
-        if (firstChild(temp_div)) |li_node|
-            appendChild(ul_node, li_node);
-
-        destroyNode(temp_div);
+        if (firstChild(temp_div)) |li| {
+            appendChild(ul, li);
+        }
     }
 
     // for (1..4) |i| {
@@ -1988,13 +1992,13 @@ test "show" {
     //     z.appendChild(ul_node, li_node);
     // }
 
-    z.appendChild(div_node, ul_node);
-    z.appendChild(fragment, div_node);
+    z.appendChild(div, ul);
+    z.appendChild(fragment, div);
 
     // batch it into the DOM
     z.appendFragment(body_node, fragment);
 
-    const fragment_txt = try z.serializeTree(allocator, div_node);
+    const fragment_txt = try z.serializeTree(allocator, div);
 
     defer allocator.free(fragment_txt);
 
