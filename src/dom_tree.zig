@@ -595,8 +595,8 @@ fn nodeToHtmlWriter(node: HtmlNode, html_writer: anytype) !void {
                 try html_writer.print(" {s}=\"{s}\"", .{ attr.name, attr.value });
             }
 
-            // Check if it's a void element (self-closing)
-            const is_void = z.isVoidElement(elem.tag);
+            // Check if it's a void element (self-closing) - OPTIMIZED: Use enum-based lookup
+            const is_void = z.isVoidElementFast(elem.tag);
 
             if (is_void and elem.children.len == 0) {
                 try html_writer.print(" />", .{});
@@ -1034,12 +1034,22 @@ test "void elements handling" {
     const result = try treeToHtml(allocator, tree);
     defer allocator.free(result);
 
-    // Should not have closing tags for void elements
+    // Debug: Print the result to see what we're getting
+    // std.debug.print("DOM tree HTML result: {s}\n", .{result});
+
+    // Should not have closing tags for void elements (they should be self-closing)
     try testing.expect(
-        std.mem.indexOf(u8, result, "</BR>") == null,
+        std.mem.indexOf(u8, result, "</br>") == null,
     );
     try testing.expect(
-        std.mem.indexOf(u8, result, "</IMG>") == null,
+        std.mem.indexOf(u8, result, "</img>") == null,
+    );
+    // Should have self-closing syntax for void elements
+    try testing.expect(
+        std.mem.indexOf(u8, result, "<BR />") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, result, "<IMG src=\"test.jpg\" alt=\"test\" />") != null,
     );
     try testing.expect(
         std.mem.indexOf(u8, result, "</P>") != null,

@@ -91,7 +91,7 @@
 
 - `lxb_dom_element_qualified_name()` - Not available in lexbor version
 - `lxb_dom_interface_character_data()` - Not needed for core functionality  
-- `lexbor_str_data_ncmp()` - String comparison (not needed yet)
+- `lexbor_str_data_ncmp()` - String comparison. Useless, Zig has `std.mem.eqL`built in.
 - Full template content access - Limited by lexbor version availability
 
 ### 📊 **Statistics**

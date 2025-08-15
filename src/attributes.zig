@@ -31,7 +31,6 @@ extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]con
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
-extern "c" fn lexbor_str_data_ncmp(first: [*]const u8, sec: [*]const u8, size: usize) bool;
 
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
@@ -266,7 +265,10 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 }
 
 /// Get the qualified name of an element (namespace:tagname or just tagname)
+///
 /// This is useful for elements with namespaces like SVG or MathML
+///
+/// Caller needs to free the slice
 pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
@@ -276,13 +278,11 @@ pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8
     return result;
 }
 
-/// Compare two lexbor strings with case sensitivity
-/// Useful for efficient string comparisons in DOM operations
+// /// Compare two lexbor strings with case sensitivity. Useless, Zig has built-in string comparison. !!!!!!!!!!!!!!!!!!!!!!!!!
+// ///
+// /// Useful for efficient string comparisons in DOM operations
 pub fn compareStrings(first: []const u8, second: []const u8) bool {
-    if (first.len != second.len) return false;
-    if (first.len == 0) return true;
-
-    return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
+    return std.mem.eql(u8, first, second);
 }
 
 // ----------------------------------------------------------

@@ -180,8 +180,9 @@ fn appendRegularElementHtml(allocator: std.mem.Allocator, node: *z.DomNode, skip
             try html.append('"');
         }
 
-        // Check if it's a void element
-        if (z.isVoidElement(element)) {
+        // Check if it's a void element - OPTIMIZED: Use enum-based lookup
+        const qualified_name = z.qualifiedName(element);
+        if (z.isVoidElementFast(qualified_name)) {
             try html.appendSlice(" />");
             return;
         }

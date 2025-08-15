@@ -41,8 +41,17 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
 /// This is the key function you wanted! Takes lexbor's qualifiedName result and returns enum.
 /// Optimized for the common case where qualified names are lowercase (from lexbor).
 pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
-    // Fast path: try direct enum lookup (most common case)
+    // Fast path: try direct enum lookup (most common case - lowercase)
     if (parseTag(qualified_name)) |tag| {
+        return tag;
+    }
+
+    // Handle case-insensitive lookup for uppercase tags
+    var lowercase_buf: [64]u8 = undefined;
+    if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
+
+    const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
+    if (parseTag(lowercase_name)) |tag| {
         return tag;
     }
 
