@@ -1,9 +1,11 @@
-# z-html: `lexbor` in `Zig`
+# z-html: a `lexbor` in `Zig` project
 
 > [!WARNING]
 > Work in progress
 
-`zhtml` is a - thin -  wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), a browser engine. In other wrods, use `JavaScript` semantics on the server with `Zig`.
+`zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), a browser engine.
+
+In other words, you can use `JavaScript` semantics on the server with `Zig`.
 
 `lexbor` follows <https://dom.spec.whatwg.org/>, and we follow  - mostly -  the `JavaScript` semantics.
 
@@ -11,19 +13,33 @@
 
 This project exposes a significant subset of all available `lexbor` functions:
 
-- document parsing
-- chunk parsing with `lexbor`'s "chunk_parser" engine
-- fragment / context-aware parsing
-- serialization
-- innerHTML
-- DOM to DOM_tree and return: tuple and JSON format
-- CSS selectors using `lexbor`'s "css_parser" engine
-- HTML attributes and search
-- DOM node manipulation
-- Collections with search by attribute.
+- Parsing:
+  - document parsing: `parseFromString()`
+  - chunk processing
+  - fragment / context-aware parsing
+  - `setInnerHTML()`
+- Serialization: 
+  - tree: `serializeToString()`
+  - `innerHTML()`
+- DOM_tree and back
+  - compressed tuple: `DOM_toTuple()` and `Tuple_toDOM()`
+  - W3C JSON: `DOM_toJSON()` and `JSON_toDOM()`
+- CSS selectors search with cached CSS selectors parsing: `querySelector()` and `filter()`
+- HTML attributes
+  - fast "walker" search with _tokens_:
+    - `getElementById()`
+    - and derivatives class / data-attribute
+  - Collections and search on _exact string matching_:
+    - `getElementsById()`
+    - "attribute-value" pairs
+    - they use an iterator to extract from the results.
+- DOM: nodes / elements / text / comment
+  - create / destroy
+  - node / element navigation
+  - append / insert / remove
 - DOM cleaning with options (remove comments, whitespace, empty nodes)
 
-## Example
+## Examples
 
 ### Build a fragment, inject it and serialization
 
