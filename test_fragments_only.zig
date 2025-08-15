@@ -29,7 +29,7 @@ test "parseFragmentInto cross-document cloning" {
 
     try testing.expect(children.len == 2);
     try testing.expectEqualStrings("P", z.tagName(children[0]));
-    try testing.expectEqualStrings("SPAN", z.tagName(children[1]));
+    try testing.expectEqualStrings("SPAN", z.qualifiedName(children[1]));
 
     const p_text = try z.getTextContent(allocator, children[0]);
     defer allocator.free(p_text);

@@ -267,7 +267,7 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 
 /// Get the qualified name of an element (namespace:tagname or just tagname)
 /// This is useful for elements with namespaces like SVG or MathML
-pub fn getElementQualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
 

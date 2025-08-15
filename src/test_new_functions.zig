@@ -18,7 +18,7 @@ test "Newly added lexbor functions" {
     const div_element = z.nodeToElement(div).?;
 
     // Test on regular HTML element
-    const div_qualified = try z.getElementQualifiedName(allocator, div_element);
+    const div_qualified = try z.qualifiedName(allocator, div_element);
     defer allocator.free(div_qualified);
     print("  DIV qualified name: '{s}'\n", .{div_qualified});
     try std.testing.expectEqualStrings("div", div_qualified);
@@ -26,7 +26,7 @@ test "Newly added lexbor functions" {
     // Test on paragraph element
     const p = z.firstChild(div).?;
     const p_element = z.nodeToElement(p).?;
-    const p_qualified = try z.getElementQualifiedName(allocator, p_element);
+    const p_qualified = try z.qualifiedName(allocator, p_element);
     defer allocator.free(p_qualified);
     print("  P qualified name: '{s}'\n", .{p_qualified});
     try std.testing.expectEqualStrings("p", p_qualified);

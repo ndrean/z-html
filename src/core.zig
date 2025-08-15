@@ -852,9 +852,12 @@ extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; 
 ///
 /// It returns a concatenation of the text contents of all descendant text nodes or an error if none are found. !! This is wrong, should return NULL if NULL!!
 ///
-/// It works on nodes (text, comment or element).
+/// Works on nodes (text, comment or element).
 ///
 /// Caller needs to free the returned string
+///
+/// DEPRECATED: This API is incorrect - empty text content is not an error.
+/// Use getTextContentOptional() for the correct behavior, or getTextContentOrEmpty() for JS-like behavior.
 pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
@@ -866,6 +869,41 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     const result = try allocator.alloc(u8, len);
     @memcpy(result, text_ptr[0..len]);
     return result;
+}
+
+/// [core] Get concatenated text content of a node as optional (CORRECT API)
+///
+/// Returns the concatenated text content of all descendant text nodes,
+/// or null if the node has no text content (which is NOT an error).
+///
+/// Works on nodes (text, comment or element).
+///
+/// Caller needs to free the returned string if not null.
+pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *DomNode) !?[]u8 {
+    var len: usize = 0;
+    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
+
+    defer lexbor_destroy_text_wrapper(node, text_ptr);
+
+    if (len == 0) return null;
+
+    const result = try allocator.alloc(u8, len);
+    @memcpy(result, text_ptr[0..len]);
+    return result;
+}
+
+/// [core] Get text content with empty string fallback (JavaScript-like behavior)
+///
+/// Returns the text content or an empty string if none exists.
+/// This matches JavaScript's element.textContent behavior.
+///
+/// Caller needs to free the returned string.
+pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+    if (try getTextContentOptional(allocator, node)) |content| {
+        return content;
+    } else {
+        return try allocator.dupe(u8, "");
+    }
 }
 
 /// [core] Set text content on a node

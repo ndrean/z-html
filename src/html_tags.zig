@@ -36,6 +36,24 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
     return null;
 }
 
+/// [HtmlTag] FAST: Convert qualified name to HtmlTag enum (optimized for lexbor output)
+///
+/// This is the key function you wanted! Takes lexbor's qualifiedName result and returns enum.
+/// Optimized for the common case where qualified names are lowercase (from lexbor).
+pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
+    // Fast path: try direct enum lookup (most common case)
+    if (parseTag(qualified_name)) |tag| {
+        return tag;
+    }
+
+    // Handle namespaced elements: "svg:circle" -> null (not in our enum)
+    if (std.mem.indexOf(u8, qualified_name, ":")) |_| {
+        return null; // Namespaced elements not in standard HTML enum
+    }
+
+    return null; // Unknown/custom element
+}
+
 /// Helper to parse HTML tag with case conversion
 pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !?z.HtmlTag {
     // Convert to lowercase for parsing
@@ -54,6 +72,8 @@ pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !
 ///  `self.toString` returns the tag name as a string.
 ///
 /// `self.isVoid` checks if the tag is a self-closing element (e.g., `<br>`, `<img>`).
+///
+///  `self.isNoEscape` checks if the tag should not have its content escaped.
 pub const HtmlTag = enum {
     a,
     abbr,
@@ -169,22 +189,76 @@ pub const HtmlTag = enum {
     pub fn toString(self: HtmlTag) []const u8 {
         return @tagName(self);
     }
+
     pub fn isVoid(self: HtmlTag) bool {
-        inline for (HtmlVoidTag) |tag| {
-            if (self == tag) return true;
-        }
-        return false;
+        return VoidTagSet.contains(self);
+    }
+
+    /// Check if this tag should not have its text content escaped
+    pub fn isNoEscape(self: HtmlTag) bool {
+        return NoEscapeTagSet.contains(self);
     }
 };
 
-/// [HtmlTag] List of self-closing elements
+/// [HtmlTag] Set of self-closing elements (modern approach)
+const VoidTagSet = struct {
+    /// Fast inline check if a tag is void (self-closing)
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,
+            else => false,
+        };
+    }
+};
+
+/// [HtmlTag] List of self-closing elements (DEPRECATED: use VoidTagSet instead)
 const HtmlVoidTag = [_]HtmlTag{ .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr };
 
-/// [HtmlTag] List of tags that should not be escaped
-const no_escape_tags = [_][]const u8{ "SCRIPT", "STYLE", "XMP", "IFRAME", "NOEMBED", "NOFRAMES", "PLAINTEXT" };
+/// [HtmlTag] Set of tags that should not be escaped (modern approach)
+const NoEscapeTagSet = struct {
+    /// Fast inline check if a tag should not be escaped
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .script, .style, .iframe => true,
+            else => false,
+        };
+    }
+};
 
-const no_escape_tags2 = [_]HtmlTag{ .script, .style, .xmp, .iframe, .noembed, .noframes, .plaintext };
+/// [HtmlTag] List of tags that should not be escaped (string version - DEPRECATED)
+/// Note: Includes obsolete tags like XMP, NOEMBED, NOFRAMES, PLAINTEXT
+const no_escape_tags = [_][]const u8{ "script", "style", "xmp", "iframe", "noembed", "noframes", "plaintext" };
 
+/// [HtmlTag] Fast check if element is void/self-closing (FAST enum version)
+/// Uses qualified name from lexbor and enum-based lookup for maximum performance
+pub fn isVoidElementFast(qualified_name: []const u8) bool {
+    const tag = fromQualifiedName(qualified_name) orelse return false;
+    return VoidTagSet.contains(tag);
+}
+
+/// [HtmlTag] Fast check if element should not have its content escaped
+///
+/// Uses qualified name from lexbor and enum-based lookup
+pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
+    const tag = fromQualifiedName(qualified_name) orelse return false;
+    return NoEscapeTagSet.contains(tag);
+}
+
+/// [HtmlTag] DEPRECATED: Check if an element is a void (self-closing) element using string comparison
+pub fn isVoidElement(tag: []const u8) bool {
+    // Convert to lowercase for parsing (lexbor often returns uppercase)
+    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
+    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
+
+    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
+
+    if (parseTag(lowercase_tag)) |html_tag| {
+        return html_tag.isVoid();
+    }
+    return false; // Unknown tags are not void
+}
+
+/// [HtmlTag] DEPRECATED: Use isNoEscapeElementFast instead
 pub fn isNoEscapeElement(tag: []const u8) bool {
     // Convert to lowercase for parsing (lexbor often returns uppercase)
     var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
@@ -198,22 +272,48 @@ pub fn isNoEscapeElement(tag: []const u8) bool {
     }
     return false;
 }
-
-/// [HtmlTag] Check if an element is a void (self-closing) element using html_tags
-pub fn isVoidElement(tag: []const u8) bool {
-    // Convert to lowercase for parsing (lexbor often returns uppercase)
-    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
-    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
-
-    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
-
-    if (parseTag(lowercase_tag)) |html_tag| {
-        return html_tag.isVoid();
-    }
-    return false; // Unknown tags are not void
-}
 // =================================================================
 // === Tests ===
+
+test "fromQualifiedName enum conversion" {
+    // Test standard HTML tags
+    try testing.expect(fromQualifiedName("div").? == HtmlTag.div);
+    try testing.expect(fromQualifiedName("p").? == HtmlTag.p);
+    try testing.expect(fromQualifiedName("script").? == HtmlTag.script);
+
+    // Test custom elements
+    try testing.expect(fromQualifiedName("custom-element") == null);
+    try testing.expect(fromQualifiedName("my-widget") == null);
+
+    // Test namespaced elements
+    try testing.expect(fromQualifiedName("svg:circle") == null);
+    try testing.expect(fromQualifiedName("math:equation") == null);
+}
+
+test "FAST enum-based functions vs SLOW string comparison" {
+    // Test the FAST enum-based functions
+    try testing.expect(isVoidElementFast("br") == true);
+    try testing.expect(isVoidElementFast("img") == true);
+    try testing.expect(isVoidElementFast("div") == false);
+
+    try testing.expect(isNoEscapeElementFast("script") == true);
+    try testing.expect(isNoEscapeElementFast("style") == true);
+    try testing.expect(isNoEscapeElementFast("div") == false);
+
+    // Verify void element functions match
+    try testing.expect(isVoidElementFast("br") == isVoidElement("br"));
+    try testing.expect(isVoidElementFast("img") == isVoidElement("img"));
+    try testing.expect(isVoidElementFast("div") == isVoidElement("div"));
+
+    // Note: No-escape functions differ for obsolete tags like XMP, NOEMBED, etc.
+    // The fast version only handles modern HTML5 tags, which is usually what you want.
+    try testing.expect(isNoEscapeElementFast("script") == true);
+    try testing.expect(isNoEscapeElement("script") == true); // Both should agree on modern tags
+
+    // Fast version doesn't handle obsolete tags (returns false)
+    try testing.expect(isNoEscapeElementFast("xmp") == false); // Not in HTML5 enum
+    try testing.expect(isNoEscapeElement("xmp") == true); // String version handles it
+}
 
 test "parseHtmlTag" {
     const good_tag = parseTag("div");

@@ -50,7 +50,10 @@ pub const parseFragmentInto = fragments.parseFragmentInto;
 pub const HtmlTag = tag.HtmlTag;
 pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
-pub const isVoidElement = tag.isVoidElement;
+pub const fromQualifiedName = tag.fromQualifiedName; // NEW: Fast string→enum conversion
+pub const isVoidElement = tag.isVoidElement; // DEPRECATED: Use isVoidElementFast
+pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
+pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // RECOMMENDED: Fast enum-based
 
 //----------------------------------------------------------------------------
 // Core
@@ -204,7 +207,9 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 // Text content
 
 pub const getCommentTextContent = lxb.getCommentTextContent;
-pub const getTextContent = lxb.getTextContent;
+pub const getTextContent = lxb.getTextContent; // DEPRECATED: Use getTextContentOptional or getTextContentOrEmpty
+pub const getTextContentOptional = lxb.getTextContentOptional; // RECOMMENDED: Correct API
+pub const getTextContentOrEmpty = lxb.getTextContentOrEmpty; // ALTERNATIVE: JavaScript-like behavior
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
@@ -241,7 +246,7 @@ pub const setAttribute = attrs.elementSetAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
-pub const getElementQualifiedName = attrs.getElementQualifiedName;
+pub const qualifiedName = attrs.qualifiedName;
 pub const compareStrings = attrs.compareStrings;
 pub const getAttributes = attrs.getAttributes;
 
@@ -331,7 +336,7 @@ test "new lexbor functions - getElementQualifiedName and compareStrings" {
     const div_element = nodeToElement(div_node).?;
 
     // Test getElementQualifiedName
-    const qualified_name = try getElementQualifiedName(testing.allocator, div_element);
+    const qualified_name = try qualifiedName(testing.allocator, div_element);
     defer testing.allocator.free(qualified_name);
     try testing.expect(qualified_name.len > 0);
     // Should be "div"

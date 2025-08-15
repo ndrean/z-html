@@ -120,7 +120,7 @@ lexbor_node_owner_document()                 // 🔧 Custom wrapper for document
 // - templateAwareFirstChild() for template-aware navigation
 
 //--- 🎯 RECENTLY DISCOVERED & ADDED ---
-// - getElementQualifiedName() for namespace:tagname access
+// - qualifiedName() for namespace:tagname access
 // - compareStrings() for efficient lexbor string comparison
 
 //=============================================================================
