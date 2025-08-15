@@ -15,10 +15,7 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
     return null;
 }
 
-/// [HtmlTag] FAST: Convert qualified name to HtmlTag enum (optimized for lexbor output)
-///
-/// This is the key function you wanted! Takes lexbor's qualifiedName result and returns enum.
-/// Optimized for the common case where qualified names are lowercase (from lexbor).
+/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum
 pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     // Fast path: try direct enum lookup (most common case - lowercase)
     if (parseTag(qualified_name)) |tag| {
@@ -188,7 +185,7 @@ pub const HtmlTag = enum {
     }
 };
 
-/// [HtmlTag] Set of self-closing elements (modern approach)
+/// [HtmlTag] Set of self-closing elements
 const VoidTagSet = struct {
     /// Fast inline check if a tag is void (self-closing)
     pub inline fn contains(tag: HtmlTag) bool {
@@ -224,6 +221,24 @@ pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
     const tag = fromQualifiedName(qualified_name) orelse return false;
     return NoEscapeTagSet.contains(tag);
 }
+
+/// [HtmlTag] Extended check for no-escape elements including custom elements
+/// Use this if you have custom elements that contain raw code
+pub fn isNoEscapeElementExtended(qualified_name: []const u8, custom_no_escape_tags: []const []const u8) bool {
+    // First check standard HTML5 tags
+    if (isNoEscapeElementFast(qualified_name)) {
+        return true;
+    }
+
+    // Then check custom tags
+    for (custom_no_escape_tags) |custom_tag| {
+        if (std.mem.eql(u8, qualified_name, custom_tag)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 // =================================================================
 // === Tests ===
 
@@ -240,6 +255,28 @@ test "fromQualifiedName enum conversion" {
     // Test namespaced elements
     try testing.expect(fromQualifiedName("svg:circle") == null);
     try testing.expect(fromQualifiedName("math:equation") == null);
+}
+
+test "custom elements and web components" {
+    // Standard HTML5 elements
+    try testing.expect(isVoidElementFast("br") == true);
+    try testing.expect(isNoEscapeElementFast("script") == true);
+
+    // Custom elements/Web components (safe defaults)
+    try testing.expect(isVoidElementFast("my-widget") == false); // Not void
+    try testing.expect(isNoEscapeElementFast("my-widget") == false); // DO escape (safer)
+    try testing.expect(isVoidElementFast("custom-button") == false);
+    try testing.expect(isNoEscapeElementFast("custom-button") == false);
+
+    // Web component naming conventions
+    try testing.expect(isVoidElementFast("x-calendar") == false);
+    try testing.expect(isNoEscapeElementFast("x-calendar") == false);
+
+    // Extended function with custom no-escape tags
+    const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
+    try testing.expect(isNoEscapeElementExtended("script", &custom_no_escape) == true); // Standard
+    try testing.expect(isNoEscapeElementExtended("code-editor", &custom_no_escape) == true); // Custom
+    try testing.expect(isNoEscapeElementExtended("my-widget", &custom_no_escape) == false); // Regular custom
 }
 
 test "FAST enum-based functions" {
@@ -314,19 +351,15 @@ test "lexbor NODENAME and self.toString" {
 }
 
 test "mixing enum and string creation" {
-    // const allocator = testing.allocator;
-
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
-    // Type-safe enum creation
     const div = try z.createElement(
         doc,
         "div",
         &.{},
     );
 
-    // Flexible string creation (for custom elements)
     const custom = try z.createElement(
         doc,
         "my-custom-element",
@@ -338,8 +371,20 @@ test "mixing enum and string creation" {
         &.{},
     );
 
-    // Verify they work
     try testing.expectEqualStrings("DIV", z.nodeName(z.elementToNode(div)));
     try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName(z.elementToNode(custom)));
     try testing.expectEqualStrings("X-WIDGET", z.nodeName(z.elementToNode(web_component)));
+    try testing.expectEqualStrings("DIV", z.tagName(div));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagName(custom));
+    try testing.expectEqualStrings("X-WIDGET", z.tagName(web_component));
+
+    const allocator = testing.allocator;
+
+    const qcustom = try z.qualifiedName(allocator, custom);
+    defer allocator.free(qcustom);
+    try testing.expectEqualStrings("my-custom-element", qcustom);
+
+    const qdiv = try z.qualifiedName(allocator, div);
+    defer allocator.free(qdiv);
+    try testing.expectEqualStrings("div", qdiv);
 }
