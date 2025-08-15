@@ -51,7 +51,6 @@ pub const HtmlTag = tag.HtmlTag;
 pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
 pub const fromQualifiedName = tag.fromQualifiedName; // NEW: Fast string→enum conversion
-pub const isVoidElement = tag.isVoidElement; // DEPRECATED: Use isVoidElementFast
 pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
 pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // RECOMMENDED: Fast enum-based
 

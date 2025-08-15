@@ -5,27 +5,6 @@ const z = @import("zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
-/// [HtmlTag] Element tag representation.
-///
-/// This represents an HTML element tag, which can either be a standard tag (from the enum)
-/// or a custom tag (from a string).
-///
-/// Exposes two helper functions: `fromEnum` and `fromString`
-pub const ElementTag = union(enum) {
-    tag: HtmlTag,
-    custom: []const u8,
-
-    /// Helper to create from enum
-    pub fn fromEnum(html_tag: HtmlTag) ElementTag {
-        return ElementTag{ .tag = html_tag };
-    }
-
-    /// Helper to create from string
-    pub fn fromString(tag_name: []const u8) ElementTag {
-        return ElementTag{ .custom = tag_name };
-    }
-};
-
 /// [HtmlTag] Optional: Parse string to HtmlTag
 pub fn parseTag(name: []const u8) ?HtmlTag {
     inline for (std.meta.fields(HtmlTag)) |field| {
@@ -220,9 +199,6 @@ const VoidTagSet = struct {
     }
 };
 
-/// [HtmlTag] List of self-closing elements (DEPRECATED: use VoidTagSet instead)
-const HtmlVoidTag = [_]HtmlTag{ .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr };
-
 /// [HtmlTag] Set of tags that should not be escaped (modern approach)
 const NoEscapeTagSet = struct {
     /// Fast inline check if a tag should not be escaped
@@ -233,10 +209,6 @@ const NoEscapeTagSet = struct {
         };
     }
 };
-
-/// [HtmlTag] List of tags that should not be escaped (string version - DEPRECATED)
-/// Note: Includes obsolete tags like XMP, NOEMBED, NOFRAMES, PLAINTEXT
-const no_escape_tags = [_][]const u8{ "script", "style", "xmp", "iframe", "noembed", "noframes", "plaintext" };
 
 /// [HtmlTag] Fast check if element is void/self-closing (FAST enum version)
 /// Uses qualified name from lexbor and enum-based lookup for maximum performance
@@ -251,35 +223,6 @@ pub fn isVoidElementFast(qualified_name: []const u8) bool {
 pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
     const tag = fromQualifiedName(qualified_name) orelse return false;
     return NoEscapeTagSet.contains(tag);
-}
-
-/// [HtmlTag] DEPRECATED: Check if an element is a void (self-closing) element using string comparison
-pub fn isVoidElement(tag: []const u8) bool {
-    // Convert to lowercase for parsing (lexbor often returns uppercase)
-    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
-    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
-
-    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
-
-    if (parseTag(lowercase_tag)) |html_tag| {
-        return html_tag.isVoid();
-    }
-    return false; // Unknown tags are not void
-}
-
-/// [HtmlTag] DEPRECATED: Use isNoEscapeElementFast instead
-pub fn isNoEscapeElement(tag: []const u8) bool {
-    // Convert to lowercase for parsing (lexbor often returns uppercase)
-    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
-    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
-    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
-
-    for (no_escape_tags) |no_escape_tag| {
-        if (std.mem.eql(u8, lowercase_tag, no_escape_tag)) {
-            return true;
-        }
-    }
-    return false;
 }
 // =================================================================
 // === Tests ===
@@ -299,7 +242,7 @@ test "fromQualifiedName enum conversion" {
     try testing.expect(fromQualifiedName("math:equation") == null);
 }
 
-test "FAST enum-based functions vs SLOW string comparison" {
+test "FAST enum-based functions" {
     // Test the FAST enum-based functions
     try testing.expect(isVoidElementFast("br") == true);
     try testing.expect(isVoidElementFast("img") == true);
@@ -309,19 +252,13 @@ test "FAST enum-based functions vs SLOW string comparison" {
     try testing.expect(isNoEscapeElementFast("style") == true);
     try testing.expect(isNoEscapeElementFast("div") == false);
 
-    // Verify void element functions match
-    try testing.expect(isVoidElementFast("br") == isVoidElement("br"));
-    try testing.expect(isVoidElementFast("img") == isVoidElement("img"));
-    try testing.expect(isVoidElementFast("div") == isVoidElement("div"));
-
-    // Note: No-escape functions differ for obsolete tags like XMP, NOEMBED, etc.
-    // The fast version only handles modern HTML5 tags, which is usually what you want.
-    try testing.expect(isNoEscapeElementFast("script") == true);
-    try testing.expect(isNoEscapeElement("script") == true); // Both should agree on modern tags
+    // Test case insensitivity
+    try testing.expect(isVoidElementFast("BR") == true);
+    try testing.expect(isVoidElementFast("IMG") == true);
+    try testing.expect(isNoEscapeElementFast("SCRIPT") == true);
 
     // Fast version doesn't handle obsolete tags (returns false)
     try testing.expect(isNoEscapeElementFast("xmp") == false); // Not in HTML5 enum
-    try testing.expect(isNoEscapeElement("xmp") == true); // String version handles it
 }
 
 test "parseHtmlTag" {
@@ -330,34 +267,6 @@ test "parseHtmlTag" {
 
     const custom_tag = parseTag("custom-element");
     try testing.expect(custom_tag == null);
-}
-
-test "elementTag" {
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    // Test creating elements from enum
-    const div_elt = try z.createElement(doc, "div", &.{});
-
-    const node_name = z.nodeName(z.elementToNode(div_elt));
-    const expected_name = HtmlTag.div.toString();
-
-    // Note: DOM names are typically uppercase
-    try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
-
-    // Test creating elements from string
-    const custom_elt = try z.createElement(
-        doc,
-        // .{ .custom = "custom-element" },
-        "custom-element",
-        &.{},
-    );
-
-    const custom_node_name = z.nodeName(z.elementToNode(custom_elt));
-    const custom_expected_name = "custom-element";
-
-    // Note: DOM names are typically uppercase
-    try testing.expect(std.ascii.eqlIgnoreCase(custom_expected_name, custom_node_name));
 }
 
 test "isVoid tag" {
@@ -378,14 +287,14 @@ test "isVoid tag" {
     }
 }
 
-test "isVoidElement modernized with html_tags" {
-    // Test the updated isVoidElement function
-    try testing.expect(isVoidElement("br") == true);
-    try testing.expect(isVoidElement("img") == true);
-    try testing.expect(isVoidElement("div") == false);
-    try testing.expect(isVoidElement("custom-element") == false);
-    try testing.expect(isVoidElement("BR") == true); // Case insensitive
-    try testing.expect(isVoidElement("IMG") == true);
+test "isVoidElementFast with various tags" {
+    // Test the updated isVoidElementFast function
+    try testing.expect(isVoidElementFast("br") == true);
+    try testing.expect(isVoidElementFast("img") == true);
+    try testing.expect(isVoidElementFast("div") == false);
+    try testing.expect(isVoidElementFast("custom-element") == false);
+    try testing.expect(isVoidElementFast("BR") == true); // Case insensitive
+    try testing.expect(isVoidElementFast("IMG") == true);
 }
 test "lexbor NODENAME and self.toString" {
     const doc = try z.createDocument();
