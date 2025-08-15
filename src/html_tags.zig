@@ -207,23 +207,79 @@ const NoEscapeTagSet = struct {
     }
 };
 
-/// [HtmlTag] Fast check if element is void/self-closing (FAST enum version)
-/// Uses qualified name from lexbor and enum-based lookup for maximum performance
+/// [HtmlTag] Fast check if element is void/self-closing (string-based)
+///
+/// Uses qualified name string and enum-based lookup for maximum performance.
+/// For direct element checking without string allocation, use isVoidElementFastZeroCopy().
+///
+/// **Use when:** You already have the qualified name string
+/// **Performance:** Fast (enum lookup), requires qualified name parameter
 pub fn isVoidElementFast(qualified_name: []const u8) bool {
     const tag = fromQualifiedName(qualified_name) orelse return false;
     return VoidTagSet.contains(tag);
 }
 
-/// [HtmlTag] Fast check if element should not have its content escaped
+/// [HtmlTag] Fast check if element should not have its content escaped (string-based)
 ///
-/// Uses qualified name from lexbor and enum-based lookup
+/// Uses qualified name string and enum-based lookup for maximum performance.
+/// For direct element checking without string allocation, use isNoEscapeElementFastZeroCopy().
+///
+/// **Use when:** You already have the qualified name string
+/// **Performance:** Fast (enum lookup), requires qualified name parameter
 pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
     const tag = fromQualifiedName(qualified_name) orelse return false;
     return NoEscapeTagSet.contains(tag);
 }
 
+/// [HtmlTag] ZERO-COPY void element check using lexbor's memory directly
+///
+/// **Most performant version** - no allocation, direct from lexbor's memory
+///
+/// **Use when:** You have the element object and need immediate checking
+/// **Performance:** Fastest (no string allocation), but element must be valid
+///
+/// ```zig
+/// if (isVoidElementFastZeroCopy(element)) {
+///     // Handle void element (like <br>, <img>)
+/// }
+/// ```
+pub fn isVoidElementFastZeroCopy(element: *z.DomElement) bool {
+    const qualified_name = z.qualifiedNameBorrow(element);
+    return isVoidElementFast(qualified_name);
+}
+
+/// [HtmlTag] ZERO-COPY no-escape check using lexbor's memory directly
+///
+/// **Most performant version** - no allocation, direct from lexbor's memory
+///
+/// **Use when:** You have the element object and need immediate checking
+/// **Performance:** Fastest (no string allocation), but element must be valid
+///
+/// ```zig
+/// if (isNoEscapeElementFastZeroCopy(element)) {
+///     // Raw content (like <script>, <style>) - don't escape
+/// } else {
+///     // Regular content - escape HTML entities
+/// }
+/// ```
+pub fn isNoEscapeElementFastZeroCopy(element: *z.DomElement) bool {
+    const qualified_name = z.qualifiedNameBorrow(element);
+    return isNoEscapeElementFast(qualified_name);
+}
+
 /// [HtmlTag] Extended check for no-escape elements including custom elements
-/// Use this if you have custom elements that contain raw code
+///
+/// Combines standard HTML5 tags with your custom no-escape tags.
+///
+/// **Use when:** You have web components that contain raw code (like code editors)
+/// **Performance:** Fast for standard tags (enum), linear search for custom tags
+///
+/// ```zig
+/// const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
+/// if (isNoEscapeElementExtended(tag_name, &custom_no_escape)) {
+///     // Don't escape content
+/// }
+/// ```
 pub fn isNoEscapeElementExtended(qualified_name: []const u8, custom_no_escape_tags: []const []const u8) bool {
     // First check standard HTML5 tags
     if (isNoEscapeElementFast(qualified_name)) {
@@ -296,6 +352,27 @@ test "FAST enum-based functions" {
 
     // Fast version doesn't handle obsolete tags (returns false)
     try testing.expect(isNoEscapeElementFast("xmp") == false); // Not in HTML5 enum
+}
+
+test "ZERO-COPY element functions" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // Create test elements
+    const br_elem = try z.createElement(doc, "br", &.{});
+    const script_elem = try z.createElement(doc, "script", &.{});
+    const div_elem = try z.createElement(doc, "div", &.{});
+    const custom_elem = try z.createElement(doc, "my-widget", &.{});
+
+    // Test zero-copy void element checks
+    try testing.expect(isVoidElementFastZeroCopy(br_elem) == true);
+    try testing.expect(isVoidElementFastZeroCopy(div_elem) == false);
+    try testing.expect(isVoidElementFastZeroCopy(custom_elem) == false); // Custom elements are not void
+
+    // Test zero-copy no-escape checks
+    try testing.expect(isNoEscapeElementFastZeroCopy(script_elem) == true);
+    try testing.expect(isNoEscapeElementFastZeroCopy(div_elem) == false);
+    try testing.expect(isNoEscapeElementFastZeroCopy(custom_elem) == false); // Custom elements are escaped by default
 }
 
 test "parseHtmlTag" {
@@ -378,8 +455,10 @@ test "mixing enum and string creation" {
     try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagName(custom));
     try testing.expectEqualStrings("X-WIDGET", z.tagName(web_component));
 
+    // Test both allocation and zero-copy versions
     const allocator = testing.allocator;
 
+    // Allocating version (safe for long-term storage)
     const qcustom = try z.qualifiedName(allocator, custom);
     defer allocator.free(qcustom);
     try testing.expectEqualStrings("my-custom-element", qcustom);
@@ -387,4 +466,10 @@ test "mixing enum and string creation" {
     const qdiv = try z.qualifiedName(allocator, div);
     defer allocator.free(qdiv);
     try testing.expectEqualStrings("div", qdiv);
+
+    // Zero-copy version (fast, but only valid during element lifetime)
+    const qcustom_borrowed = z.qualifiedNameBorrow(custom);
+    const qdiv_borrowed = z.qualifiedNameBorrow(div);
+    try testing.expectEqualStrings("my-custom-element", qcustom_borrowed);
+    try testing.expectEqualStrings("div", qdiv_borrowed);
 }

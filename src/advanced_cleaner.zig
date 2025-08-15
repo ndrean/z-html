@@ -18,12 +18,12 @@ pub fn leadingWhitespaceSize(data: []const u8) usize {
 }
 
 /// Check if a text node should not be escaped (inside script, style, etc.)
-/// OPTIMIZED: Uses enum-based lookup instead of string comparison
+/// OPTIMIZED: Uses zero-copy enum-based lookup for maximum performance
 pub fn isNoEscapeTextNode(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
 
     if (z.nodeToElement(parent)) |parent_element| {
-        const qualified_name = z.qualifiedName(parent_element);
+        const qualified_name = z.qualifiedNameBorrow(parent_element);
         return z.isNoEscapeElementFast(qualified_name);
     }
 
@@ -36,26 +36,28 @@ pub fn appendNodeHtmlSmart(allocator: std.mem.Allocator, node: *z.DomNode, skip_
 
     switch (node_type) {
         .text => {
-            const text_content = try z.getTextContent(allocator, node);
-            defer allocator.free(text_content);
+            // Zero-copy text content access for immediate processing
+            if (z.getTextContentBorrow(node)) |text_content| {
+                const whitespace_size = leadingWhitespaceSize(text_content);
 
-            const whitespace_size = leadingWhitespaceSize(text_content);
+                // Skip whitespace-only nodes if requested
+                if (whitespace_size == text_content.len and skip_whitespace_nodes) {
+                    return;
+                }
 
-            // Skip whitespace-only nodes if requested
-            if (whitespace_size == text_content.len and skip_whitespace_nodes) {
-                return;
+                if (isNoEscapeTextNode(node)) {
+                    // No escaping for script/style content
+                    try html.appendSlice(text_content);
+                } else {
+                    // Smart escaping with whitespace preservation
+                    try appendEscapingSmart(html, text_content, whitespace_size);
+                }
             }
-
-            if (isNoEscapeTextNode(node)) {
-                // No escaping for script/style content
-                try html.appendSlice(text_content);
-            } else {
-                // Smart escaping with whitespace preservation
-                try appendEscapingSmart(html, text_content, whitespace_size);
-            }
+            // Note: If getTextContentBorrow returns null, we simply skip the node
         },
 
         .comment => {
+            // Comments still need allocation since we need to handle potential empty content
             const text_content = try z.getTextContent(allocator, node);
             defer allocator.free(text_content);
 
@@ -180,8 +182,8 @@ fn appendRegularElementHtml(allocator: std.mem.Allocator, node: *z.DomNode, skip
             try html.append('"');
         }
 
-        // Check if it's a void element - OPTIMIZED: Use enum-based lookup
-        const qualified_name = z.qualifiedName(element);
+        // Check if it's a void element - OPTIMIZED: Zero-copy enum-based lookup
+        const qualified_name = z.qualifiedNameBorrow(element);
         if (z.isVoidElementFast(qualified_name)) {
             try html.appendSlice(" />");
             return;
@@ -221,14 +223,14 @@ fn cleanNodeAdvanced(allocator: std.mem.Allocator, node: *z.DomNode, options: Ad
     switch (node_type) {
         .text => {
             if (options.skip_whitespace_nodes) {
-                const text_content = try z.getTextContent(allocator, node);
-                defer allocator.free(text_content);
-
-                const whitespace_size = leadingWhitespaceSize(text_content);
-                if (whitespace_size == text_content.len) {
-                    // Remove whitespace-only text nodes
-                    z.destroyNode(node);
-                    return;
+                // Zero-copy whitespace detection
+                if (z.getTextContentBorrow(node)) |text_content| {
+                    const whitespace_size = leadingWhitespaceSize(text_content);
+                    if (whitespace_size == text_content.len) {
+                        // Remove whitespace-only text nodes
+                        z.destroyNode(node);
+                        return;
+                    }
                 }
             }
         },
@@ -314,4 +316,28 @@ test "no-escape text node detection" {
     }
 
     _ = allocator; // Suppress unused warning
+}
+
+test "zero-copy text content functions" {
+    const html = "<div>Hello <span>World</span>!</div>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyElement(doc);
+    const div = z.firstChild(z.elementToNode(body)).?;
+
+    // Test zero-copy text content access
+    if (z.getTextContentBorrow(div)) |text_content| {
+        try testing.expect(std.mem.eql(u8, text_content, "Hello World!"));
+    } else {
+        try testing.expect(false); // Should have text content
+    }
+
+    // Test that it's actually zero-copy by checking we get the same pointer
+    const borrowed1 = z.getTextContentBorrow(div);
+    const borrowed2 = z.getTextContentBorrow(div);
+    try testing.expect(borrowed1 != null);
+    try testing.expect(borrowed2 != null);
+    // Same pointer means zero-copy (lexbor's internal buffer)
+    try testing.expect(borrowed1.?.ptr == borrowed2.?.ptr);
 }

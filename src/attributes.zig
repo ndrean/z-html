@@ -266,9 +266,19 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 
 /// Get the qualified name of an element (namespace:tagname or just tagname)
 ///
-/// This is useful for elements with namespaces like SVG or MathML
+/// Get element's qualified name (allocating version)
 ///
-/// Caller needs to free the slice
+/// This is useful for elements with namespaces like SVG or MathML.
+/// Returns a newly allocated slice that the caller owns and must free.
+///
+/// **Use when:** You need to store the name beyond the element's lifetime
+/// **Performance:** Slower (allocation + copy), but safe for long-term storage
+///
+/// ```zig
+/// const name = try qualifiedName(allocator, element);
+/// defer allocator.free(name); // You must free this
+/// // Safe to use 'name' even after element is destroyed
+/// ```
 pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
@@ -276,6 +286,29 @@ pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8
     const result = try allocator.alloc(u8, name_len);
     @memcpy(result, name_ptr[0..name_len]);
     return result;
+}
+
+/// Get element's qualified name (zero-copy version)
+///
+/// Returns a slice directly into lexbor's internal memory - no allocation!
+///
+/// **Use when:** Processing immediately, element lifetime is guaranteed
+/// **Performance:** Fastest (direct pointer access), but lifetime-bound
+///
+/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
+/// - The element remains in the DOM tree
+/// - The document is not destroyed
+/// - No DOM modifications that might cause internal reallocation
+///
+/// ```zig
+/// const name = qualifiedNameBorrow(element);
+/// // Use immediately - don't store for later!
+/// if (someCondition(name)) { ... }
+/// ```
+pub fn qualifiedNameBorrow(element: *z.DomElement) []const u8 {
+    var name_len: usize = 0;
+    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
+    return name_ptr[0..name_len];
 }
 
 // /// Compare two lexbor strings with case sensitivity. Useless, Zig has built-in string comparison. !!!!!!!!!!!!!!!!!!!!!!!!!

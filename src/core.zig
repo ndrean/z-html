@@ -897,13 +897,44 @@ pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *DomNode) !?[]
 /// Returns the text content or an empty string if none exists.
 /// This matches JavaScript's element.textContent behavior.
 ///
+/// [core] Get text content with empty string fallback (JavaScript-like behavior)
+///
+/// Returns the text content or an empty string if none exists.
+/// This matches JavaScript's element.textContent behavior.
+///
 /// Caller needs to free the returned string.
 pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     if (try getTextContentOptional(allocator, node)) |content| {
         return content;
-    } else {
-        return try allocator.dupe(u8, "");
     }
+    return allocator.dupe(u8, "");
+}
+
+/// [core] Get text content as zero-copy slice (FASTEST)
+///
+/// Returns a slice directly into lexbor's internal memory - no allocation!
+///
+/// **Use when:** Processing immediately, node lifetime is guaranteed
+/// **Performance:** Fastest (direct pointer access), but lifetime-bound
+///
+/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
+/// - The node remains in the DOM tree
+/// - The document is not destroyed
+/// - No DOM modifications that might cause internal reallocation
+///
+/// ```zig
+/// if (getTextContentBorrow(node)) |text| {
+///     // Use immediately - don't store for later!
+///     processText(text);
+/// }
+/// ```
+pub fn getTextContentBorrow(node: *DomNode) ?[]const u8 {
+    var len: usize = 0;
+    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
+
+    if (len == 0) return null;
+
+    return text_ptr[0..len];
 }
 
 /// [core] Set text content on a node

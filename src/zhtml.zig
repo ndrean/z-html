@@ -210,6 +210,7 @@ pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getTextContent = lxb.getTextContent; // DEPRECATED: Use getTextContentOptional or getTextContentOrEmpty
 pub const getTextContentOptional = lxb.getTextContentOptional; // RECOMMENDED: Correct API
 pub const getTextContentOrEmpty = lxb.getTextContentOrEmpty; // ALTERNATIVE: JavaScript-like behavior
+pub const getTextContentBorrow = lxb.getTextContentBorrow; // FASTEST: Zero-copy version
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
@@ -247,6 +248,7 @@ pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
 pub const qualifiedName = attrs.qualifiedName;
+pub const qualifiedNameBorrow = attrs.qualifiedNameBorrow; // Zero-copy version
 pub const compareStrings = attrs.compareStrings;
 pub const getAttributes = attrs.getAttributes;
 

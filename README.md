@@ -11,7 +11,7 @@ In other words, you can use `JavaScript` semantics on the server with `Zig`.
 
 **Features:**
 
-This project exposes a significant subset of all available `lexbor` functions:
+This project exposes a significant / essential subset of all available `lexbor` functions:
 
 - Parsing:
   - document parsing: `parseFromString()`
@@ -25,6 +25,7 @@ This project exposes a significant subset of all available `lexbor` functions:
   - compressed tuple: `DOM_toTuple()` and `Tuple_toDOM()`
   - W3C JSON: `DOM_toJSON()` and `JSON_toDOM()`
 - CSS selectors search with cached CSS selectors parsing: `querySelector()` and `filter()`
+- Template element support
 - HTML attributes
   - fast "walker" search with _tokens_:
     - `getElementById()`
@@ -33,7 +34,7 @@ This project exposes a significant subset of all available `lexbor` functions:
     - `getElementsById()`
     - "attribute-value" pairs
     - they use an iterator to extract from the results.
-- DOM: nodes / elements / text / comment
+- DOM manipulation on nodes / elements / text / comment
   - create / destroy
   - node / element navigation
   - append / insert / remove
