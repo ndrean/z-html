@@ -3,39 +3,42 @@
 > [!WARNING]
 > Work in progress
 
-`zhtml` is a - thin -  wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor).
+`zhtml` is a - thin -  wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), a browser engine. In other wrods, use `JavaScript` semantics on the server with `Zig`.
 
-`lexbor` follows <https://dom.spec.whatwg.org/>.
-
-We expose a significant subset of all available functions.
-
-The naming follows mostly the `JavaScript` convention.
-
-> We use `Zig` allocators instead of using `lexbor` internals for most functions returning slices. This probably trades a bit some performance for memory safety - returned strings are owned by your allocator rather than pointing to internal lexbor memory that could be invalidated.
+`lexbor` follows <https://dom.spec.whatwg.org/>, and we follow  - mostly -  the `JavaScript` semantics.
 
 **Features:**
 
-- document and fragment parsing
+This project exposes a significant subset of all available `lexbor` functions:
+
+- document parsing
 - chunk parsing with `lexbor`'s "chunk_parser" engine
-- node/element/fragment/document serialization
-- DOM to DOM_tree and return: tuple and (todo) JSON format
-- DOM cleaning with options (remove comments, whitespace, empty nodes)
+- fragment / context-aware parsing
+- serialization
+- innerHTML
+- DOM to DOM_tree and return: tuple and JSON format
 - CSS selectors using `lexbor`'s "css_parser" engine
 - HTML attributes and search
 - DOM node manipulation
-- Search by attribute with collections.
+- Collections with search by attribute.
+- DOM cleaning with options (remove comments, whitespace, empty nodes)
 
-## Examples
-
-Use `JavaScript` semantics on the server!
+## Example
 
 ### Build a fragment, inject it and serialization
 
-```c
+We create a fragment, populate it and append it to a document.
+
+We test the result with:
+
+- a collection count as a result of a _search by attribute_
+- string comparison using _serialization_
+
+```cpp
 const std = @import("std");
 const z = @import("zhtml.zig");
 
-test "Append JS fragment" {
+test "Append fragment" {
   const allocator = std.testing.allocator;
 
   // create the skeleton <html><body></body></html>
@@ -45,7 +48,6 @@ test "Append JS fragment" {
   const body = try bodyNode(doc);
 
   const fragment = try z.createDocumentFragment(doc);
-  defer destroyNode(fragment);
 
   // create with attributes
   const div_elt = try z.createElement(doc,"div",
@@ -53,16 +55,13 @@ test "Append JS fragment" {
   );
 
   const div = elementToNode(div_elt);
-  defer destroyNode(div);
   const comment = try z.createComment(doc, "a comment");
-  defer destroyComment(comment)
   z.appendChild(div, commentToNode(comment));
 
   const ul_elt = try z.createElement(doc, "ul", &.{});
   const ul = elementToNode(ul);
 
   for (1..4) |i| {
-    // we use alternatively `innerHTML`
     const content = try std.fmt.allocPrint(allocator,
             "<li data-id=\"{d}\">Item {d}</li>",
             .{ i, i },
@@ -72,8 +71,10 @@ test "Append JS fragment" {
     const temp_elt = try createElement(doc, "div", &.{});
     const temp_div = elementToNode(temp_elt);
 
+    // we inject the <li> string as innerHTML into the temp <div>
     _ = try z.setInnerHTML(allocator, temp_elt, content,.{});
 
+    // and append the new <li> node to the <ul> node
     if (firstChild(temp_div)) |li| 
           appendChild(ul, li);
       
@@ -84,10 +85,20 @@ test "Append JS fragment" {
   z.appendChild(fragment, div);
   z.appendFragment(body, fragment);
 
-  const fragment_txt = try z.serializeTree(allocator, div);
+  // first test: count check using collection
+  const lis = try z.getElementsByTagName(doc, "LI");
+  defer if (lis) |collection| {
+        z.destroyCollection(collection);
+    };
+
+  const li_count = z.getCollectionLength(lis);
+  try testing.expect(li_count == 3);
+
+  // second test: we check that the full string is what we expect
+  const serialized_fragment = try z.serializeTree(allocator, div);
   defer allocator.free(fragment_txt);
 
-  const pretty_expected =
+  const expected_fragment =
         \\<div class="container-list">
         \\  <!--a comment-->
         \\  <ul>
@@ -98,19 +109,23 @@ test "Append JS fragment" {
         \\</div>
     ;
 
-  const expected = try z.normalizeWhitespace(allocator, pretty_expected);
+  const expected = try z.normalizeWhitespace(allocator, expected_fragment);
   defer allocator.free(expected);
   
-  try testing.expectEqualStrings(expected,fragment_txt);
+  try testing.expectEqualStrings(expected, serialized_fragment);
 }
 ```
 
 ### DOM structure
 
-```c
+We can debug the document structure:
+
+```cpp
   // continue
   try z.debugDocumentStructure(doc)
 ```
+
+The output is:
 
 ```txt
 --- DOCUMENT STRUCTURE ----
@@ -129,7 +144,7 @@ DIV
 
 - the tuple version: `{tagName, attributes, children}`
 
-```c
+```cpp
   // continue
   const tree = try z.documentToTupleTree(allocator, doc);
   defer z.freeHtmlTree(allocator, tree);
@@ -139,7 +154,9 @@ DIV
   }
 ```
 
-```txt
+gives the compressed "tuple" representation:
+
+```json
 [
   {
     "DIV", 
@@ -160,15 +177,15 @@ DIV
 
 - the JSON format: `{nodeType, tagName, attributes, children}` where element = 1, text = 3, comment = 8, document = 9, fragment = 11.
 
-```c
+```cpp
   const json_tree = try documentToJsonTree(allocator, doc);
   const json_string = try jsonNodeToString(allocator, json_tree[0]);
   print("{s}", .{json_string });
 ```
 
-gives:
+gives the W3C JSON representation:
 
-```txt
+```json
 {
   "nodeType": 1, 
   "tagName": "DIV", 
@@ -205,7 +222,7 @@ gives:
 
 ### CSS selectors and attributes
 
-```c
+```cpp
   // continuation
   var engine = try z.CssSelectorEngine.init(allocator);
   defer engine.deinit();
@@ -229,7 +246,65 @@ gives:
 }
 ```
 
-## File structure
+## `lexbor` DOM memory management: Document Ownership vs Manual Cleanup
+
+In `lexbor`, nodes belong to documents, and the document acts as the memory manager.
+
+When a node is attached to a document (either directly or through a fragment that gets appended), the document owns it.
+
+When `destroyDocument()` is called, it automatically destroys ALL nodes that belong to it.
+
+When a node is NOT attached to any document, you must manually destroy it.
+
+> Very few functions that return strings point to internal `lexbor` memory. The `nodeName()` function can be usesd if it is immediately disposed. If you need to store it, use `nodeNameOwned()` instead.
+
+## Chunk Parsing vs Fragment Parsing
+
+HTML chunks are parsed as it streams into a full HTML document.
+
+Fragmemnt parsing handles templates and components (for template engines, component frameworks, server-sde rendering).
+
+| Feature | Fragment Parsing | Chunk Parsing |
+|--|--|--|
+| Purpose | Parse incomplete HTML snippets | Parse streaming into complete HTML |
+| Input | Template fragments, components | Network streams, large files chunks |
+| Context | Respects HTML parsing rules by context | Sequential document building |
+| Output | Parsed fragment nodes | Complete document |
+| Use Cases | Templates, components, HTMX, email | HTTP responses, file processing|
+
+## Parsing strings methods available
+
+| Method | Context Awareness | Cross-Document | Memory Management | Use Case |
+|--|--|--|--|---|
+| `parseFromString` | Full document | Single doc | Document owns all | Complete pages |
+| `setInnerHTML` | Parent element context | Same document | Element cleanup | Content replacement |
+| `parseFragment` | Explicit context | Cross-document via `parseFragmentInto` | Fragment result owns | Templates/components |
+
+The _fragment parsing_ gives you _context-aware parsing_ - meaning `<tr>` elements are parsed differently when you specify a `.table` context vs `.body` context.
+
+- parse with context awareness:
+  
+```cpp
+const result = try z.parseFragment(allocator, "<tr><td>Data</td></tr>", .table);
+defer result.deinit();
+```
+
+- into an existing document:
+
+```cpp
+try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .body);
+```
+
+- Cross-document node cloning to inser parsed fragments into target documents
+- results handling `getElements()` and `serialize()`
+
+## Project details
+
+### How to use it
+
+TODO
+
+### file structure
 
 - build.zig
 - Makefile.lexbor   # `lexbor` build automation
@@ -256,19 +331,19 @@ gives:
   - examples
     - todo
 
-## `lexbor` built with static linking
+### `lexbor` built with static linking
 
 ```sh
 make -f Makefile.lexbor
 ```
 
-## Run tests
+### Run tests
 
 The _build.zig_ file runs all the tests from _zhtml.zig_.
 It imports all the submodules and run the tests.
 
 ```sh
- zig build test --summary all -Doptimize=Debug
+ zig build test --summary all
  ```
 
 ## Build
@@ -277,11 +352,11 @@ It imports all the submodules and run the tests.
  zig build run -Doptimize=ReleaseFast #or Debug
  ```
 
-## Source: `lexbor` examples
+### Source: `lexbor` examples
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
-## Notes: searching in the  `lexbor` library
+### Notes: searching in the  `lexbor` library
 
 In the build static object _liblexbor_static.a_:
 
@@ -298,7 +373,7 @@ find lexbor_src_2.4.0/source -name "*.c" | xargs grep -l "lxb_selectors_opt_set_
 or
 
 ```sh
-grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/
+grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/lexbor/
 ```
 
 Test individual `Zig` files:
@@ -306,3 +381,4 @@ Test individual `Zig` files:
 ```sh
  zig test src/test_traversal.zig -I lexbor_src_2.4.0/source --library c lexbor_src_2.4.0/build/liblexbor_static.a src/minimal.c
  ```
+

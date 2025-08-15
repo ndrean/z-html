@@ -18,6 +18,12 @@ lxb_dom_element_t *lexbor_dom_interface_element_wrapper(lxb_dom_node_t *node)
   return lxb_dom_interface_element(node);
 }
 
+// Cross-document node cloning wrapper
+lxb_dom_node_t *lexbor_clone_node_deep(lxb_dom_node_t *node, lxb_html_document_t *target_doc)
+{
+  return lxb_dom_document_import_node(lxb_dom_interface_document(target_doc), node, true);
+}
+
 // Wrapper for field access to get the owner document from a node
 lxb_html_document_t *lexbor_node_owner_document(lxb_dom_node_t *node)
 {

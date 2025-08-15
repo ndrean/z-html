@@ -3,6 +3,7 @@
 // Re-export all modules
 const lxb = @import("core.zig");
 const chunks = @import("chunks.zig");
+const fragments = @import("fragments.zig");
 const css = @import("css_selectors.zig");
 const attrs = @import("attributes.zig");
 const serialize = @import("serializer.zig");
@@ -37,6 +38,13 @@ pub const CssSelectorEngine = css.CssSelectorEngine;
 // Chunk parsing
 pub const ChunkParser = chunks.ChunkParser;
 pub const HtmlParser = chunks.HtmlParser;
+
+// Fragment parsing
+pub const FragmentContext = fragments.FragmentContext;
+pub const FragmentResult = fragments.FragmentResult;
+pub const parseFragment = fragments.parseFragment;
+pub const parseFragmentSimple = fragments.parseFragmentSimple;
+pub const parseFragmentInto = fragments.parseFragmentInto;
 
 // HTML tags
 pub const HtmlTag = tag.HtmlTag;

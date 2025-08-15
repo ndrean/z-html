@@ -733,8 +733,6 @@ extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8
 extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
 
-// Check if all this is needed !!
-
 /// [core] Get text content as Zig string (copies to Zig-managed memory)
 ///
 /// It returns a concatenation of the text contents of all descendant text nodes.
@@ -896,7 +894,7 @@ pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
 // Tests
 // =====================================================================
 
-test "memory safety: getNodeName vs getNodeNameOwned" {
+test "memory safety: nodeName vs nodeNameOwned" {
     const allocator = std.testing.allocator;
     const doc = try createDocument();
     defer destroyDocument(doc);
@@ -1923,7 +1921,7 @@ test "show" {
     const body_node = try bodyNode(doc);
 
     const fragment = try z.createDocumentFragment(doc);
-    defer destroyNode(fragment);
+    // defer destroyNode(fragment);
 
     const div_elt = try z.createElement(
         doc,
@@ -1932,15 +1930,15 @@ test "show" {
     );
 
     const div = elementToNode(div_elt);
-    defer destroyNode(div);
+    // defer destroyNode(div);
 
     const comment_node = try z.createComment(doc, "a comment");
-    defer destroyComment(comment_node);
+    // defer destroyComment(comment_node);
     z.appendChild(div, commentToNode(comment_node));
 
     const ul_elt = try z.createElement(doc, "ul", &.{});
     const ul = elementToNode(ul_elt);
-    defer destroyNode(ul);
+    // defer destroyNode(ul);
 
     for (1..4) |i| {
         const inner_content = try std.fmt.allocPrint(
@@ -1952,7 +1950,6 @@ test "show" {
 
         const temp_div_elt = try createElement(doc, "div", &.{});
         const temp_div = elementToNode(temp_div_elt);
-        defer destroyNode(temp_div);
 
         _ = try z.setInnerHTML(
             allocator,
@@ -1965,6 +1962,7 @@ test "show" {
         if (firstChild(temp_div)) |li| {
             appendChild(ul, li);
         }
+        destroyNode(temp_div);
     }
 
     // for (1..4) |i| {
@@ -1998,7 +1996,15 @@ test "show" {
     // batch it into the DOM
     z.appendFragment(body_node, fragment);
 
+    const lis = try z.getElementsByTagName(doc, "LI");
+    defer if (lis) |collection| {
+        z.destroyCollection(collection);
+    };
+    const li_count = z.getCollectionLength(lis.?);
+    try testing.expect(li_count == 3);
+
     const fragment_txt = try z.serializeTree(allocator, div);
+    print("\n\n{s}\n\n", .{fragment_txt});
 
     defer allocator.free(fragment_txt);
 

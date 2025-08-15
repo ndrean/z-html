@@ -1,3 +1,4 @@
+//! Serialization, innerHTML
 // =============================================================================
 // Serialization Nodes and Elements
 // =============================================================================
@@ -109,10 +110,24 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
 
 /// [Serialize] Sets / replaces element's inner HTML with security controls.
 ///
-/// If options.allow_html is true: parses content as HTML (DANGEROUS - only for trusted content)
-/// If options.allow_html is false: treats content as safe text (escapes HTML if options.escape is true)
+/// -  `options.allow_html = true`: parses content as HTML for trusted content.
+/// -  `options.allow_html = false`: treats content as safe __text__ and escapes HTML if `options.escape = true`
 ///
-/// Returns the updated element or error if escaping fails
+/// Returns the updated element as _parsed HTML_ or _text_ or error if escaping fails
+/// ## Example
+/// ```
+/// // parsing as HTML elements
+/// try setInnerHTML(allocator, element, "<script> alert('XSS')</script>", .{});
+/// <script> alert('XSS')</script>
+///
+/// // parsing into text
+/// try setInnerHTML(allocator, element, "<script> alert('XSS')</script>", .{ .allow_html = false });
+///  "<script> alert('XSS')</script>"
+///
+// parsing into text with escape
+/// try setInnerHTML(allocator, element, "<script> alert('XSS')</script>", .{ .allow_html = false, .escape = true });
+///  "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;"
+/// ```
 pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.DomElement, content: []const u8, options: z.TextOptions) !*z.DomElement {
     if (options.allow_html) {
         // Developer explicitly allowed HTML parsing - use at your own risk
@@ -130,9 +145,8 @@ pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.DomElement, conten
     }
 }
 
-/// [Serialize] UNSAFE: Sets element's inner HTML directly without safety checks.
+/// [Serialize]Sets element's inner HTML directly without safety checks.
 ///
-/// Only use when you're certain the content is safe HTML.
 /// For user content, use setInnerHTML() with TextOptions instead.
 fn setInnerHTMLUnsafe(element: *z.DomElement, inner: []const u8) *z.DomElement {
     return lxb_html_element_inner_html_set(
