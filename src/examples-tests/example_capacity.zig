@@ -60,7 +60,7 @@ pub fn main() !void {
     print("\n=== Testing with Search Functions ===\n", .{});
     if (try z.getElementsByAttributeName(doc, "class", .default)) |class_elements| {
         defer z.destroyCollection(class_elements);
-        print("Found {} elements with 'class' attribute using default capacity ({})\n", .{ z.getCollectionLength(class_elements), z.getDefaultCapacity() });
+        print("Found {} elements with 'class' attribute using default capacity ({})\n", .{ z.collectionLength(class_elements), z.getDefaultCapacity() });
     }
 
     // 6. Reset to original default

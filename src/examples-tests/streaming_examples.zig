@@ -84,7 +84,7 @@ test "large file chunk processing simulation" {
     const all_divs = try z.getElementsByTagName(doc, "DIV");
     defer z.destroyCollection(all_divs);
 
-    const div_count = z.getCollectionLength(all_divs);
+    const div_count = z.collectionLength(all_divs);
     try testing.expect(div_count == 1000);
     print("Successfully parsed {} div elements from chunked input\n", .{div_count});
 }
@@ -133,8 +133,8 @@ test "real-time HTML fragment streaming" {
     const updates = try z.getElementsByClassName(doc, "update");
     defer z.destroyCollection(updates);
 
-    try testing.expect(z.getCollectionLength(updates) == 4);
-    print("Processed {} live updates via chunk streaming\n", .{z.getCollectionLength(updates)});
+    try testing.expect(z.collectionLength(updates) == 4);
+    print("Processed {} live updates via chunk streaming\n", .{z.collectionLength(updates)});
 }
 
 // Example 4: Template Streaming (Server-Side Rendering)
@@ -182,7 +182,7 @@ test "SSR template streaming" {
     const products_collection = try z.getElementsByClassName(doc, "product");
     defer z.destroyCollection(products_collection);
 
-    try testing.expect(z.getCollectionLength(products_collection) == 3);
+    try testing.expect(z.collectionLength(products_collection) == 3);
 
     // Verify pricing data
     const first_product = z.getCollectionElementAt(products_collection, 0).?;
@@ -192,7 +192,7 @@ test "SSR template streaming" {
         try testing.expectEqualStrings("1", id);
     }
 
-    print("Successfully rendered {} products via streaming\n", .{z.getCollectionLength(products_collection)});
+    print("Successfully rendered {} products via streaming\n", .{z.collectionLength(products_collection)});
 }
 
 // Example 5: Error Recovery in Chunk Parsing
@@ -222,7 +222,7 @@ test "chunk parsing with malformed HTML recovery" {
 
     // lexbor automatically recovers and fixes malformed HTML
     const doc = chunk_parser.getDocument();
-    const html = try z.serializeTree(allocator, try z.bodyNode(doc));
+    const html = try z.serializeToString(allocator, try z.bodyNode(doc));
     defer allocator.free(html);
 
     print("Recovered HTML: {s}\n", .{html});

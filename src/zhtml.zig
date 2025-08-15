@@ -158,7 +158,7 @@ pub const createDefaultCollection = collection.createDefaultCollection;
 pub const createSingleElementCollection = collection.createSingleElementCollection;
 pub const destroyCollection = collection.destroyCollection;
 pub const clearCollection = collection.clearCollection;
-pub const getCollectionLength = collection.getCollectionLength;
+pub const collectionLength = collection.collectionLength;
 pub const getCollectionElementAt = collection.getCollectionElementAt;
 pub const getFirstCollectionElement = collection.getCollectionFirstElement;
 pub const getLastCollectionElement = collection.getCollectionLastElement;
@@ -183,7 +183,7 @@ pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
 pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 
 // Serialization
-pub const serializeTree = serialize.serializeTree;
+pub const serializeToString = serialize.serializeToString;
 pub const serializeNode = serialize.serializeNode;
 pub const serializeElement = serialize.serializeElement;
 

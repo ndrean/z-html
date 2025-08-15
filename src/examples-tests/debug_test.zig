@@ -17,7 +17,7 @@ pub fn main() !void {
     const id_elements = try zhtml.getElementsByAttributeName(doc, "id", 2);
     if (id_elements) |collection| {
         defer zhtml.destroyCollection(collection);
-        const count = zhtml.getCollectionLength(collection);
+        const count = zhtml.collectionLength(collection);
         std.debug.print("Found {} elements with 'id' attribute\n", .{count});
     } else {
         std.debug.print("Failed to create collection\n", .{});

@@ -47,7 +47,7 @@ pub fn runCollectionExamples() !void {
         };
         defer z.destroyCollection(text_inputs);
 
-        std.debug.print("Found {} text input(s)\n", .{z.getCollectionLength(text_inputs)});
+        std.debug.print("Found {} text input(s)\n", .{z.collectionLength(text_inputs)});
     }
 
     // Example 3: Find elements by class
@@ -58,7 +58,7 @@ pub fn runCollectionExamples() !void {
         };
         defer z.destroyCollection(buttons);
 
-        std.debug.print("Found {} button(s) with 'btn' class\n", .{z.getCollectionLength(buttons)});
+        std.debug.print("Found {} button(s) with 'btn' class\n", .{z.collectionLength(buttons)});
     }
 
     std.debug.print("\n=== getElementsByAttributeName Examples ===\n", .{});
@@ -71,7 +71,7 @@ pub fn runCollectionExamples() !void {
         };
         defer z.destroyCollection(id_elements);
 
-        const count = z.getCollectionLength(id_elements);
+        const count = z.collectionLength(id_elements);
         std.debug.print("Found {} element(s) with 'id' attribute:\n", .{count});
 
         // Use iterator to go through all elements
@@ -91,7 +91,7 @@ pub fn runCollectionExamples() !void {
         };
         defer z.destroyCollection(required_elements);
 
-        std.debug.print("Found {} required field(s)\n", .{z.getCollectionLength(required_elements)});
+        std.debug.print("Found {} required field(s)\n", .{z.collectionLength(required_elements)});
     }
 
     // Example 6: Find all elements with 'class' attribute
@@ -102,7 +102,7 @@ pub fn runCollectionExamples() !void {
         };
         defer z.destroyCollection(class_elements);
 
-        std.debug.print("Found {} element(s) with 'class' attribute\n", .{z.getCollectionLength(class_elements)});
+        std.debug.print("Found {} element(s) with 'class' attribute\n", .{z.collectionLength(class_elements)});
     }
 
     std.debug.print("\n=== Iterator Examples ===\n", .{});
@@ -112,7 +112,7 @@ pub fn runCollectionExamples() !void {
         const all_inputs = z.getElementsByAttribute(doc, "type", "text", false) orelse return;
         defer z.destroyCollection(all_inputs);
 
-        const input_count = z.getCollectionLength(all_inputs);
+        const input_count = z.collectionLength(all_inputs);
         if (input_count > 0) {
             std.debug.print("Iterating through {} input(s):\n", .{input_count});
 

@@ -1103,7 +1103,7 @@ test "collection vs walker - when collections are still useful" {
     const collection_data_42 = try z.getElementsByAttributePair(doc, .{ .name = "data-id", .value = "42" }, false);
     const collection_data_42_count = if (collection_data_42) |coll| blk: {
         defer z.destroyCollection(coll);
-        break :blk z.getCollectionLength(coll);
+        break :blk z.collectionLength(coll);
     } else 0;
 
     std.debug.print("Exact data-id='42' matching:\n", .{});

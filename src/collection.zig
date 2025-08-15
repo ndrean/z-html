@@ -131,7 +131,7 @@ pub fn clearCollection(collection: *z.DomCollection) void {
 }
 
 /// [collection] Get the number of elements in the collection
-pub fn getCollectionLength(collection: *z.DomCollection) usize {
+pub fn collectionLength(collection: *z.DomCollection) usize {
     return lxb_dom_collection_length_noi(collection);
 }
 
@@ -139,7 +139,7 @@ pub fn getCollectionLength(collection: *z.DomCollection) usize {
 ///
 /// Returns null if index is out of bounds
 pub fn getCollectionElementAt(collection: *z.DomCollection, index: usize) ?*z.DomElement {
-    if (index >= getCollectionLength(collection)) {
+    if (index >= collectionLength(collection)) {
         return null;
     }
     return lxb_dom_collection_element_noi(collection, index);
@@ -155,14 +155,14 @@ pub fn getCollectionFirstElement(collection: *z.DomCollection) ?*z.DomElement {
 /// [collection] Get the last element in the collection
 /// Returns null if collection is empty
 pub fn getCollectionLastElement(collection: *z.DomCollection) ?*z.DomElement {
-    const len = getCollectionLength(collection);
+    const len = collectionLength(collection);
     if (len == 0) return null;
     return getCollectionElementAt(collection, len - 1);
 }
 
 /// [collection] Check if collection is empty
 pub fn isCollectionEmpty(collection: *z.DomCollection) bool {
-    return getCollectionLength(collection) == 0;
+    return collectionLength(collection) == 0;
 }
 
 /// [collection] Add an element to the collection
@@ -190,7 +190,7 @@ pub const CollectionIterator = struct {
     }
 
     pub fn next(self: *CollectionIterator) ?*z.DomElement {
-        if (self.index >= getCollectionLength(self.collection)) {
+        if (self.index >= collectionLength(self.collection)) {
             return null;
         }
         const element = getCollectionElementAt(self.collection, self.index);
@@ -412,7 +412,7 @@ fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollec
 ///
 /// Caller needs to free the returned slice
 pub fn collectionToSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*z.DomElement {
-    const len = getCollectionLength(collection);
+    const len = collectionLength(collection);
     if (len == 0) return &[_]?*z.DomElement{};
 
     const slice = try allocator.alloc(?*z.DomElement, len);
@@ -424,7 +424,7 @@ pub fn collectionToSlice(allocator: std.mem.Allocator, collection: *z.DomCollect
 
 /// [collection] Debug: Print collection info for debugging
 pub fn debugPrint(collection: *z.DomCollection) void {
-    const len = getCollectionLength(collection);
+    const len = collectionLength(collection);
     print("Debug print Collection: {} elements\n", .{len});
 
     var iter = iterator(collection);
@@ -450,7 +450,7 @@ test "collection basic operations" {
 
     // Initially empty
     try testing.expect(isCollectionEmpty(collection));
-    try testing.expectEqual(@as(usize, 0), getCollectionLength(collection));
+    try testing.expectEqual(@as(usize, 0), collectionLength(collection));
     try testing.expect(getCollectionFirstElement(collection) == null);
 
     // Test iterator on empty collection
@@ -508,7 +508,7 @@ test "getElementsByAttribute functionality" {
     const collection = try getElementsByClassName(doc, "highlight") orelse return error.CollectionFailed;
     defer destroyCollection(collection);
 
-    try testing.expectEqual(@as(usize, 2), getCollectionLength(collection));
+    try testing.expectEqual(@as(usize, 2), collectionLength(collection));
 
     const first = getCollectionElementAt(collection, 0);
     const second = getCollectionElementAt(collection, 1);
@@ -538,7 +538,7 @@ test "getElementsByAttributePair comprehensive tests" {
             false,
         ) orelse return error.CollectionFailed;
         defer destroyCollection(text_inputs);
-        try testing.expectEqual(@as(usize, 1), getCollectionLength(text_inputs));
+        try testing.expectEqual(@as(usize, 1), collectionLength(text_inputs));
     }
 
     // Test 2: Find by required attribute (this will find elements with required="")
@@ -561,7 +561,7 @@ test "getElementsByAttributePair comprehensive tests" {
             false,
         ) orelse return error.CollectionFailed;
         defer destroyCollection(username_field);
-        try testing.expectEqual(@as(usize, 1), getCollectionLength(username_field));
+        try testing.expectEqual(@as(usize, 1), collectionLength(username_field));
     }
 
     // Test 4: Case insensitive search
@@ -572,7 +572,7 @@ test "getElementsByAttributePair comprehensive tests" {
             true,
         ) orelse return error.CollectionFailed;
         defer destroyCollection(submit_inputs);
-        try testing.expectEqual(@as(usize, 1), getCollectionLength(submit_inputs));
+        try testing.expectEqual(@as(usize, 1), collectionLength(submit_inputs));
     }
 
     // Test 5: Non-existent attribute value
@@ -583,7 +583,7 @@ test "getElementsByAttributePair comprehensive tests" {
             false,
         ) orelse return error.CollectionFailed;
         defer destroyCollection(nonexistent);
-        try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
+        try testing.expectEqual(@as(usize, 0), collectionLength(nonexistent));
     }
 }
 
@@ -618,7 +618,7 @@ test "comprehensive iterator tests" {
         }
         // The actual count depends on HTML parsing, but should be reasonable
         try testing.expect(count > 0);
-        try testing.expectEqual(getCollectionLength(items), count);
+        try testing.expectEqual(collectionLength(items), count);
     }
 
     // Test 2: Iterator reset functionality
@@ -636,7 +636,7 @@ test "comprehensive iterator tests" {
             count += 1;
         }
         try testing.expect(count > 0);
-        try testing.expectEqual(getCollectionLength(items), count);
+        try testing.expectEqual(collectionLength(items), count);
     }
 
     // Test 3: Multiple independent iterators
@@ -683,7 +683,7 @@ test "comprehensive iterator tests" {
     // Test 5: Manual vs iterator comparison
     {
         var iter = iterator(items);
-        for (0..getCollectionLength(items)) |i| {
+        for (0..collectionLength(items)) |i| {
             const manual_element = getCollectionElementAt(items, i);
             const iter_element = iter.next();
 
@@ -717,7 +717,7 @@ test "collection utility functions" {
     defer destroyCollection(buttons);
 
     // Test collection utility functions
-    try testing.expectEqual(@as(usize, 1), getCollectionLength(buttons));
+    try testing.expectEqual(@as(usize, 1), collectionLength(buttons));
     try testing.expect(!isCollectionEmpty(buttons));
 
     const first = getCollectionFirstElement(buttons);
@@ -857,12 +857,12 @@ test "performance comparison: Lexbor native vs custom Zig traversal" {
     const end1 = try Instant.now();
     const elapsed1: f64 = @floatFromInt(end1.since(start1));
 
-    try testing.expectEqual(@as(usize, 1), getCollectionLength(collection1));
+    try testing.expectEqual(@as(usize, 1), collectionLength(collection1));
     const element1 = getCollectionFirstElement(collection1);
     try testing.expect(element1 != null);
 
     _ = elapsed1;
-    // print("Lexbor native (name+value): {d:.3}ms - Found {} elements\n", .{ elapsed1 / std.time.ns_per_ms, getCollectionLength(collection1) });
+    // print("Lexbor native (name+value): {d:.3}ms - Found {} elements\n", .{ elapsed1 / std.time.ns_per_ms, collectionLength(collection1) });
 
     // Method 2: Custom Zig traversal - getElementsByAttributeName (name only)
     const start2 = try Instant.now();
@@ -876,12 +876,12 @@ test "performance comparison: Lexbor native vs custom Zig traversal" {
     const elapsed2: f64 = @floatFromInt(end2.since(start2));
     _ = elapsed2; // Use elapsed2 to avoid unused variable warning
 
-    // print("Custom Zig traversal (name only): {d:.3}ms - Found {} elements\n", .{ elapsed2 / std.time.ns_per_ms, getCollectionLength(collection2) });
+    // print("Custom Zig traversal (name only): {d:.3}ms - Found {} elements\n", .{ elapsed2 / std.time.ns_per_ms, collectionLength(collection2) });
 
     // The custom traversal should find ALL elements with data-test attribute (101 elements)
     // The native should find only the one with the specific value (1 element)
-    try testing.expect(getCollectionLength(collection2) > getCollectionLength(collection1));
-    try testing.expectEqual(@as(usize, 101), getCollectionLength(collection2)); // All divs have data-test
+    try testing.expect(collectionLength(collection2) > collectionLength(collection1));
+    try testing.expectEqual(@as(usize, 101), collectionLength(collection2)); // All divs have data-test
 
     // print("Performance ratio: {d:.2}x (native is faster)\n", .{elapsed2 / elapsed1});
     // print("Note: Different search criteria - native finds specific value, custom finds any attribute name\n", .{});
@@ -935,7 +935,7 @@ test "elementHasAnyAttribute performance demonstration" {
     ) orelse return error.CollectionFailed;
     defer destroyCollection(id_elements);
 
-    try testing.expectEqual(@as(usize, 1), getCollectionLength(id_elements));
+    try testing.expectEqual(@as(usize, 1), collectionLength(id_elements));
 
     const found_element = getCollectionElementAt(id_elements, 0).?;
     try testing.expect(z.hasAttribute(found_element, "id"));
@@ -975,7 +975,7 @@ test "getElementsByAttributeName performance optimization" {
     ) orelse return error.CollectionFailed;
     defer destroyCollection(id_elements);
 
-    const count = getCollectionLength(id_elements);
+    const count = collectionLength(id_elements);
     try testing.expect(count == 3); // container, para1, span1
 
     // Verify that elements without any attributes were correctly skipped
@@ -1017,7 +1017,7 @@ test "getElementsByAttributeName functionality" {
         ) orelse return error.CollectionFailed;
         defer destroyCollection(id_elements);
 
-        const count = getCollectionLength(id_elements);
+        const count = collectionLength(id_elements);
         try testing.expect(count == 5);
 
         // Verify we can iterate through them
@@ -1041,7 +1041,7 @@ test "getElementsByAttributeName functionality" {
 
         defer destroyCollection(class_elements);
 
-        const count = getCollectionLength(class_elements);
+        const count = collectionLength(class_elements);
         try testing.expect(count >= 3);
 
         // Verify all found elements have the class attribute
@@ -1061,7 +1061,7 @@ test "getElementsByAttributeName functionality" {
 
         defer destroyCollection(type_elements);
 
-        const count = getCollectionLength(type_elements);
+        const count = collectionLength(type_elements);
         try testing.expectEqual(@as(usize, 3), count);
     }
 
@@ -1075,7 +1075,7 @@ test "getElementsByAttributeName functionality" {
 
         defer destroyCollection(name_elements);
 
-        const count = getCollectionLength(name_elements);
+        const count = collectionLength(name_elements);
         try testing.expectEqual(@as(usize, 2), count);
     }
 
@@ -1084,7 +1084,7 @@ test "getElementsByAttributeName functionality" {
         const nonexistent = try getElementsByAttributeName(doc, "nonexistent", .single) orelse return error.CollectionFailed;
         defer destroyCollection(nonexistent);
 
-        try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
+        try testing.expectEqual(@as(usize, 0), collectionLength(nonexistent));
         try testing.expect(isCollectionEmpty(nonexistent));
     }
 
@@ -1107,8 +1107,8 @@ test "getElementsByAttributeName functionality" {
         defer destroyCollection(specific_id);
 
         // all_with_id should have more elements than specific_id
-        try testing.expect(getCollectionLength(all_with_id) > getCollectionLength(specific_id));
-        try testing.expectEqual(@as(usize, 1), getCollectionLength(specific_id));
+        try testing.expect(collectionLength(all_with_id) > collectionLength(specific_id));
+        try testing.expectEqual(@as(usize, 1), collectionLength(specific_id));
     }
 }
 
@@ -1137,10 +1137,10 @@ test "getElementsByTagName functionality" {
         const paragraphs = try getElementsByTagName(doc, "P") orelse return error.CollectionFailed;
         defer destroyCollection(paragraphs);
 
-        try testing.expectEqual(@as(usize, 3), getCollectionLength(paragraphs));
+        try testing.expectEqual(@as(usize, 3), collectionLength(paragraphs));
 
         // Verify all found elements are indeed paragraphs
-        for (0..getCollectionLength(paragraphs)) |i| {
+        for (0..collectionLength(paragraphs)) |i| {
             const element = getCollectionElementAt(paragraphs, i).?;
             const tag_name = z.tagName(element);
             try testing.expect(std.mem.eql(u8, tag_name, "P"));
@@ -1152,7 +1152,7 @@ test "getElementsByTagName functionality" {
         const divs = try getElementsByTagName(doc, "DIV") orelse return error.CollectionFailed;
         defer destroyCollection(divs);
 
-        try testing.expectEqual(@as(usize, 2), getCollectionLength(divs)); // container + nested div
+        try testing.expectEqual(@as(usize, 2), collectionLength(divs)); // container + nested div
     }
 
     // Test 3: Find all spans
@@ -1160,7 +1160,7 @@ test "getElementsByTagName functionality" {
         const spans = try getElementsByTagName(doc, "SPAN") orelse return error.CollectionFailed;
         defer destroyCollection(spans);
 
-        try testing.expectEqual(@as(usize, 2), getCollectionLength(spans));
+        try testing.expectEqual(@as(usize, 2), collectionLength(spans));
     }
 
     // Test 4: Find non-existent tag
@@ -1168,7 +1168,7 @@ test "getElementsByTagName functionality" {
         const articles = try getElementsByTagName(doc, "ARTICLE") orelse return error.CollectionFailed;
         defer destroyCollection(articles);
 
-        try testing.expectEqual(@as(usize, 0), getCollectionLength(articles));
+        try testing.expectEqual(@as(usize, 0), collectionLength(articles));
     }
 }
 
@@ -1200,10 +1200,10 @@ test "getElementsByName functionality" {
         const gender_inputs = try getElementsByName(doc, "gender") orelse return error.CollectionFailed;
         defer destroyCollection(gender_inputs);
 
-        try testing.expectEqual(@as(usize, 2), getCollectionLength(gender_inputs));
+        try testing.expectEqual(@as(usize, 2), collectionLength(gender_inputs));
 
         // Verify all found elements have the correct name attribute
-        for (0..getCollectionLength(gender_inputs)) |i| {
+        for (0..collectionLength(gender_inputs)) |i| {
             const element = getCollectionElementAt(gender_inputs, i).?;
             if (try z.getAttribute(allocator, element, "name")) |name_value| {
                 defer allocator.free(name_value);
@@ -1217,7 +1217,7 @@ test "getElementsByName functionality" {
         const username_input = try getElementsByName(doc, "username") orelse return error.CollectionFailed;
         defer destroyCollection(username_input);
 
-        try testing.expectEqual(@as(usize, 1), getCollectionLength(username_input));
+        try testing.expectEqual(@as(usize, 1), collectionLength(username_input));
     }
 
     // Test 3: Find non-existent name
@@ -1225,7 +1225,7 @@ test "getElementsByName functionality" {
         const nonexistent = try getElementsByName(doc, "nonexistent") orelse return error.CollectionFailed;
         defer destroyCollection(nonexistent);
 
-        try testing.expectEqual(@as(usize, 0), getCollectionLength(nonexistent));
+        try testing.expectEqual(@as(usize, 0), collectionLength(nonexistent));
     }
 }
 
@@ -1337,7 +1337,7 @@ test "configurable default capacity usage example" {
     // print("\n=== Testing with Search Functions ===\n", .{});
     if (try getElementsByAttributeName(doc, "class", .default)) |class_elements| {
         defer destroyCollection(class_elements);
-        // print("Found {} elements with 'class' attribute using default capacity ({})\n", .{ getCollectionLength(class_elements), getDefaultCapacity() });
+        // print("Found {} elements with 'class' attribute using default capacity ({})\n", .{ collectionLength(class_elements), getDefaultCapacity() });
     }
 
     // 6. Reset to original default

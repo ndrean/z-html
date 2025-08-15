@@ -72,7 +72,7 @@ pub fn runBasicCollectionExample() !void {
         defer z.destroyCollection(collection);
 
         print("✓ Created collection successfully\n", .{});
-        print("Collection length: {}\n", .{z.getCollectionLength(collection)});
+        print("Collection length: {}\n", .{z.collectionLength(collection)});
 
         if (z.isCollectionEmpty(collection)) {
             print("✓ Collection is empty as expected\n", .{});

@@ -31,9 +31,9 @@ pub fn main() !void {
     print("\n1. Finding all paragraphs with getElementsByTagName:\n", .{});
     if (try z.getElementsByTagName(doc, "P")) |paragraphs| {
         defer z.destroyCollection(paragraphs);
-        print("Found {} paragraph(s)\n", .{z.getCollectionLength(paragraphs)});
+        print("Found {} paragraph(s)\n", .{z.collectionLength(paragraphs)});
 
-        for (0..z.getCollectionLength(paragraphs)) |i| {
+        for (0..z.collectionLength(paragraphs)) |i| {
             if (z.getCollectionElementAt(paragraphs, i)) |p| {
                 const p_node = z.elementToNode(p);
                 const text = try z.getTextContentOpts(allocator, p_node, .{});
@@ -48,7 +48,7 @@ pub fn main() !void {
     print("\n2. Finding elements by class:\n", .{});
     if (try z.getElementsByClassName(doc, "container")) |containers| {
         defer z.destroyCollection(containers);
-        print("Found {} element(s) with class 'container'\n", .{z.getCollectionLength(containers)});
+        print("Found {} element(s) with class 'container'\n", .{z.collectionLength(containers)});
     }
 
     print("\n=== DOM Manipulation Demo ===\n", .{});
@@ -88,9 +88,9 @@ pub fn main() !void {
         print("\n5. Verifying final document structure:\n", .{});
         if (try z.getElementsByTagName(doc, "DIV")) |all_divs| {
             defer z.destroyCollection(all_divs);
-            print("Total DIV elements in document: {}\n", .{z.getCollectionLength(all_divs)});
+            print("Total DIV elements in document: {}\n", .{z.collectionLength(all_divs)});
 
-            for (0..z.getCollectionLength(all_divs)) |i| {
+            for (0..z.collectionLength(all_divs)) |i| {
                 if (z.getCollectionElementAt(all_divs, i)) |div| {
                     if (z.getElementTextContent(div)) |text| {
                         print("  - DIV {}: '{}'\n", .{ i + 1, text });

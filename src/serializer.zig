@@ -24,7 +24,7 @@ extern "c" fn lxb_html_element_inner_html_set(body: *z.DomElement, inner: [*]con
 ///
 ///
 /// Caller needs to free the returned slice.
-pub fn serializeTree(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
+pub fn serializeToString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var str: lxbString = .{
         .data = null,
         .length = 0,
@@ -76,7 +76,7 @@ pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
 /// Caller needs to free the returned slice.
 pub fn serializeElement(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     const node = z.elementToNode(element);
-    return try serializeTree(allocator, node);
+    return try serializeToString(allocator, node);
 }
 
 // -------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     // Traverse child nodes and concatenate their serialization into a slice
     var child = z.firstChild(element_node);
     while (child != null) {
-        const child_html = try serializeTree(allocator, child.?);
+        const child_html = try serializeToString(allocator, child.?);
         defer allocator.free(child_html);
 
         try result.appendSlice(child_html);
@@ -199,7 +199,7 @@ test "innerHTML" {
     const inner2 = try innerHTML(allocator, div);
     defer allocator.free(inner2);
 
-    const inner3 = try serializeTree(allocator, z.elementToNode(div));
+    const inner3 = try serializeToString(allocator, z.elementToNode(div));
     defer allocator.free(inner3);
 
     try testing.expect(
@@ -284,7 +284,7 @@ test "direct serialization" {
     const body_node = try z.bodyNode(doc);
 
     if (z.firstChild(body_node)) |div_node| {
-        const serialized = try serializeTree(allocator, div_node);
+        const serialized = try serializeToString(allocator, div_node);
         defer allocator.free(serialized);
 
         try testing.expect(
@@ -315,7 +315,7 @@ test "serialize Node vs tree functionality" {
     const node_html = try serializeNode(allocator, div_node);
     defer allocator.free(node_html);
 
-    const tree_html = try serializeTree(
+    const tree_html = try serializeToString(
         allocator,
         div_node,
     );
@@ -397,7 +397,7 @@ test "behaviour of serializeNode" {
         const serial_node = try serializeNode(allocator, element_node);
         defer allocator.free(serial_node);
 
-        const serialized_tree = try serializeTree(allocator, element_node);
+        const serialized_tree = try serializeToString(allocator, element_node);
         defer allocator.free(serialized_tree);
 
         try testing.expectEqualStrings(serial_node, case.serialized_node);
@@ -486,7 +486,7 @@ test "serializeNode vs serializeTree comparison" {
     const node_result = try serializeNode(allocator, article_node);
     defer allocator.free(node_result);
 
-    const tree_result = try serializeTree(allocator, article_node);
+    const tree_result = try serializeToString(allocator, article_node);
     defer allocator.free(tree_result);
 
     try testing.expect(node_result.len == 9);

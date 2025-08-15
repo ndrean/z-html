@@ -134,7 +134,7 @@ test "chunks1" {
         "P",
     );
 
-    const html = try z.serializeTree(
+    const html = try z.serializeToString(
         allocator,
         z.elementToNode(body),
     );
@@ -200,7 +200,7 @@ test "chunk parsing comprehensive" {
     );
 
     // Test serialization
-    const html = try z.serializeTree(
+    const html = try z.serializeToString(
         allocator,
         z.elementToNode(body),
     );

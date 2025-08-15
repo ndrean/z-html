@@ -15,7 +15,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
 
     const body_node = try z.bodyNode(doc);
 
-    const html = try z.serializeTree(
+    const html = try z.serializeToString(
         allocator,
         body_node,
     );
@@ -31,7 +31,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
         .{ .remove_comments = true },
     );
 
-    const new_html = try z.serializeTree(
+    const new_html = try z.serializeToString(
         allocator,
         body_node,
     );

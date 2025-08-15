@@ -107,11 +107,11 @@ test "Append fragment" {
         z.destroyCollection(collection);
     };
 
-  const li_count = z.getCollectionLength(lis);
+  const li_count = z.collectionLength(lis);
   try testing.expect(li_count == 3);
 
   // second test: we check that the full string is what we expect
-  const serialized_fragment = try z.serializeTree(allocator, div);
+  const serialized_fragment = try z.serializeToString(allocator, div);
   defer allocator.free(fragment_txt);
 
   const expected_fragment =

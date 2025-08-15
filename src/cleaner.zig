@@ -426,7 +426,7 @@ test "cleaning options coverage" {
         const body_node = try z.bodyNode(doc);
 
         try cleanDomTree(allocator, body_node, .{});
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         // Should preserve comments and empty elements
@@ -465,7 +465,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         // Debug: print the actual result to see what we're getting
@@ -494,12 +494,12 @@ test "cleaning options coverage" {
         defer z.destroyDocument(doc);
         const body_node = try z.bodyNode(doc);
 
-        const before_empty = try z.serializeTree(allocator, body_node);
+        const before_empty = try z.serializeToString(allocator, body_node);
         defer allocator.free(before_empty);
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
         // print("After empty element removal: {s}\n", .{result});
         // print("T3: {s}\n", .{result});
@@ -554,7 +554,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
         // print("T4: {s}\n", .{result});
 
@@ -612,7 +612,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         print("Test 5 (escape ignored in cleaning) result: '{s}'\n", .{result});
@@ -650,7 +650,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         // print("Test 6 (cleaning only, escape ignored) result: '{s}'\n", .{result});
@@ -703,7 +703,7 @@ test "keep_new_lines option comprehensive test" {
             },
         );
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
         print("{s}\n", .{result});
 
@@ -724,7 +724,7 @@ test "keep_new_lines option comprehensive test" {
         const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
-        const before_newlines = try z.serializeTree(allocator, body_node);
+        const before_newlines = try z.serializeToString(allocator, body_node);
         defer allocator.free(before_newlines);
         // print("Before newlines cleaning: {s}\n", .{before_newlines});
 
@@ -737,7 +737,7 @@ test "keep_new_lines option comprehensive test" {
             },
         );
 
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
         // print("After newlines cleaning (keep=true): {s}\n", .{result});
 
@@ -782,7 +782,7 @@ test "complete DOM cleaning with proper node removal" {
 
     // print("\n=== Complete DOM Cleaning Test ===\n", .{});
 
-    const before = try z.serializeTree(allocator, body_node);
+    const before = try z.serializeToString(allocator, body_node);
     defer allocator.free(before);
 
     try cleanDomTree(
@@ -795,7 +795,7 @@ test "complete DOM cleaning with proper node removal" {
         },
     );
 
-    const after = try z.serializeTree(allocator, body_node);
+    const after = try z.serializeToString(allocator, body_node);
     defer allocator.free(after);
     // print("\n\nAfter cleaning:=============\n{s}\n\n", .{after});
 
@@ -836,13 +836,13 @@ test "comment removal between text nodes concatenation issue" {
     const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
-    const before = try z.serializeTree(allocator, body_node);
+    const before = try z.serializeToString(allocator, body_node);
     defer allocator.free(before);
     print("Before comment removal: {s}\n", .{before});
 
     try cleanDomTree(allocator, body_node, .{ .remove_comments = true });
 
-    const after = try z.serializeTree(allocator, body_node);
+    const after = try z.serializeToString(allocator, body_node);
     defer allocator.free(after);
     print("After comment removal: {s}\n", .{after});
 
@@ -959,12 +959,12 @@ test "comment removal with proper spacing" {
         const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
-        const before = try z.serializeTree(allocator, body_node);
+        const before = try z.serializeToString(allocator, body_node);
         defer allocator.free(before);
 
         try cleanDomTree(allocator, body_node, .{ .remove_comments = true });
 
-        const after = try z.serializeTree(allocator, body_node);
+        const after = try z.serializeToString(allocator, body_node);
         defer allocator.free(after);
 
         print("Test {d}: {s}\n", .{ i + 1, test_case.description });
@@ -998,7 +998,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
     // Test 1: Insert without escaping
     try z.setOrReplaceText(allocator, p_node, user_input, .{ .escape = false });
     {
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         print("Unescaped text insertion result: '{s}'\n", .{result});
@@ -1010,7 +1010,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
     // Test 2: Insert with escaping (double-escaping)
     try z.setOrReplaceText(allocator, p_node, user_input, .{ .escape = true });
     {
-        const result = try z.serializeTree(allocator, body_node);
+        const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
         print("Escaped text insertion result: '{s}'\n", .{result});

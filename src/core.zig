@@ -477,11 +477,83 @@ pub fn isSelfClosingNode(node: *DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
-/// [core] Check if node contains only whitespace
+/// [core] Used to check if node that is an _non self-closing element_ contains only whitespace
 ///
-/// Only works on Elements (#text or #comments are seen as empty)
+/// Self-closing elements, #text or #comments nodes are seen as empty nodes
+///
+/// ## Examples
+/// ```
+/// const img = try z.createElement(doc, "img", &.{.name = "src", .value = "image.png"});
+/// try testing.expect(z.isSelfClosing(z.elementToNode(img)));
+/// try testing.expect(z.isNodeEmpty(z.elementToNode(img)));
+///
+/// const p = try z.createTextNode(doc, "some text");
+/// try testing.expect(z.isNodeEmpty(p));
+///
+/// const comment = try z.createComment(doc, "some comment");
+/// try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
+///
+/// // to select only non self-closing elements, do:
+/// if (!z.isSelfClosingNode(node) and !(z.nodeType(node) == .comment) and !(z.nodeType(node) == .text)) {
+///   if (z.isNodeEmpty(node)) {
+///     std.debug.print("node is \"really\" empty!", .{} );
+///   }
+/// }
 pub fn isNodeEmpty(node: *DomNode) bool {
     return lxb_dom_node_is_empty(node);
+}
+
+test "what is empty?" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body></body></html>");
+    defer destroyDocument(doc);
+
+    const body_node = try bodyNode(doc);
+    const body = try bodyElement(doc);
+
+    try testing.expect(isNodeEmpty(body_node));
+
+    const innerHtml =
+        "<p id=\"1\"></p><span>  </span><br/><img alt=\"img\"/><div>  \n </div><script></script><p> text </p>";
+    _ = try z.setInnerHTML(allocator, body, innerHtml, .{});
+    const p = firstChild(body_node);
+    const span = nextSibling(p.?);
+    const br = nextSibling(span.?);
+    const img = nextSibling(br.?);
+    const div = nextSibling(img.?);
+    const inner_div = z.firstChild(div.?);
+    const script = nextSibling(div.?);
+    const last_p = nextSibling(script.?);
+    const inner_last_p = z.firstChild(last_p.?);
+
+    try testing.expect(!isNodeEmpty(body_node));
+    try testing.expect(isNodeEmpty(p.?)); // attributes don't change emptyness
+    try testing.expect((!isSelfClosingNode(p.?) and !(z.nodeType(p.?) == .comment) and !(z.nodeType(p.?) == .text)));
+    try testing.expect(isNodeEmpty(span.?));
+    try testing.expect(isNodeEmpty(br.?)); // self-closing empty
+    try testing.expect(isNodeEmpty(img.?)); // self-closing empty
+    try testing.expect(isNodeEmpty(div.?)); // whitespace only is empty
+    try testing.expect(isNodeEmpty(script.?));
+    try testing.expect(!isNodeEmpty(last_p.?)); // contains a node
+    try testing.expect(isNodeEmpty(inner_div.?)); // #text are empty
+    try testing.expect(isNodeEmpty(inner_last_p.?)); // #text are empty
+
+    const text1 = getTextContent(allocator, p.?);
+    try testing.expectError(Err.EmptyTextContent, text1);
+
+    // DIv is empty but contains whotespace like characters.
+    const text2 = try getTextContent(allocator, div.?);
+    defer allocator.free(text2);
+    try testing.expect(text2.len == 4); // 3 ' ' and 1 '\n'
+
+    const text3 = try getTextContent(allocator, inner_last_p.?);
+    defer allocator.free(text3);
+    try testing.expect(text3.len == 6);
+
+    const p2 = try z.createTextNode(doc, "some text ");
+    try testing.expect(z.isNodeEmpty(p2));
+    const comment = try z.createComment(doc, "some comment");
+    try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
 }
 
 //=============================================================================
@@ -733,9 +805,11 @@ extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8
 extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
 
-/// [core] Get text content as Zig string (copies to Zig-managed memory)
+/// [core] Get concatenated text content of a node. !! It is wrong to return an error if NULL. Change
 ///
-/// It returns a concatenation of the text contents of all descendant text nodes.
+/// It returns a concatenation of the text contents of all descendant text nodes or an error if none are found. !! This is wrong, should return NULL if NULL!!
+///
+/// It works on nodes (text, comment or element).
 ///
 /// Caller needs to free the returned string
 pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
@@ -751,7 +825,7 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
     return result;
 }
 
-/// [core] Set text content on empty node from Zig string
+/// [core] Set text content on a node
 pub fn setTextContent(node: *DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
@@ -763,7 +837,7 @@ pub fn setTextContent(node: *DomNode, content: []const u8) !void {
 
 /// [core] set or replace text data on a text node
 ///
-/// If the inner text node is empty, it will be created.
+/// If the inner text node is void, it will be created.
 /// If options.escape is true, the text will be HTML-escaped before insertion.
 pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []const u8, options: z.TextOptions) !void {
     // Apply HTML escaping if requested (for new user input)
@@ -804,26 +878,45 @@ pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![
     return inner_text;
 }
 
-// test "getCommentTextContent" {
-//     const allocator = std.testing.allocator;
-//     const doc = try createDocument();
-//     defer destroyDocument(doc);
+test "first text content & comment" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<p>hello</p><br/><!--comment-->");
+    const p = firstChild(try bodyNode(doc));
+    const text = try getTextContent(allocator, p.?);
+    defer allocator.free(text);
+    try testing.expectEqualStrings("hello", text);
+    const inner = z.firstChild(p.?);
+    const inner_text = try getTextContent(allocator, inner.?);
+    defer allocator.free(inner_text);
+    try testing.expectEqualStrings("hello", inner_text);
+    const br = elementToNode(nextElementSibling(nodeToElement(p.?).?).?);
+    const br_text = getTextContent(allocator, br);
+    try testing.expectError(Err.EmptyTextContent, br_text);
+    const comment_node = nextSibling(br);
+    const comment_text = try getTextContent(allocator, comment_node.?);
+    try testing.expectEqualStrings("comment", comment_text);
+    defer allocator.free(comment_text);
+    const comment = nodeToComment(comment_node.?);
+    const c_text = try getCommentTextContent(allocator, comment.?);
+    defer allocator.free(c_text);
+    try testing.expectEqualStrings("comment", c_text);
+}
 
-//     const comment = try createComment(doc, "This is a comment");
-//     defer destroyComment(comment);
+test "first set text content" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<p></p><span>first</span>");
+    const p = firstChild(try bodyNode(doc));
+    const span = nextSibling(p.?).?;
+    try setTextContent(p.?, "new text");
+    try setTextContent(span, "second");
 
-//     const text_content = try getCommentTextContent(allocator, comment);
-//     defer allocator.free(text_content);
-
-//     try testing.expectEqualStrings("This is a comment", text_content);
-//     const body = try bodyElement(doc);
-//     const inner = z.setinnerHTML(body, "<!-- another one-->");
-//     _ = inner;
-//     const first_child = firstChild(elementToNode(body));
-//     const inner_text = try getCommentTextContent(allocator, nodeToComment(first_child.?).?);
-//     defer allocator.free(inner_text);
-//     try testing.expectEqualStrings("another one", inner_text);
-// }
+    const p_text = try getTextContent(allocator, p.?);
+    defer allocator.free(p_text);
+    try testing.expectEqualStrings("new text", p_text);
+    const span_text = try getTextContent(allocator, span);
+    defer allocator.free(span_text);
+    try testing.expectEqualStrings("second", span_text);
+}
 
 /// Free lexbor-allocated memory ????
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
@@ -1155,66 +1248,6 @@ test "appendChildren helper" {
     try testing.expectEqual(@as(usize, 3), child_count);
 }
 
-test "what is empty?" {
-    const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body></body></html>");
-    defer destroyDocument(doc);
-
-    const body_node = try bodyNode(doc);
-    const body = try bodyElement(doc);
-
-    try testing.expect(isNodeEmpty(body_node));
-
-    const innerHtml =
-        "<p id=\"1\"></p><span>  </span><br/><img alt=\"img\"><div>  \n </div><scriptx></scriptx";
-    _ = try z.setInnerHTML(allocator, body, innerHtml, .{});
-    const p = firstChild(body_node);
-    const span = nextSibling(p.?);
-    const br = nextSibling(span.?);
-    const img = nextSibling(br.?);
-    const div = nextSibling(img.?);
-    const script = nextSibling(div.?);
-
-    try testing.expect(!isNodeEmpty(body_node));
-    try testing.expect(isNodeEmpty(p.?));
-    try testing.expect(isNodeEmpty(span.?));
-    try testing.expect(isNodeEmpty(br.?));
-    try testing.expect(isNodeEmpty(img.?));
-    try testing.expect(isNodeEmpty(div.?));
-    try testing.expect(isNodeEmpty(script.?));
-
-    const text1 = getTextContent(allocator, p.?);
-    try testing.expectError(Err.EmptyTextContent, text1);
-
-    // DIv is empty but contains whotespace like characters.
-    const text2 = try getTextContent(allocator, div.?);
-    defer allocator.free(text2);
-    try testing.expect(text2.len == 4); // 3 ' ' and 1 '\n'
-}
-
-test "node with (non empty) inner text is NOT empty" {
-    // node with inner text node
-    const doc = try parseFromString("<p>Text</p>");
-    defer destroyDocument(doc);
-    const body = try bodyElement(doc);
-    const body_node = elementToNode(body);
-    const p = firstChild(body_node);
-    try testing.expect(!isNodeEmpty(p.?));
-}
-
-test "node with an (empty text content) node is NOT empty" {
-    const doc = try parseFromString("<p><span><strong></strong></span></p>");
-    defer destroyDocument(doc);
-    const body = try bodyElement(doc);
-    const body_node = elementToNode(body);
-    const p = firstChild(body_node);
-    try testing.expect(!isNodeEmpty(p.?));
-
-    const allocator = testing.allocator;
-    const text = getTextContent(allocator, p.?);
-    try testing.expectError(Err.EmptyTextContent, text);
-}
-
 test "isWhitespaceOnlyText" {
     const text1 = " hello world ";
     try testing.expect(!isWhitespaceOnlyText(text1));
@@ -1377,7 +1410,7 @@ test "create Html element, parseTag, custom element" {
     try testing.expect(found_custom);
 
     const allocator = std.testing.allocator;
-    const text = try z.serializeTree(allocator, body_node);
+    const text = try z.serializeToString(allocator, body_node);
     defer allocator.free(text);
     try testing.expectEqualStrings("<body><p></p><custom-element data-id=\"123\"></custom-element><span></span></body>", text);
 
@@ -1602,7 +1635,7 @@ test "Append JS fragment" {
 
     z.appendFragment(body_node, fragment);
 
-    const fragment_txt = try z.serializeTree(
+    const fragment_txt = try z.serializeToString(
         allocator,
         div_node,
     );
@@ -2000,10 +2033,10 @@ test "show" {
     defer if (lis) |collection| {
         z.destroyCollection(collection);
     };
-    const li_count = z.getCollectionLength(lis.?);
+    const li_count = z.collectionLength(lis.?);
     try testing.expect(li_count == 3);
 
-    const fragment_txt = try z.serializeTree(allocator, div);
+    const fragment_txt = try z.serializeToString(allocator, div);
     print("\n\n{s}\n\n", .{fragment_txt});
 
     defer allocator.free(fragment_txt);

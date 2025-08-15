@@ -1103,7 +1103,7 @@ test "complex HTML structure" {
             .remove_comments = true,
         },
     );
-    const txt = try z.serializeTree(allocator, body_node);
+    const txt = try z.serializeToString(allocator, body_node);
     defer allocator.free(txt);
 
     // print("\nActual: ----------\n{s}\n\n", .{html});
