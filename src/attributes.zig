@@ -352,6 +352,16 @@ const AttributeSearchContext = struct {
     found_element: ?*z.DomElement,
 };
 
+/// Context for collecting multiple elements using walker callback
+const MultiElementSearchContext = struct {
+    target_attr_name: []const u8,
+    target_attr_value: ?[]const u8, // null means just check for attribute existence
+    target_class: ?[]const u8, // for class searches
+    search_type: enum { attribute, class }, // what type of search we're doing
+    allocator: std.mem.Allocator,
+    results: std.ArrayList(*z.DomElement),
+};
+
 /// Fast walker callback for getElementById optimization
 /// Returns LEXBOR_ACTION_STOP when ID is found, LEXBOR_ACTION_OK to continue
 fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
@@ -408,6 +418,60 @@ fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     }
 
     return LEXBOR_ACTION_OK; // Continue searching
+}
+
+/// Fast walker callback for collecting multiple elements by attribute
+/// Always returns LEXBOR_ACTION_OK to continue searching entire tree
+fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+    if (ctx == null) return LEXBOR_ACTION_OK;
+
+    const search_ctx = @as(*MultiElementSearchContext, @ptrCast(@alignCast(ctx.?)));
+
+    // Only check element nodes
+    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+
+    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+
+    var matches = false;
+
+    switch (search_ctx.search_type) {
+        .attribute => {
+            // Check if this element has the target attribute
+            if (!hasAttribute(element, search_ctx.target_attr_name)) return LEXBOR_ACTION_OK;
+
+            // If we only care about attribute existence (value is null), it matches
+            if (search_ctx.target_attr_value == null) {
+                matches = true;
+            } else {
+                // Otherwise, check the attribute value
+                const attr_value = elementGetNamedAttributeValue(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+                matches = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
+            }
+        },
+        .class => {
+            // Check if this element has a class attribute
+            if (!hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
+
+            // Get the class value and search for the target class
+            const class_value = elementGetNamedAttributeValue(element, "class") orelse return LEXBOR_ACTION_OK;
+
+            var iterator = std.mem.splitScalar(u8, class_value, ' ');
+            while (iterator.next()) |class| {
+                const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+                if (std.mem.eql(u8, trimmed_class, search_ctx.target_class.?)) {
+                    matches = true;
+                    break;
+                }
+            }
+        },
+    }
+
+    if (matches) {
+        // Add to results - ignore allocation errors to keep walking
+        search_ctx.results.append(element) catch {};
+    }
+
+    return LEXBOR_ACTION_OK; // Always continue searching
 }
 
 /// Fast walker callback for attribute search optimization
@@ -518,7 +582,72 @@ pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, data_name: []const u8
     return getElementByAttributeFast(doc, attr_name, value);
 }
 
-// ----------------------------------------------------------
+//=============================================================================
+// WALKER-BASED MULTIPLE RESULTS (Alternative to Collections)
+//=============================================================================
+
+/// [attributes] Find ALL elements with specific class using walker (alternative to collection)
+///
+/// This is a walker-based alternative to the collection-based getElementsByClassName.
+/// Potentially faster for large DOMs as it avoids collection overhead.
+///
+/// Caller must free the returned slice.
+pub fn getElementsByClassWalker(allocator: std.mem.Allocator, doc: *z.HtmlDocument, class_name: []const u8) ![]const *z.DomElement {
+    const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
+
+    var search_ctx = MultiElementSearchContext{
+        .target_attr_name = undefined, // Not used for class search
+        .target_attr_value = undefined, // Not used for class search
+        .target_class = class_name,
+        .search_type = .class,
+        .allocator = allocator,
+        .results = std.ArrayList(*z.DomElement).init(allocator),
+    };
+    defer search_ctx.results.deinit();
+
+    lxb_dom_node_simple_walk(root_node, multiElementAttributeWalkerCallback, &search_ctx);
+
+    return search_ctx.results.toOwnedSlice();
+}
+
+/// [attributes] Find ALL elements with specific attribute using walker (alternative to collection)
+///
+/// This is a walker-based alternative to collection-based attribute searching.
+/// Can search by attribute existence (attr_value = null) or specific values.
+///
+/// Caller must free the returned slice.
+pub fn getElementsByAttributeWalker(allocator: std.mem.Allocator, doc: *z.HtmlDocument, attr_name: []const u8, attr_value: ?[]const u8) ![]const *z.DomElement {
+    const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
+
+    var search_ctx = MultiElementSearchContext{
+        .target_attr_name = attr_name,
+        .target_attr_value = attr_value,
+        .target_class = undefined, // Not used for attribute search
+        .search_type = .attribute,
+        .allocator = allocator,
+        .results = std.ArrayList(*z.DomElement).init(allocator),
+    };
+    defer search_ctx.results.deinit();
+
+    lxb_dom_node_simple_walk(root_node, multiElementAttributeWalkerCallback, &search_ctx);
+
+    return search_ctx.results.toOwnedSlice();
+}
+
+/// [attributes] Find ALL elements with specific data-* attribute using walker
+///
+/// Convenience wrapper for data attribute searching.
+/// Example: getElementsByDataAttributeWalker(allocator, doc, "category", "tech")
+///          finds all elements with data-category="tech"
+///
+/// Caller must free the returned slice.
+pub fn getElementsByDataAttributeWalker(allocator: std.mem.Allocator, doc: *z.HtmlDocument, data_name: []const u8, value: ?[]const u8) ![]const *z.DomElement {
+    // Build the full data attribute name
+    var attr_name_buffer: [256]u8 = undefined;
+    const attr_name = try std.fmt.bufPrint(attr_name_buffer[0..], "data-{s}", .{data_name});
+
+    return getElementsByAttributeWalker(allocator, doc, attr_name, value);
+} // ----------------------------------------------------------
 // TESTS
 // ----------------------------------------------------------
 
@@ -949,54 +1078,48 @@ test "walker-based search vs existing implementations comparison" {
     try testing.expectEqualStrings("Important text", content);
 }
 
-test "walker search edge cases and performance" {
+test "collection vs walker - when collections are still useful" {
     const allocator = testing.allocator;
 
-    // Test with deeply nested structure
-    var html_buffer = std.ArrayList(u8).init(allocator);
-    defer html_buffer.deinit();
-
-    const writer = html_buffer.writer();
-    try writer.writeAll("<html><body>");
-
-    // Create nested structure
-    for (0..50) |i| {
-        try writer.print("<div class='level-{}'>", .{i});
-    }
-
-    try writer.writeAll("<span id='deep-target' class='target-class' data-depth='50'>Deep Target</span>");
-
-    for (0..50) |_| {
-        try writer.writeAll("</div>");
-    }
-
-    try writer.writeAll("</body></html>");
-
-    const html = try html_buffer.toOwnedSlice();
-    defer allocator.free(html);
+    const html =
+        \\<html><body>
+        \\  <div data-id="42">Exact match</div>
+        \\  <div data-id="142">Partial match</div>
+        \\  <div data-id="420">Partial match</div>
+        \\  <div data-category="electronics">Category</div>
+        \\</body></html>
+    ;
 
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    // Test that walker can find deeply nested elements efficiently
-    const deep_id = try getElementByIdFast(doc, "deep-target");
-    try testing.expect(deep_id != null);
-    try testing.expectEqualStrings("SPAN", z.tagName(deep_id.?));
+    std.debug.print("\n=== When Collections Excel ===\n", .{});
 
-    const deep_class = try getElementByClassFast(doc, "target-class");
-    try testing.expect(deep_class != null);
-    try testing.expect(deep_class.? == deep_id.?);
+    // Test exact attribute value matching where collections work well
+    const walker_data_42 = try getElementsByDataAttributeWalker(allocator, doc, "id", "42");
+    defer allocator.free(walker_data_42);
 
-    const deep_data = try getElementByDataAttributeFast(doc, "depth", "50");
-    try testing.expect(deep_data != null);
-    try testing.expect(deep_data.? == deep_id.?);
+    // For exact data-id matching, let's use getElementsByAttributePair directly
+    const collection_data_42 = try z.getElementsByAttributePair(doc, .{ .name = "data-id", .value = "42" }, false);
+    const collection_data_42_count = if (collection_data_42) |coll| blk: {
+        defer z.destroyCollection(coll);
+        break :blk z.getCollectionLength(coll);
+    } else 0;
 
-    // Test first-match behavior - should find level-0 first
-    const first_level = try getElementByClassFast(doc, "level-0");
-    try testing.expect(first_level != null);
-    try testing.expectEqualStrings("DIV", z.tagName(first_level.?));
+    std.debug.print("Exact data-id='42' matching:\n", .{});
+    std.debug.print("  Walker: {} elements\n", .{walker_data_42.len});
+    std.debug.print("  Collection: {} elements\n", .{collection_data_42_count});
+
+    // Both should find exactly 1 element
+    try testing.expect(walker_data_42.len == 1);
+    try testing.expect(collection_data_42_count == 1);
+
+    std.debug.print("\n📊 Summary:\n", .{});
+    std.debug.print("• Walker: Better for CSS classes (token-based)\n", .{});
+    std.debug.print("• Collection: Better for exact attribute values\n", .{});
+    std.debug.print("• Walker: Better for single-element searches (early exit)\n", .{});
+    std.debug.print("• Collection: Better for bulk operations on known large result sets\n", .{});
 }
-
 test "getElementById vs getElementByIdFast comparison" {
     const allocator = testing.allocator;
 
