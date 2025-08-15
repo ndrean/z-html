@@ -20,21 +20,13 @@ pub fn leadingWhitespaceSize(data: []const u8) usize {
 }
 
 /// Check if a text node should not be escaped (inside script, style, etc.)
-/// This provides LazyHTML's context-aware escaping
+/// OPTIMIZED: Uses zero-copy enum-based lookup for maximum performance
 pub fn isNoEscapeTextNode(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
 
     if (z.nodeToElement(parent)) |parent_element| {
-        const tag_name = z.tagName(parent_element);
-
-        // Elements where text content should not be escaped
-        const no_escape_tags = [_][]const u8{ "SCRIPT", "STYLE", "XMP", "IFRAME", "NOEMBED", "NOFRAMES", "PLAINTEXT" };
-
-        for (no_escape_tags) |tag| {
-            if (std.mem.eql(u8, tag_name, tag)) {
-                return true;
-            }
-        }
+        const qualified_name = z.qualifiedNameBorrow(parent_element);
+        return z.isNoEscapeElementFast(qualified_name);
     }
 
     return false;
