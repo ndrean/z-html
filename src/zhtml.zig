@@ -105,6 +105,11 @@ pub const appendFragment = lxb.appendFragment;
 pub const getChildNodes = lxb.getChildNodes;
 pub const getChildren = lxb.getChildren;
 
+// Template element support
+pub const isTemplateElement = lxb.isTemplateElement;
+pub const templateInterface = lxb.templateInterface;
+pub const templateAwareFirstChild = lxb.templateAwareFirstChild;
+
 // Experimental DOM Traversal utilities
 pub const forEachChildNode = traverse.forEachChildNode;
 pub const forEachChildElement = traverse.forEachChildElement;
@@ -236,6 +241,8 @@ pub const setAttribute = attrs.elementSetAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
+pub const getElementQualifiedName = attrs.getElementQualifiedName;
+pub const compareStrings = attrs.compareStrings;
 pub const getAttributes = attrs.getAttributes;
 
 // Element search functions
@@ -293,10 +300,53 @@ pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *D
 }
 
 // ----------------------------------------------------------------------------
+// Smart Text Processing (LazyHTML-level improvements)
+// ----------------------------------------------------------------------------
+const smart_text = @import("smart_text.zig");
+pub const leadingWhitespaceSize = smart_text.leadingWhitespaceSize;
+pub const isNoEscapeTextNode = smart_text.isNoEscapeTextNode;
+pub const escapeHtmlSmart = smart_text.escapeHtmlSmart;
+pub const processTextContentSmart = smart_text.processTextContentSmart;
+
+// ----------------------------------------------------------------------------
 // Test all imported modules
 // ----------------------------------------------------------------------------
 test {
     std.testing.refAllDecls(@This());
+}
+
+// ----------------------------------------------------------------------------
+// Tests for newly discovered lexbor functions
+// ----------------------------------------------------------------------------
+test "new lexbor functions - getElementQualifiedName and compareStrings" {
+    // Create a simple HTML document for testing
+    const html = "<html><body><div id='test'>Hello</div></body></html>";
+    const document = try parseFromString(html);
+    defer destroyDocument(document);
+
+    // Get the div element
+    const body = try bodyElement(document);
+    const body_node = elementToNode(body);
+    const div_node = firstChild(body_node).?;
+    const div_element = nodeToElement(div_node).?;
+
+    // Test getElementQualifiedName
+    const qualified_name = try getElementQualifiedName(testing.allocator, div_element);
+    defer testing.allocator.free(qualified_name);
+    try testing.expect(qualified_name.len > 0);
+    // Should be "div"
+    try testing.expectEqualStrings("div", qualified_name);
+
+    // Test compareStrings
+    const str1 = "hello";
+    const str2 = "hello";
+    const str3 = "world";
+
+    // Test equal strings
+    try testing.expect(compareStrings(str1, str2));
+
+    // Test different strings
+    try testing.expect(!compareStrings(str1, str3));
 }
 
 const std = @import("std");

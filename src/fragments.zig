@@ -191,14 +191,14 @@ test "table fragment parsing with context" {
     defer allocator.free(elements);
 
     // Debug what we actually got
-    print("Table elements found: {}\n", .{elements.len});
-    for (elements, 0..) |element, i| {
-        print("Element {}: {s}\n", .{ i, z.tagName(element) });
-    }
+    // print("Table elements found: {}\n", .{elements.len});
+    // for (elements, 0..) |element, i| {
+    //     print("Element {}: {s}\n", .{ i, z.tagName(element) });
+    // }
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
-    print("Table serialized: {s}\n", .{serialized});
+    // print("Table serialized: {s}\n", .{serialized});
 
     // lexbor might auto-wrap TR elements in TBODY
     try testing.expect(elements.len >= 1);

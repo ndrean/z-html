@@ -303,8 +303,14 @@ pub fn printNode(node: HtmlNode, indent: usize) void {
             }
             print("]}}", .{});
         },
-        .text => |text| print("\"{s}\"", .{text}),
-        .comment => |comment| print("{{\"comment\", \"{s}\"}}", .{comment.text}),
+        .text => |text| print(
+            "\"{s}\"",
+            .{text},
+        ),
+        .comment => |comment| print(
+            "{{\"comment\", \"{s}\"}}",
+            .{comment.text},
+        ),
     }
     if (indent == 0) print("\n", .{});
 }
@@ -672,7 +678,7 @@ pub fn walkTree(node: *z.DomNode, depth: u32) void {
 
 /// [tree] Debug: print document structure (for debugging)
 pub fn printDocumentStructure(doc: *z.HtmlDocument) !void {
-    print("\n--- DOCUMENT STRUCTURE ----\n", .{});
+    // print("\n--- DOCUMENT STRUCTURE ----\n", .{});
     const root = try z.bodyNode(doc);
     walkTree(root, 0);
 }
@@ -688,11 +694,11 @@ test "DOM tree conversion existing primitives" {
     const tree = try documentToTupleTree(allocator, doc);
     defer freeHtmlTree(allocator, tree);
 
-    print("Tree structure:\n", .{});
-    for (tree, 0..) |node, i| {
-        print("[{}]: ", .{i});
-        printNode(node, 0);
-    }
+    // print("Tree structure:\n", .{});
+    // for (tree, 0..) |node, i| {
+    //     print("[{}]: ", .{i});
+    //     printNode(node, 0);
+    // }
 
     try testing.expect(tree.len >= 2);
 }
@@ -708,7 +714,7 @@ test "JSON format conversion" {
     const json_tree = try documentToJsonTree(allocator, doc);
     defer freeJsonTree(allocator, json_tree);
 
-    print("\n=== JSON Format ===\n", .{});
+    // print("\n=== JSON Format ===\n", .{});
     try testing.expect(json_tree.len > 0);
 
     // Check the structure matches expected JSON format
@@ -756,29 +762,39 @@ test "W3C DOM JSON format example" {
     const json_tree = try documentToJsonTree(allocator, doc);
     defer freeJsonTree(allocator, json_tree);
 
-    print("\n=== W3C DOM JSON Format Example ===\n", .{});
+    // print("\n=== W3C DOM JSON Format Example ===\n", .{});
 
     // Demonstrate the new format structure
     switch (json_tree[0]) {
         .element => |elem| {
-            print("Element: nodeType={d}, tagName=\"{s}\"\n", .{ elem.nodeType, elem.tagName });
-            print("Attributes ({d}):\n", .{elem.attributes.len});
-            for (elem.attributes) |attr| {
-                print("  {{ \"name\": \"{s}\", \"value\": \"{s}\" }}\n", .{ attr.name, attr.value });
-            }
-            print("Children ({d}):\n", .{elem.children.len});
-            for (elem.children, 0..) |child, i| {
-                switch (child) {
-                    .element => |child_elem| print("  [{d}]: Element nodeType={d}, tagName=\"{s}\"\n", .{ i, child_elem.nodeType, child_elem.tagName }),
-                    .text => |text_node| print("  [{d}]: Text nodeType={d}, data=\"{s}\"\n", .{ i, text_node.nodeType, text_node.data }),
-                    .comment => |comment_node| print("  [{d}]: Comment nodeType={d}, data=\"{s}\"\n", .{ i, comment_node.nodeType, comment_node.data }),
-                }
-            }
+            _ = elem;
+            // print("Element: nodeType={d}, tagName=\"{s}\"\n", .{ elem.nodeType, elem.tagName });
+            // print("Attributes ({d}):\n", .{elem.attributes.len});
+            // for (elem.attributes) |attr| {
+            // print("  {{ \"name\": \"{s}\", \"value\": \"{s}\" }}\n", .{ attr.name, attr.value });
+            // }
+            // print("Children ({d}):\n", .{elem.children.len});
+            // for (elem.children, 0..) |child, i| {
+            //     switch (child) {
+            //         .element => |child_elem| print(
+            //             "  [{d}]: Element nodeType={d}, tagName=\"{s}\"\n",
+            //             .{ i, child_elem.nodeType, child_elem.tagName },
+            //         ),
+            //         .text => |text_node| print(
+            //             "  [{d}]: Text nodeType={d}, data=\"{s}\"\n",
+            //             .{ i, text_node.nodeType, text_node.data },
+            //         ),
+            //         .comment => |comment_node| print(
+            //             "  [{d}]: Comment nodeType={d}, data=\"{s}\"\n",
+            //             .{ i, comment_node.nodeType, comment_node.data },
+            //         ),
+            //     }
+            // }
         },
         else => {},
     }
 
-    print("✅ W3C DOM JSON format example completed!\n", .{});
+    // print("✅ W3C DOM JSON format example completed!\n", .{});
 }
 
 test "JSON serialization and parsing round-trip" {
@@ -792,13 +808,13 @@ test "JSON serialization and parsing round-trip" {
     const json_tree = try documentToJsonTree(allocator, doc);
     defer freeJsonTree(allocator, json_tree);
 
-    print("\n=== JSON Serialization and Parsing Test ===\n", .{});
+    // print("\n=== JSON Serialization and Parsing Test ===\n", .{});
 
     // Serialize JsonNode to JSON string
     const json_string = try jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);
 
-    print("Serialized JSON:\n{s}\n", .{json_string});
+    // print("Serialized JSON:\n{s}\n", .{json_string});
 
     // Parse JSON string back to JsonNode
     const parsed_node = try parseJsonString(allocator, json_string);
@@ -833,7 +849,7 @@ test "JSON serialization and parsing round-trip" {
         else => try testing.expect(false),
     }
 
-    print("✅ JSON round-trip test passed!\n", .{});
+    // print("✅ JSON round-trip test passed!\n", .{});
 }
 
 test "JSON array serialization" {
@@ -850,8 +866,8 @@ test "JSON array serialization" {
     const json_string = try jsonTreeToString(allocator, json_tree);
     defer allocator.free(json_string);
 
-    print("\n=== JSON Array Serialization ===\n", .{});
-    print("JSON Array:\n{s}\n", .{json_string});
+    // print("\n=== JSON Array Serialization ===\n", .{});
+    // print("JSON Array:\n{s}\n", .{json_string});
 
     // Parse back to tree
     const parsed_tree = try parseJsonTreeString(allocator, json_string);
@@ -859,13 +875,13 @@ test "JSON array serialization" {
 
     try testing.expect(parsed_tree.len == 2);
 
-    print("✅ JSON array test passed!\n", .{});
+    // print("✅ JSON array test passed!\n", .{});
 }
 
 test "usage example: DOM to JSON and back" {
     const allocator = testing.allocator;
 
-    print("\n=== Complete Usage Example ===\n", .{});
+    // print("\n=== Complete Usage Example ===\n", .{});
 
     // 1. Parse HTML
     const html = "<article class=\"post\"><h1>Title</h1><p>Content</p><!-- metadata --></article>";
@@ -879,35 +895,39 @@ test "usage example: DOM to JSON and back" {
     // 3. Serialize to JSON string (for storage, transmission, etc.)
     const json_string = try jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);
-    print("Step 1 - DOM to JSON string:\n{s}\n\n", .{json_string});
+    // print("Step 1 - DOM to JSON string:\n{s}\n\n", .{json_string});
 
     // 4. Parse JSON string back to JsonNode (from storage, API, etc.)
     const parsed_node = try parseJsonString(allocator, json_string);
     defer freeJsonNode(allocator, parsed_node);
-    print("Step 2 - Parsed back to JsonNode\n", .{});
+    // print("Step 2 - Parsed back to JsonNode\n", .{});
 
     // 5. Access the structured data
     switch (parsed_node) {
         .element => |elem| {
-            print("Step 3 - Access structured data:\n", .{});
-            print("  Element: {s} (nodeType: {d})\n", .{ elem.tagName, elem.nodeType });
-            print("  Attributes: {d}\n", .{elem.attributes.len});
-            for (elem.attributes) |attr| {
-                print("    {s}=\"{s}\"\n", .{ attr.name, attr.value });
-            }
-            print("  Children: {d}\n", .{elem.children.len});
-            for (elem.children, 0..) |child, i| {
-                switch (child) {
-                    .element => |child_elem| print("    [{d}]: Element <{s}>\n", .{ i, child_elem.tagName }),
-                    .text => |text| print("    [{d}]: Text \"{s}\"\n", .{ i, text.data }),
-                    .comment => |comment| print("    [{d}]: Comment \"{s}\"\n", .{ i, comment.data }),
-                }
-            }
+            _ = elem;
+            // print("Step 3 - Access structured data:\n", .{});
+            // print("  Element: {s} (nodeType: {d})\n", .{ elem.tagName, elem.nodeType });
+            // print("  Attributes: {d}\n", .{elem.attributes.len});
+            // for (elem.attributes) |attr| {
+            //     print("    {s}=\"{s}\"\n", .{ attr.name, attr.value });
+            // }
+            // print("  Children: {d}\n", .{elem.children.len});
+            // for (elem.children, 0..) |child, i| {
+            //     switch (child) {
+            //         .element => |child_elem|
+            //         print("    [{d}]: Element <{s}>\n", .{ i, child_elem.tagName }),
+            //         .text => |text|
+            //         print("    [{d}]: Text \"{s}\"\n", .{ i, text.data }),
+            //         .comment => |comment|
+            //         print("    [{d}]: Comment \"{s}\"\n", .{ i, comment.data }),
+            //     }
+            // }
         },
         else => {},
     }
 
-    print("✅ Complete usage example finished!\n", .{});
+    // print("✅ Complete usage example finished!\n", .{});
 }
 
 test "complex HTML structure conversion" {
@@ -922,11 +942,11 @@ test "complex HTML structure conversion" {
     const tree = try documentToTupleTree(allocator, doc);
     defer freeHtmlTree(allocator, tree);
 
-    print("Full tree structure:\n", .{});
-    for (tree, 0..) |node, i| {
-        print("[{}]: ", .{i});
-        printNode(node, 0);
-    }
+    // print("Full tree structure:\n", .{});
+    // for (tree, 0..) |node, i| {
+    //     print("[{}]: ", .{i});
+    //     printNode(node, 0);
+    // }
 }
 
 test "exact target format" {
@@ -941,7 +961,7 @@ test "exact target format" {
     const full_tree = try fulldocumentToTupleTree(allocator, doc);
     defer freeHtmlNode(allocator, full_tree);
 
-    printNode(full_tree, 0);
+    // printNode(full_tree, 0);
 
     // Verify it's an HTML element with children
     switch (full_tree) {

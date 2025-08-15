@@ -64,7 +64,6 @@ pub fn isTypeElement(node: *z.DomNode) bool {
 
 /// [node_types] Check if node is a text node
 pub fn isTypeText(node: *z.DomNode) bool {
-    print("{any}\t", .{nodeType(node)});
     return nodeType(node) == .text;
 }
 

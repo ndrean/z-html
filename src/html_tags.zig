@@ -177,7 +177,27 @@ pub const HtmlTag = enum {
     }
 };
 
+/// [HtmlTag] List of self-closing elements
 const HtmlVoidTag = [_]HtmlTag{ .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr };
+
+/// [HtmlTag] List of tags that should not be escaped
+const no_escape_tags = [_][]const u8{ "SCRIPT", "STYLE", "XMP", "IFRAME", "NOEMBED", "NOFRAMES", "PLAINTEXT" };
+
+const no_escape_tags2 = [_]HtmlTag{ .script, .style, .xmp, .iframe, .noembed, .noframes, .plaintext };
+
+pub fn isNoEscapeElement(tag: []const u8) bool {
+    // Convert to lowercase for parsing (lexbor often returns uppercase)
+    var lowercase_buf: [64]u8 = undefined; // Should be enough for any HTML tag
+    if (tag.len >= lowercase_buf.len) return false; // Unknown long tag, assume not void
+    const lowercase_tag = std.ascii.lowerString(lowercase_buf[0..tag.len], tag);
+
+    for (no_escape_tags) |no_escape_tag| {
+        if (std.mem.eql(u8, lowercase_tag, no_escape_tag)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /// [HtmlTag] Check if an element is a void (self-closing) element using html_tags
 pub fn isVoidElement(tag: []const u8) bool {

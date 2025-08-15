@@ -29,7 +29,50 @@ pub const AttributePair = struct {
 // pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
 // pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
 
+// Template element interface
+pub const HtmlTemplate = opaque {};
+
 pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
+
+// External lexbor functions
+extern "c" fn lxb_html_interface_template_wrapper() ?*const anyopaque;
+extern "c" fn lxb_html_template_content_wrapper(template_element: *anyopaque) ?*DomNode;
+extern "c" fn lxb_html_tree_node_is_wrapper(node: *DomNode, tag_id: u32) bool;
+
+/// Check if a node is a template element
+pub fn isTemplateElement(node: *DomNode) bool {
+    return lxb_html_tree_node_is_wrapper(node, LXB_TAG_TEMPLATE);
+}
+
+/// Get template interface for template elements
+pub fn templateInterface(element: *DomElement) ?*HtmlTemplate {
+    _ = element; // For compatibility - wrapper doesn't need element parameter
+    return @ptrCast(@constCast(lxb_html_interface_template_wrapper()));
+}
+
+/// Template-aware first child - handles template elements correctly
+pub fn templateAwareFirstChild(node: *DomNode) ?*DomNode {
+    if (isTemplateElement(node)) {
+        // Template elements store content in DocumentFragment
+        if (getTemplateContent(node)) |content| {
+            return firstChild(content);
+        }
+        return null;
+    }
+    return firstChild(node);
+}
+
+// Helper function for template content access (needs implementation)
+/// Get the content of a template element
+pub fn getTemplateContent(node: *DomNode) ?*DomNode {
+    if (!isTemplateElement(node)) return null;
+    return lxb_html_template_content_wrapper(node);
+}
+
+fn templateContentFirstChild(template: *HtmlTemplate) ?*DomNode {
+    _ = template; // Simplified - use node-based approach
+    return null; // Will be replaced by getTemplateContent flow
+}
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
@@ -1718,7 +1761,7 @@ test "Append JS fragment" {
     defer z.freeJsonTree(allocator, json_tree);
     const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);
-    print("\n\n{s}\n", .{json_string});
+    // print("\n\n{s}\n", .{json_string});
 }
 
 test "JavaScript children from fragment" {
@@ -2037,7 +2080,7 @@ test "show" {
     try testing.expect(li_count == 3);
 
     const fragment_txt = try z.serializeToString(allocator, div);
-    print("\n\n{s}\n\n", .{fragment_txt});
+    // print("\n\n{s}\n\n", .{fragment_txt});
 
     defer allocator.free(fragment_txt);
 
@@ -2216,10 +2259,10 @@ test "Performance comparison: Character-based vs Lexbor-based HTML normalization
 test "practical string-to-DOM scenarios" {
     const allocator = testing.allocator;
 
-    print("\n=== Practical String-to-DOM Scenarios ===\n", .{});
+    // print("\n=== Practical String-to-DOM Scenarios ===\n", .{});
 
     // Scenario 1: Full page parsing with parseFromString
-    print("\n1. Full HTML Document Parsing:\n", .{});
+    // print("\n1. Full HTML Document Parsing:\n", .{});
     const full_page =
         \\<!DOCTYPE html>
         \\<html>
@@ -2238,11 +2281,11 @@ test "practical string-to-DOM scenarios" {
     const page_content = try z.serializeElement(allocator, body);
     defer allocator.free(page_content);
 
-    print("   Use case: Loading complete HTML documents\n", .{});
-    print("   Result: '{s}'\n", .{page_content});
+    // print("   Use case: Loading complete HTML documents\n", .{});
+    // print("   Result: '{s}'\n", .{page_content});
 
     // Scenario 2: Template fragment insertion with setInnerHTML
-    print("\n2. Dynamic Content Insertion:\n", .{});
+    // print("\n2. Dynamic Content Insertion:\n", .{});
     const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
     defer destroyDocument(template_doc);
 
@@ -2273,11 +2316,11 @@ test "practical string-to-DOM scenarios" {
     const dynamic_result = try z.serializeElement(allocator, content_div.?);
     defer allocator.free(dynamic_result);
 
-    print("   Use case: Dynamic content generation and insertion\n", .{});
-    print("   Result: '{s}'\n", .{dynamic_result});
+    // print("   Use case: Dynamic content generation and insertion\n", .{});
+    // print("   Result: '{s}'\n", .{dynamic_result});
 
     // Scenario 3: Fragment parsing for reusable components
-    print("\n3. Component Fragment Parsing:\n", .{});
+    // print("\n3. Component Fragment Parsing:\n", .{});
     const components = [_][]const u8{
         "<button class='btn btn-primary'>Click me</button>",
         "<input type='email' placeholder='Enter email' required>",
@@ -2299,16 +2342,16 @@ test "practical string-to-DOM scenarios" {
 
         _ = try z.setInnerHTML(allocator, app_div.?, updated_content, .{ .allow_html = true });
 
-        print("   Added component {d}: {s}\n", .{ i + 1, component });
+        // print("   Added component {d}: {s}\n", .{ i + 1, component });
     }
 
     const app_result = try z.serializeElement(allocator, app_div.?);
     defer allocator.free(app_result);
 
-    print("   Final app: '{s}'\n", .{app_result});
+    // print("   Final app: '{s}'\n", .{app_result});
 
-    print("\n=== Summary ===\n", .{});
-    print("• parseFromString: Creates complete documents, handles DOCTYPE, etc.\n", .{});
-    print("• setInnerHTML: Injects HTML fragments into existing elements\n", .{});
-    print("• Both convert strings to DOM, but serve different use cases\n", .{});
+    // print("\n=== Summary ===\n", .{});
+    // print("• parseFromString: Creates complete documents, handles DOCTYPE, etc.\n", .{});
+    // print("• setInnerHTML: Injects HTML fragments into existing elements\n", .{});
+    // print("• Both convert strings to DOM, but serve different use cases\n", .{});
 }

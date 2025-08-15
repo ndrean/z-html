@@ -286,7 +286,7 @@ Fragmemnt parsing handles templates and components (for template engines, compon
 | Input | Template fragments, components | Network streams, large files chunks |
 | Context | Respects HTML parsing rules by context | Sequential document building |
 | Output | Parsed fragment nodes | Complete document |
-| Use Cases | Templates, components, HTMX, email | HTTP responses, file processing|
+| Use Cases | Templates eg email, web components, component based frameworks... | HTTP responses, file processing|
 
 ## Parsing strings methods available
 

@@ -30,6 +30,8 @@ extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]con
 extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
+extern "c" fn lexbor_str_data_ncmp(first: [*]const u8, sec: [*]const u8, size: usize) bool;
 
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
@@ -261,6 +263,26 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
     const result = try allocator.alloc(u8, id_len);
     @memcpy(result, id_ptr[0..id_len]);
     return result;
+}
+
+/// Get the qualified name of an element (namespace:tagname or just tagname)
+/// This is useful for elements with namespaces like SVG or MathML
+pub fn getElementQualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+    var name_len: usize = 0;
+    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
+
+    const result = try allocator.alloc(u8, name_len);
+    @memcpy(result, name_ptr[0..name_len]);
+    return result;
+}
+
+/// Compare two lexbor strings with case sensitivity
+/// Useful for efficient string comparisons in DOM operations
+pub fn compareStrings(first: []const u8, second: []const u8) bool {
+    if (first.len != second.len) return false;
+    if (first.len == 0) return true;
+
+    return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
 }
 
 // ----------------------------------------------------------
@@ -1093,7 +1115,7 @@ test "collection vs walker - when collections are still useful" {
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
 
-    std.debug.print("\n=== When Collections Excel ===\n", .{});
+    // std.debug.print("\n=== When Collections Excel ===\n", .{});
 
     // Test exact attribute value matching where collections work well
     const walker_data_42 = try getElementsByDataAttributeWalker(allocator, doc, "id", "42");
@@ -1106,19 +1128,19 @@ test "collection vs walker - when collections are still useful" {
         break :blk z.collectionLength(coll);
     } else 0;
 
-    std.debug.print("Exact data-id='42' matching:\n", .{});
-    std.debug.print("  Walker: {} elements\n", .{walker_data_42.len});
-    std.debug.print("  Collection: {} elements\n", .{collection_data_42_count});
+    // std.debug.print("Exact data-id='42' matching:\n", .{});
+    // std.debug.print("  Walker: {} elements\n", .{walker_data_42.len});
+    // std.debug.print("  Collection: {} elements\n", .{collection_data_42_count});
 
     // Both should find exactly 1 element
     try testing.expect(walker_data_42.len == 1);
     try testing.expect(collection_data_42_count == 1);
 
-    std.debug.print("\n📊 Summary:\n", .{});
-    std.debug.print("• Walker: Better for CSS classes (token-based)\n", .{});
-    std.debug.print("• Collection: Better for exact attribute values\n", .{});
-    std.debug.print("• Walker: Better for single-element searches (early exit)\n", .{});
-    std.debug.print("• Collection: Better for bulk operations on known large result sets\n", .{});
+    // std.debug.print("\n📊 Summary:\n", .{});
+    // std.debug.print("• Walker: Better for CSS classes (token-based)\n", .{});
+    // std.debug.print("• Collection: Better for exact attribute values\n", .{});
+    // std.debug.print("• Walker: Better for single-element searches (early exit)\n", .{});
+    // std.debug.print("• Collection: Better for bulk operations on known large result sets\n", .{});
 }
 test "getElementById vs getElementByIdFast comparison" {
     const allocator = testing.allocator;

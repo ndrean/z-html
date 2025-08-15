@@ -615,7 +615,7 @@ test "cleaning options coverage" {
         const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
-        print("Test 5 (escape ignored in cleaning) result: '{s}'\n", .{result});
+        // print("Test 5 (escape ignored in cleaning) result: '{s}'\n", .{result});
 
         // In DOM cleaning, escape option is ignored - content should remain as-is
         // HTML elements parsed by lexbor remain as elements, text content is not escaped
@@ -691,7 +691,7 @@ test "keep_new_lines option comprehensive test" {
         for (child_nodes) |child| {
             const txt = try z.getTextContent(allocator, child);
             defer allocator.free(txt);
-            print("Child node: {s}, \n", .{txt});
+            // print("Child node: {s}, \n", .{txt});
         }
 
         try cleanDomTree(
@@ -705,7 +705,7 @@ test "keep_new_lines option comprehensive test" {
 
         const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
-        print("{s}\n", .{result});
+        // print("{s}\n", .{result});
 
         // Newlines should be collapsed to spaces and comment is removed with proper spacing
         try testing.expect(
@@ -838,13 +838,13 @@ test "comment removal between text nodes concatenation issue" {
 
     const before = try z.serializeToString(allocator, body_node);
     defer allocator.free(before);
-    print("Before comment removal: {s}\n", .{before});
+    // print("Before comment removal: {s}\n", .{before});
 
     try cleanDomTree(allocator, body_node, .{ .remove_comments = true });
 
     const after = try z.serializeToString(allocator, body_node);
     defer allocator.free(after);
-    print("After comment removal: {s}\n", .{after});
+    // print("After comment removal: {s}\n", .{after});
 
     // This demonstrates the problem:
     // "Hello<!-- comment -->World" becomes "HelloWorld" (should be "Hello World")
@@ -874,18 +874,18 @@ test "isWhitespaceOnlyNode behavior with comments" {
     const div_node = z.firstChild(body_node).?;
     const txt = try z.getTextContent(allocator, div_node);
     defer allocator.free(txt);
-    print("-------------{s}\n", .{txt});
+    // print("-------------{s}\n", .{txt});
 
     var child = z.firstChild(div_node);
     var comment_count: usize = 0;
 
-    print("\n=== Testing isWhitespaceOnlyNode on comments ===\n", .{});
+    // print("\n=== Testing isWhitespaceOnlyNode on comments ===\n", .{});
 
     while (child != null) {
         const node_type = z.nodeType(child.?);
         if (node_type == .comment) {
             comment_count += 1;
-            const is_whitespace_only = z.isWhitespaceOnlyNode(child.?);
+            // const is_whitespace_only = z.isWhitespaceOnlyNode(child.?);
 
             // Get comment content for debugging (handle empty comments)
             const comment_text = z.getTextContent(allocator, child.?) catch |err| switch (err) {
@@ -894,12 +894,12 @@ test "isWhitespaceOnlyNode behavior with comments" {
             };
             defer allocator.free(comment_text);
 
-            print("Comment {d}: '{s}' -> isWhitespaceOnlyNode: {}\n", .{ comment_count, comment_text, is_whitespace_only });
+            // print("Comment {d}: '{s}' -> isWhitespaceOnlyNode: {}\n", .{ comment_count, comment_text, is_whitespace_only });
         }
         child = z.nextSibling(child.?);
     }
 
-    print("=== End comment test ===\n", .{});
+    // print("=== End comment test ===\n", .{});
 
     try testing.expect(comment_count > 0); // Make sure we found comments
 }
@@ -950,9 +950,10 @@ test "comment removal with proper spacing" {
         },
     };
 
-    print("\n=== Testing comment removal with spacing ===\n", .{});
+    // print("\n=== Testing comment removal with spacing ===\n", .{});
 
     for (test_cases, 0..) |test_case, i| {
+        _ = i;
         const doc = try z.parseFromString(test_case.html);
         defer z.destroyDocument(doc);
 
@@ -967,19 +968,19 @@ test "comment removal with proper spacing" {
         const after = try z.serializeToString(allocator, body_node);
         defer allocator.free(after);
 
-        print("Test {d}: {s}\n", .{ i + 1, test_case.description });
-        print("  Before: {s}\n", .{before});
-        print("  After:  {s}\n", .{after});
-        print("  Expected text: '{s}'\n", .{test_case.expected});
+        // print("Test {d}: {s}\n", .{ i + 1, test_case.description });
+        // print("  Before: {s}\n", .{before});
+        // print("  After:  {s}\n", .{after});
+        // print("  Expected text: '{s}'\n", .{test_case.expected});
 
         // Check if the expected text is in the result
         const found = std.mem.indexOf(u8, after, test_case.expected) != null;
-        print("  Result: {s}\n\n", .{if (found) "✅ PASS" else "❌ FAIL"});
+        // print("  Result: {s}\n\n", .{if (found) "✅ PASS" else "❌ FAIL"});
 
         try testing.expect(found);
     }
 
-    print("=== All comment spacing tests completed ===\n", .{});
+    // print("=== All comment spacing tests completed ===\n", .{});
 }
 
 test "escape option works correctly for text insertion (not cleaning)" {
@@ -1001,7 +1002,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
         const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
-        print("Unescaped text insertion result: '{s}'\n", .{result});
+        // print("Unescaped text insertion result: '{s}'\n", .{result});
 
         // Text content is automatically escaped by lexbor when serialized, so we see escaped content
         try testing.expect(std.mem.indexOf(u8, result, "&lt;script&gt;") != null);
@@ -1013,12 +1014,12 @@ test "escape option works correctly for text insertion (not cleaning)" {
         const result = try z.serializeToString(allocator, body_node);
         defer allocator.free(result);
 
-        print("Escaped text insertion result: '{s}'\n", .{result});
+        // print("Escaped text insertion result: '{s}'\n", .{result});
 
         // Should contain double-escaped HTML (escaped by us, then by serializer)
         try testing.expect(std.mem.indexOf(u8, result, "&amp;lt;script&amp;gt;") != null);
         try testing.expect(std.mem.indexOf(u8, result, "&amp;amp;") != null);
     }
 
-    print("✅ Escape option works correctly for text insertion!\n", .{});
+    // print("✅ Escape option works correctly for text insertion!\n", .{});
 }

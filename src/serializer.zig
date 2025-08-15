@@ -220,7 +220,7 @@ test "innerHTML" {
     // Test 3: Get outer HTML (includes the div itself) --------------
     const outer = try outerHTML(allocator, div);
     defer allocator.free(outer);
-    print("{s}\n", .{outer});
+    // print("{s}\n", .{outer});
 
     // Should contain the root div tag
     try testing.expect(
@@ -421,7 +421,7 @@ test "setInnerHTML security model" {
     const safe_result = try innerHTML(allocator, div);
     defer allocator.free(safe_result);
 
-    print("\nTest 1 (safe text): {s}\n", .{safe_result});
+    // print("\nTest 1 (safe text): {s}\n", .{safe_result});
 
     // Should NOT contain parsed script tag - should be HTML-escaped text
     try testing.expect(std.mem.indexOf(u8, safe_result, "<script>") == null);
@@ -438,7 +438,7 @@ test "setInnerHTML security model" {
     const escaped_result = try innerHTML(allocator, div);
     defer allocator.free(escaped_result);
 
-    print("Test 2 (escaped): {s}\n", .{escaped_result});
+    // print("Test 2 (escaped): {s}\n", .{escaped_result});
 
     // Should be double-escaped text (& becomes &amp;)
     try testing.expect(std.mem.indexOf(u8, escaped_result, "&amp;lt;script&amp;gt;") != null);
@@ -451,7 +451,7 @@ test "setInnerHTML security model" {
     const html_result = try innerHTML(allocator, div);
     defer allocator.free(html_result);
 
-    print("Test 3 (trusted HTML): {s}\n", .{html_result});
+    // print("Test 3 (trusted HTML): {s}\n", .{html_result});
 
     // Should contain parsed HTML since developer explicitly allowed it
     try testing.expect(std.mem.indexOf(u8, html_result, "<p class=\"safe\">") != null);
@@ -463,12 +463,12 @@ test "setInnerHTML security model" {
     const dangerous_result = try innerHTML(allocator, div);
     defer allocator.free(dangerous_result);
 
-    print("Test 4 (DANGEROUS - allow_html=true): {s}\n", .{dangerous_result});
+    // print("Test 4 (DANGEROUS - allow_html=true): {s}\n", .{dangerous_result});
 
     // This WILL contain script tag - developer responsibility!
     try testing.expect(std.mem.indexOf(u8, dangerous_result, "<script>") != null);
 
-    print("✅ Security model tests passed!\n", .{});
+    // print("✅ Security model tests passed!\n", .{});
 }
 test "serializeNode vs serializeTree comparison" {
     const allocator = testing.allocator;
