@@ -79,9 +79,9 @@ pub fn serializeElement(allocator: std.mem.Allocator, element: *z.DomElement) ![
     return try serializeTree(allocator, node);
 }
 
-// -------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------
 // Inner - Outer HTML
-// -------------------------------------------------------------------------------------
+// -------------------------------------------------------
 
 /// [Serialize] Get element's inner HTML
 ///
@@ -94,7 +94,7 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
 
     const element_node = z.elementToNode(element);
 
-    // Serialize all child nodes (excluding the element itself)
+    // Traverse child nodes and concatenate their serialization into a slice
     var child = z.firstChild(element_node);
     while (child != null) {
         const child_html = try serializeTree(allocator, child.?);

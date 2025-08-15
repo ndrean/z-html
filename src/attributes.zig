@@ -31,6 +31,13 @@ extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]con
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
+// Fast DOM traversal for optimized ID search
+extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
+
+// Walker callback return codes
+const LEXBOR_ACTION_OK: u32 = 0;
+const LEXBOR_ACTION_STOP: u32 = 1;
+
 /// [attributes] Get attribute value
 ///
 /// Returns null if attribute doesn't exist, empty string if attribute exists but has no value.
@@ -63,7 +70,7 @@ pub fn hasAttribute(element: *z.DomElement, name: []const u8) bool {
     );
 }
 
-/// [utility] Attribute matcher function
+/// [attributes] Attribute matcher function
 pub fn matchesAttribute(element: *z.DomElement, attr_name: []const u8, attr_value: ?[]const u8) bool {
     if (!hasAttribute(element, attr_name)) return false;
 
@@ -74,7 +81,7 @@ pub fn matchesAttribute(element: *z.DomElement, attr_name: []const u8, attr_valu
     return true; // Just check for attribute existence
 }
 
-/// [utility] Check if element has specific class
+/// [attributes] Check if element has specific class ?????????????
 pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
     // Use a temporary allocator just for this check
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -97,12 +104,14 @@ pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
     return false;
 }
 
-/// [utility] Get all classes from element as an array - convenience wrapper
+//  TO RE REMOVED
+/// [attributes] Get all classes from element as an array - convenience wrapper
 pub fn getClasses(allocator: std.mem.Allocator, element: *z.DomElement) ![][]u8 {
     const result = try classList(allocator, element, .array);
     return result.array;
 }
 
+// TO BE REMOVED
 /// [utility] Get class string - convenience wrapper for backwards compatibility
 pub fn getClassString(allocator: std.mem.Allocator, element: *z.DomElement) !?[]u8 {
     const result = try classList(allocator, element, .string);
@@ -211,7 +220,7 @@ pub fn getAttributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]At
 
 // ----------------------------------------------------------
 
-/// Remove attribute from element
+/// [attributes] Remove attribute from element
 ///
 /// Fails silently
 pub fn removeAttribute(element: *z.DomElement, name: []const u8) !void {
@@ -232,14 +241,14 @@ pub fn getElementFirstAttribute(element: *z.DomElement) ?*DomAttr {
 
 // ----------------------------------------------------------
 
-/// Get next attribute in the list gives an attribute
+/// [attributes] Get next attribute in the list gives an attribute
 pub fn getElementNextAttribute(attr: *DomAttr) ?*DomAttr {
     return lxb_dom_element_next_attribute_noi(attr);
 }
 
 // ----------------------------------------------------------
 
-/// Get element ID as owned string
+/// [attributes] Get element ID as owned string
 ///
 /// Caller needs to free the slice
 pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
@@ -256,12 +265,16 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 
 // ----------------------------------------------------------
 
-/// Class list return type
+/// [attributes] Class list return type
 pub const ClassListType = enum {
     string, // Return full class string
     array, // Return array of individual classes
 };
 
+/// [attributes] Class list enum result type.
+///
+/// Represents the two possible return types for the class list
+/// (as a string or as an array)
 pub const ClassListResult = union(ClassListType) {
     string: ?[]u8, // Full class string (null if no classes)
     array: [][]u8, // Array of individual classes (empty if no classes)
@@ -269,10 +282,9 @@ pub const ClassListResult = union(ClassListType) {
 
 /// [attributes] Get element class as string or array - unified function
 ///
-/// This is THE primary class function that does everything:
-/// - Calls lxb_dom_element_class_noi to get raw class data
-/// - Copies to Zig-managed memory with @memcpy
-/// - Can return either full string or split array based on return_type
+/// This is the primary class function that does everything:
+/// - Copies to Zig-managed memory
+/// - Can return either full string (option `.string`) or split array based on return_type
 ///
 /// Caller needs to free the returned data appropriately
 pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement, return_type: ClassListType) !ClassListResult {
@@ -315,6 +327,195 @@ pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement, return_ty
             break :blk ClassListResult{ .array = try classes.toOwnedSlice() };
         },
     };
+}
+
+//=============================================================================
+// OPTIMIZED DOM SEARCH USING WALKER CALLBACKS
+//=============================================================================
+
+/// Context for fast ID search using walker callback
+const IdSearchContext = struct {
+    target_id: []const u8,
+    found_element: ?*z.DomElement,
+};
+
+/// Context for fast class search using walker callback
+const ClassSearchContext = struct {
+    target_class: []const u8,
+    found_element: ?*z.DomElement,
+};
+
+/// Context for fast attribute search using walker callback
+const AttributeSearchContext = struct {
+    target_attr_name: []const u8,
+    target_attr_value: ?[]const u8, // null means just check for attribute existence
+    found_element: ?*z.DomElement,
+};
+
+/// Fast walker callback for getElementById optimization
+/// Returns LEXBOR_ACTION_STOP when ID is found, LEXBOR_ACTION_OK to continue
+fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+    if (ctx == null) return LEXBOR_ACTION_OK;
+
+    const search_ctx = @as(*IdSearchContext, @ptrCast(@alignCast(ctx.?)));
+
+    // Only check element nodes
+    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+
+    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+
+    // Check if this element has an ID attribute
+    if (!hasAttribute(element, "id")) return LEXBOR_ACTION_OK;
+
+    // Get the ID value (borrowed memory)
+    const id_value = elementGetNamedAttributeValue(element, "id") orelse return LEXBOR_ACTION_OK;
+
+    // Compare with target ID
+    if (std.mem.eql(u8, id_value, search_ctx.target_id)) {
+        search_ctx.found_element = element;
+        return LEXBOR_ACTION_STOP; // Found it! Stop traversal
+    }
+
+    return LEXBOR_ACTION_OK; // Continue searching
+}
+
+/// Fast walker callback for class search optimization
+/// Returns LEXBOR_ACTION_STOP when class is found, LEXBOR_ACTION_OK to continue
+fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+    if (ctx == null) return LEXBOR_ACTION_OK;
+
+    const search_ctx = @as(*ClassSearchContext, @ptrCast(@alignCast(ctx.?)));
+
+    // Only check element nodes
+    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+
+    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+
+    // Check if this element has a class attribute
+    if (!hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
+
+    // Get the class value (borrowed memory)
+    const class_value = elementGetNamedAttributeValue(element, "class") orelse return LEXBOR_ACTION_OK;
+
+    // Search for the target class in the class list (space-separated)
+    var iterator = std.mem.splitScalar(u8, class_value, ' ');
+    while (iterator.next()) |class| {
+        const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+        if (std.mem.eql(u8, trimmed_class, search_ctx.target_class)) {
+            search_ctx.found_element = element;
+            return LEXBOR_ACTION_STOP; // Found it! Stop traversal
+        }
+    }
+
+    return LEXBOR_ACTION_OK; // Continue searching
+}
+
+/// Fast walker callback for attribute search optimization
+/// Returns LEXBOR_ACTION_STOP when attribute is found, LEXBOR_ACTION_OK to continue
+fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+    if (ctx == null) return LEXBOR_ACTION_OK;
+
+    const search_ctx = @as(*AttributeSearchContext, @ptrCast(@alignCast(ctx.?)));
+
+    // Only check element nodes
+    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+
+    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+
+    // Check if this element has the target attribute
+    if (!hasAttribute(element, search_ctx.target_attr_name)) return LEXBOR_ACTION_OK;
+
+    // If we only care about attribute existence (value is null), we found it
+    if (search_ctx.target_attr_value == null) {
+        search_ctx.found_element = element;
+        return LEXBOR_ACTION_STOP;
+    }
+
+    // Otherwise, check the attribute value
+    const attr_value = elementGetNamedAttributeValue(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+
+    if (std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?)) {
+        search_ctx.found_element = element;
+        return LEXBOR_ACTION_STOP; // Found it! Stop traversal
+    }
+
+    return LEXBOR_ACTION_OK; // Continue searching
+}
+
+/// [attributes] Fast getElementById using optimized DOM traversal
+///
+/// This is significantly faster than collection-based approaches because:
+/// 1. Uses lxb_dom_node_simple_walk for efficient tree traversal
+/// 2. Stops immediately when ID is found (early termination)
+/// 3. Avoids collection allocation/deallocation overhead
+/// 4. Direct memory comparison without intermediate allocations
+///
+/// Returns the first element with matching ID, or null if not found.
+/// IDs should be unique in valid HTML, so first match is the correct result.
+pub fn getElementByIdFast(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
+    // Start search from document root to include head elements too
+    const root_node = z.documentRoot(doc) orelse return null;
+
+    var search_ctx = IdSearchContext{
+        .target_id = id,
+        .found_element = null,
+    };
+
+    // Walk the DOM tree with our callback
+    lxb_dom_node_simple_walk(root_node, idWalkerCallback, &search_ctx);
+
+    return search_ctx.found_element;
+}
+
+/// [attributes] Fast getElementByClass using optimized DOM traversal
+///
+/// Significantly faster than iterating through all elements and checking classes.
+/// Uses the same optimization pattern as getElementByIdFast.
+///
+/// Returns the first element with matching class, or null if not found.
+pub fn getElementByClassFast(doc: *z.HtmlDocument, class_name: []const u8) !?*z.DomElement {
+    const root_node = z.documentRoot(doc) orelse return null;
+
+    var search_ctx = ClassSearchContext{
+        .target_class = class_name,
+        .found_element = null,
+    };
+
+    lxb_dom_node_simple_walk(root_node, classWalkerCallback, &search_ctx);
+
+    return search_ctx.found_element;
+}
+
+/// [attributes] Fast getElementByAttribute using optimized DOM traversal
+///
+/// Finds the first element with a specific attribute name and optionally a specific value.
+/// If attr_value is null, only checks for attribute existence.
+///
+/// Returns the first matching element, or null if not found.
+pub fn getElementByAttributeFast(doc: *z.HtmlDocument, attr_name: []const u8, attr_value: ?[]const u8) !?*z.DomElement {
+    const root_node = z.documentRoot(doc) orelse return null;
+
+    var search_ctx = AttributeSearchContext{
+        .target_attr_name = attr_name,
+        .target_attr_value = attr_value,
+        .found_element = null,
+    };
+
+    lxb_dom_node_simple_walk(root_node, attributeWalkerCallback, &search_ctx);
+
+    return search_ctx.found_element;
+}
+
+/// [attributes] Fast data attribute search - convenience wrapper
+///
+/// Searches for elements with data-* attributes (common in modern web development).
+/// Example: getElementByDataAttributeFast(doc, "id", "123") finds elements with data-id="123"
+pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, data_name: []const u8, value: ?[]const u8) !?*z.DomElement {
+    // Build the full data attribute name
+    var attr_name_buffer: [256]u8 = undefined;
+    const attr_name = try std.fmt.bufPrint(attr_name_buffer[0..], "data-{s}", .{data_name});
+
+    return getElementByAttributeFast(doc, attr_name, value);
 }
 
 // ----------------------------------------------------------
@@ -601,6 +802,269 @@ test "attribute edge cases" {
     }
 
     // print("✅ Edge cases handled correctly!\n", .{});
+}
+
+test "optimized walker-based search functions" {
+    // Create a comprehensive test document
+    const html =
+        \\<html>
+        \\<head><title>Test Document</title></head>
+        \\<body>
+        \\  <div id="header" class="navigation top-level" data-section="header">
+        \\    <nav class="menu">
+        \\      <a href="/home" class="nav-link active" data-page="home">Home</a>
+        \\      <a href="/about" class="nav-link" data-page="about">About</a>
+        \\    </nav>
+        \\  </div>
+        \\  <main id="content" class="main-content" data-section="content">
+        \\    <article class="post featured" data-id="123" data-category="tech">
+        \\      <h1 class="title">Article Title</h1>
+        \\      <p class="intro">Introduction paragraph</p>
+        \\    </article>
+        \\    <aside class="sidebar" data-widget="recent-posts">
+        \\      <div class="widget" data-type="list">Widget Content</div>
+        \\    </aside>
+        \\  </main>
+        \\  <footer id="footer" class="bottom-section" data-section="footer">
+        \\    <span class="copyright">© 2025</span>
+        \\  </footer>
+        \\</body>
+        \\</html>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test 1: getElementByIdFast - should find elements by ID
+    const header = try getElementByIdFast(doc, "header");
+    try testing.expect(header != null);
+    try testing.expectEqualStrings("DIV", z.tagName(header.?));
+
+    const content = try getElementByIdFast(doc, "content");
+    try testing.expect(content != null);
+    try testing.expectEqualStrings("MAIN", z.tagName(content.?));
+
+    const footer = try getElementByIdFast(doc, "footer");
+    try testing.expect(footer != null);
+    try testing.expectEqualStrings("FOOTER", z.tagName(footer.?));
+
+    // Test 2: getElementByClassFast - should find first element with class
+    const nav_link = try getElementByClassFast(doc, "nav-link");
+    try testing.expect(nav_link != null);
+    try testing.expectEqualStrings("A", z.tagName(nav_link.?));
+
+    const post = try getElementByClassFast(doc, "post");
+    try testing.expect(post != null);
+    try testing.expectEqualStrings("ARTICLE", z.tagName(post.?));
+
+    const widget = try getElementByClassFast(doc, "widget");
+    try testing.expect(widget != null);
+    try testing.expectEqualStrings("DIV", z.tagName(widget.?));
+
+    // Test 3: getElementByAttributeFast - attribute existence only
+    const href_element = try getElementByAttributeFast(doc, "href", null);
+    try testing.expect(href_element != null);
+    try testing.expectEqualStrings("A", z.tagName(href_element.?));
+
+    // Test 4: getElementByAttributeFast - attribute with specific value
+    const home_link = try getElementByAttributeFast(doc, "href", "/home");
+    try testing.expect(home_link != null);
+    try testing.expectEqualStrings("A", z.tagName(home_link.?));
+
+    const about_link = try getElementByAttributeFast(doc, "href", "/about");
+    try testing.expect(about_link != null);
+    try testing.expectEqualStrings("A", z.tagName(about_link.?));
+
+    // Test 5: getElementByDataAttributeFast - data attributes
+    const header_section = try getElementByDataAttributeFast(doc, "section", "header");
+    try testing.expect(header_section != null);
+    try testing.expectEqualStrings("DIV", z.tagName(header_section.?));
+
+    const home_page = try getElementByDataAttributeFast(doc, "page", "home");
+    try testing.expect(home_page != null);
+    try testing.expectEqualStrings("A", z.tagName(home_page.?));
+
+    const tech_article = try getElementByDataAttributeFast(doc, "category", "tech");
+    try testing.expect(tech_article != null);
+    try testing.expectEqualStrings("ARTICLE", z.tagName(tech_article.?));
+
+    // Test 6: Non-existent searches should return null
+    const missing_id = try getElementByIdFast(doc, "nonexistent");
+    try testing.expect(missing_id == null);
+
+    const missing_class = try getElementByClassFast(doc, "nonexistent-class");
+    try testing.expect(missing_class == null);
+
+    const missing_attr = try getElementByAttributeFast(doc, "nonexistent-attr", "value");
+    try testing.expect(missing_attr == null);
+
+    const missing_data = try getElementByDataAttributeFast(doc, "nonexistent", "value");
+    try testing.expect(missing_data == null);
+}
+
+test "walker-based search vs existing implementations comparison" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div class="container">
+        \\  <p id="paragraph1" class="text intro">First paragraph</p>
+        \\  <span class="text highlight" data-priority="high">Important text</span>
+        \\  <div class="box" data-type="info">Info box</div>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Compare ID search methods
+    const element_fast = try getElementByIdFast(doc, "paragraph1");
+    const element_collection = try z.getElementById(doc, "paragraph1");
+
+    try testing.expect(element_fast != null);
+    try testing.expect(element_collection != null);
+    try testing.expect(element_fast.? == element_collection.?);
+
+    // Test class search - walker vs manual iteration
+    const class_fast = try getElementByClassFast(doc, "text");
+    try testing.expect(class_fast != null);
+    try testing.expectEqualStrings("P", z.tagName(class_fast.?));
+
+    // Verify the found element actually has the class
+    try testing.expect(hasClass(class_fast.?, "text"));
+
+    // Test data attribute search
+    const data_element = try getElementByDataAttributeFast(doc, "priority", "high");
+    try testing.expect(data_element != null);
+    try testing.expectEqualStrings("SPAN", z.tagName(data_element.?));
+
+    // Verify the data attribute value using allocator
+    if (try getAttribute(allocator, data_element.?, "data-priority")) |priority| {
+        defer allocator.free(priority);
+        try testing.expectEqualStrings("high", priority);
+    }
+
+    // Test content verification using allocator
+    const content = try z.getTextContent(allocator, z.elementToNode(data_element.?));
+    defer allocator.free(content);
+    try testing.expectEqualStrings("Important text", content);
+}
+
+test "walker search edge cases and performance" {
+    const allocator = testing.allocator;
+
+    // Test with deeply nested structure
+    var html_buffer = std.ArrayList(u8).init(allocator);
+    defer html_buffer.deinit();
+
+    const writer = html_buffer.writer();
+    try writer.writeAll("<html><body>");
+
+    // Create nested structure
+    for (0..50) |i| {
+        try writer.print("<div class='level-{}'>", .{i});
+    }
+
+    try writer.writeAll("<span id='deep-target' class='target-class' data-depth='50'>Deep Target</span>");
+
+    for (0..50) |_| {
+        try writer.writeAll("</div>");
+    }
+
+    try writer.writeAll("</body></html>");
+
+    const html = try html_buffer.toOwnedSlice();
+    defer allocator.free(html);
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test that walker can find deeply nested elements efficiently
+    const deep_id = try getElementByIdFast(doc, "deep-target");
+    try testing.expect(deep_id != null);
+    try testing.expectEqualStrings("SPAN", z.tagName(deep_id.?));
+
+    const deep_class = try getElementByClassFast(doc, "target-class");
+    try testing.expect(deep_class != null);
+    try testing.expect(deep_class.? == deep_id.?);
+
+    const deep_data = try getElementByDataAttributeFast(doc, "depth", "50");
+    try testing.expect(deep_data != null);
+    try testing.expect(deep_data.? == deep_id.?);
+
+    // Test first-match behavior - should find level-0 first
+    const first_level = try getElementByClassFast(doc, "level-0");
+    try testing.expect(first_level != null);
+    try testing.expectEqualStrings("DIV", z.tagName(first_level.?));
+}
+
+test "getElementById vs getElementByIdFast comparison" {
+    const allocator = testing.allocator;
+
+    const html = "<div><p id='test-element'>Hello World</p></div>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test that both methods find the same element
+    const element_fast = try getElementByIdFast(doc, "test-element");
+    const element_collection = try z.getElementById(doc, "test-element");
+
+    try testing.expect(element_fast != null);
+    try testing.expect(element_collection != null);
+
+    // They should be the same element (same memory address)
+    try testing.expect(element_fast.? == element_collection.?);
+
+    // Verify content is correct
+    const text = try z.getTextContent(allocator, z.elementToNode(element_fast.?));
+    defer allocator.free(text);
+    try testing.expectEqualStrings("Hello World", text);
+}
+
+test "getElementById performance comparison" {
+    const allocator = testing.allocator;
+
+    // Create a larger document with many elements to see performance difference
+    var html_buffer = std.ArrayList(u8).init(allocator);
+    defer html_buffer.deinit();
+
+    const writer = html_buffer.writer();
+    try writer.writeAll("<html><body>");
+
+    // Add many elements before the target
+    for (0..1000) |i| {
+        try writer.print("<div class='element-{}'>Element {}</div>", .{ i, i });
+    }
+
+    // Add target element near the end
+    try writer.writeAll("<p id='target-element'>This is the target</p>");
+
+    // Add some more elements after target
+    for (0..100) |i| {
+        try writer.print("<span class='after-{}'>After {}</span>", .{ i, i });
+    }
+
+    try writer.writeAll("</body></html>");
+
+    const html = try html_buffer.toOwnedSlice();
+    defer allocator.free(html);
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test both methods find the same element
+    const fast_result = try getElementByIdFast(doc, "target-element");
+    const collection_result = try z.getElementById(doc, "target-element");
+
+    try testing.expect(fast_result != null);
+    try testing.expect(collection_result != null);
+    try testing.expect(fast_result.? == collection_result.?);
+
+    // Verify we found the correct element
+    const content = try z.getTextContent(allocator, z.elementToNode(fast_result.?));
+    defer allocator.free(content);
+    try testing.expectEqualStrings("This is the target", content);
+
+    // print("✅ Both methods found the same element with {} total DOM nodes\n", .{1101});
 }
 
 test "elementHasNamedAttribute - isolated test" {

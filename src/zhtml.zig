@@ -67,6 +67,8 @@ pub const createElement = lxb.createElement;
 pub const ownerDocument = lxb.ownerDocument;
 pub const bodyElement = lxb.bodyElement;
 pub const bodyNode = lxb.bodyNode;
+
+// Node / Element / Comment conversions
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const commentToNode = lxb.commentToNode;
@@ -81,10 +83,19 @@ pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
 pub const parentElement = lxb.parentElement;
 
-// DOM Creation and manipulation
+// DOM Creation
 pub const createTextNode = lxb.createTextNode;
 pub const createComment = lxb.createComment;
+
+// Document Fragment
 pub const createDocumentFragment = lxb.createDocumentFragment;
+
+// DOM destruction
+pub const removeNode = lxb.removeNode;
+pub const destroyComment = lxb.destroyComment;
+pub const destroyNode = lxb.destroyNode;
+pub const destroyElement = lxb.destroyElement;
+
 // pub const insertNodeBefore = lxb.insertNodeBefore;
 // pub const insertNodeAfter = lxb.insertNodeAfter;
 pub const appendChild = lxb.appendChild;
@@ -163,12 +174,6 @@ pub const setDefaultCapacity = collection.setDefaultCapacity;
 pub const getDefaultCapacity = collection.getDefaultCapacity;
 pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
-// DOM manipulation
-pub const removeNode = lxb.removeNode;
-pub const destroyComment = lxb.destroyComment;
-pub const destroyNode = lxb.destroyNode;
-pub const destroyElement = lxb.destroyElement;
-
 // Reflexion
 pub const documentRoot = lxb.documentRoot;
 pub const isNodeEmpty = lxb.isNodeEmpty;
@@ -235,6 +240,10 @@ pub const getAttributes = attrs.getAttributes;
 
 // Element search functions
 pub const getElementById = collection.getElementById;
+pub const getElementByIdFast = attrs.getElementByIdFast; // Optimized version using DOM walker
+pub const getElementByClassFast = attrs.getElementByClassFast; // Optimized class search using DOM walker
+pub const getElementByAttributeFast = attrs.getElementByAttributeFast; // Optimized attribute search using DOM walker
+pub const getElementByDataAttributeFast = attrs.getElementByDataAttributeFast; // Optimized data-* attribute search
 pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
