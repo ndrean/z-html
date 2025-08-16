@@ -17,7 +17,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
     std.debug.print("Unsafe tag (borrowing): {s}\n", .{unsafe_tag});
 
     // ✅ SAFE: Copying to Zig-owned memory
-    const safe_tag = try z.tagNameOwned(allocator, div);
+    const safe_tag = try z.tagName(allocator, div);
     defer allocator.free(safe_tag);
     std.debug.print("Safe tag (owned): {s}\n", .{safe_tag});
 
@@ -34,7 +34,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
 
     std.debug.print("=== Key Takeaways ===\n", .{});
     std.debug.print("• tagName(): Fast but unsafe for storage\n", .{});
-    std.debug.print("• tagNameOwned(): Safe but requires allocation\n", .{});
+    std.debug.print("• tagName(): Safe but requires allocation\n", .{});
     std.debug.print("• Use unsafe version for immediate comparisons\n", .{});
     std.debug.print("• Use owned version when storing tag names\n", .{});
 }
@@ -75,7 +75,7 @@ test "Practical usage patterns" {
 
     child = z.firstElementChild(div);
     while (child) |element| {
-        const owned_tag = try z.tagNameOwned(allocator, element);
+        const owned_tag = try z.tagName(allocator, element);
         try tag_names.append(owned_tag);
         child = z.nextElementSibling(element);
     }

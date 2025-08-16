@@ -47,7 +47,7 @@ pub fn tagName(element: *DomElement) []const u8
 
 ```zig
 /// ✅ SAFE: Copies to Zig-owned memory - caller must free
-pub fn tagNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8
+pub fn tagName(allocator: std.mem.Allocator, element: *DomElement) ![]u8
 ```
 
 **Use when:**
@@ -82,7 +82,7 @@ defer {
 
 var child = firstElementChild(parent);
 while (child) |element| {
-    const owned_tag = try tagNameOwned(allocator, element);
+    const owned_tag = try tagName(allocator, element);
     try tag_names.append(owned_tag);
     child = nextElementSibling(element);
 }
@@ -106,7 +106,7 @@ pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
 | `nodeName()` | ⚠️ Unsafe | Fast | Immediate use only |
 | `tagName()` | ⚠️ Unsafe | Fast | Immediate use only |
 | `nodeName()` | ✅ Safe | Slower (alloc) | Storage, passing around |
-| `tagNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
+| `tagName()` | ✅ Safe | Slower (alloc) | Storage, passing around |
 
 ## Key Takeaways
 

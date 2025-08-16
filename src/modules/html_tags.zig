@@ -6,7 +6,7 @@ const z = @import("../zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
-/// [HtmlTag] Optional: Parse string to HtmlTag
+/// [HtmlTag] Optional: Parse string to HtmlTag (inline)
 pub fn parseTag(name: []const u8) ?HtmlTag {
     inline for (std.meta.fields(HtmlTag)) |field| {
         if (std.mem.eql(u8, field.name, name)) {
@@ -16,7 +16,7 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
     return null;
 }
 
-/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum
+/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
 pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     // Fast path: try direct enum lookup (most common case - lowercase)
     if (parseTag(qualified_name)) |tag| {

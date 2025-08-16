@@ -400,7 +400,7 @@ pub fn nodeName(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
 ///
 /// ⚠️  WARNING: The returned slice points to lexbor's internal memory.
 /// Do NOT store this slice beyond the lifetime of the element.
-/// Use tagNameOwned() if you need to store the result.
+/// Use tagName() if you need to store the result.
 pub fn tagNameBorrow(element: *z.DomElement) []const u8 {
     const name_ptr = lxb_dom_element_tag_name(element, null);
     return std.mem.span(name_ptr);
@@ -410,7 +410,7 @@ pub fn tagNameBorrow(element: *z.DomElement) []const u8 {
 ///
 /// Returns a copy of the tag name that is owned by the caller.
 /// Caller must free the returned string.
-pub fn tagNameOwned(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn tagName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     const name_slice = tagNameBorrow(element);
     return try allocator.dupe(u8, name_slice);
 }
@@ -451,7 +451,7 @@ test "get node/element names" {
                 if (node.type == .element) {
                     const element = nodeToElement(current_node.?);
                     const elt_name = tagNameBorrow(element.?);
-                    const owned_elt_name = try tagNameOwned(allocator, element.?);
+                    const owned_elt_name = try tagName(allocator, element.?);
                     defer allocator.free(owned_elt_name);
                     try testing.expectEqualStrings(node.tag, elt_name);
                     try testing.expectEqualStrings(node.tag, owned_elt_name);
@@ -1094,7 +1094,7 @@ test "memory safety: nodeName vs nodeNameOwned" {
     try testing.expectEqualStrings("DIV", unsafe_name);
 
     // Test owned version (safe for storage)
-    const owned_name = try tagNameOwned(allocator, element);
+    const owned_name = try tagName(allocator, element);
     defer allocator.free(owned_name);
     try testing.expectEqualStrings("DIV", owned_name);
 
