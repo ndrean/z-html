@@ -29,7 +29,6 @@ extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]con
 extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
-extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
 
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
@@ -245,6 +244,8 @@ pub fn removeAttribute(element: *z.DomElement, name: []const u8) !void {
 // ----------------------------------------------------------
 
 /// [attributes] Get first attribute of an HTMLElement
+///
+/// Returns a DomAttr
 pub fn getElementFirstAttribute(element: *z.DomElement) ?*DomAttr {
     return lxb_dom_element_first_attribute_noi(element);
 }
@@ -252,6 +253,8 @@ pub fn getElementFirstAttribute(element: *z.DomElement) ?*DomAttr {
 // ----------------------------------------------------------
 
 /// [attributes] Get next attribute in the list gives an attribute
+///
+/// Returns a DomAttr
 pub fn getElementNextAttribute(attr: *DomAttr) ?*DomAttr {
     return lxb_dom_element_next_attribute_noi(attr);
 }
@@ -271,53 +274,6 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
     const result = try allocator.alloc(u8, id_len);
     @memcpy(result, id_ptr[0..id_len]);
     return result;
-}
-
-/// Get the qualified name of an element (namespace:tagname or just tagname)
-///
-/// Get element's qualified name (allocating version)
-///
-/// This is useful for elements with namespaces like SVG or MathML.
-/// Returns a newly allocated slice that the caller owns and must free.
-///
-/// **Use when:** You need to store the name beyond the element's lifetime
-/// **Performance:** Slower (allocation + copy), but safe for long-term storage
-///
-/// ```zig
-/// const name = try qualifiedName(allocator, element);
-/// defer allocator.free(name); // You must free this
-/// // Safe to use 'name' even after element is destroyed
-/// ```
-pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
-    var name_len: usize = 0;
-    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
-
-    const result = try allocator.alloc(u8, name_len);
-    @memcpy(result, name_ptr[0..name_len]);
-    return result;
-}
-
-/// Get element's qualified name (zero-copy version)
-///
-/// Returns a slice directly into lexbor's internal memory - no allocation!
-///
-/// **Use when:** Processing immediately, element lifetime is guaranteed
-/// **Performance:** Fastest (direct pointer access), but lifetime-bound
-///
-/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
-/// - The element remains in the DOM tree
-/// - The document is not destroyed
-/// - No DOM modifications that might cause internal reallocation
-///
-/// ```zig
-/// const name = qualifiedNameBorrow(element);
-/// // Use immediately - don't store for later!
-/// if (someCondition(name)) { ... }
-/// ```
-pub fn qualifiedNameBorrow(element: *z.DomElement) []const u8 {
-    var name_len: usize = 0;
-    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
-    return name_ptr[0..name_len];
 }
 
 // /// Compare two lexbor strings with case sensitivity. Useless, Zig has built-in string comparison. !!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1184,6 +1140,7 @@ test "collection vs walker - when collections are still useful" {
     // std.debug.print("• Walker: Better for single-element searches (early exit)\n", .{});
     // std.debug.print("• Collection: Better for bulk operations on known large result sets\n", .{});
 }
+
 test "getElementById vs getElementByIdFast comparison" {
     const allocator = testing.allocator;
 

@@ -128,6 +128,7 @@ extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
 extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.DomElement;
 extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
 extern "c" fn lxb_dom_element_tag_name(element: *z.DomElement, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
 extern "c" fn lxb_dom_node_remove(node: *z.DomNode) void;
 extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
 
@@ -357,18 +358,14 @@ test "creation & convertions" {
 
 // ---------------------------------------------------------------------------
 
-/// [core] UNSAFE: Get node's tag name or type as Zig string ( borrows lexbor's memory)
+/// [core] (UPPERCASED if element) Get the tag name or type of a _node_ as Zig string (UNSAFE: borrows lexbor's memory)
 ///
-/// - Returns the `nodeType` (#text, #comment) for non-elements nodes,
-/// - returns the `tagName` in uppercase for element nodes.
+/// - returns the `nodeType` (#text, #comment) for non-elements nodes,
+/// - returns the `tagName` in UPPERCASE for element nodes.
 ///
-/// If you want the `nodeType`, use:
-/// - `z.nodeType(node)` to get an enum,
-/// - `z.nodeTypeName(node)` to get a string.
+/// ⚠️ Do NOT store this slice beyond the lifetime of the node.
 ///
-/// ⚠️  UNSAFE: The returned slice points to lexbor's internal memory.
-/// Do NOT store this slice beyond the lifetime of the node.
-/// Use z.nodeName() if you need to store the result.
+/// Use the allocated `z.nodeName()` if you need to store the result.
 /// ## Example
 /// ```
 /// test "nodeType/tagname" {
@@ -379,34 +376,48 @@ test "creation & convertions" {
 ///     const node_type = z.nodeType(div_node);
 ///     try testing.expect(node_type == .element);
 /// }
+/// ---
 /// ```
 pub fn nodeNameBorrow(node: *z.DomNode) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
 
-/// [core] Get node's tag name or node type as owned Zig string.
+/// [core] (UPPERCASED if element) Get the tag name or type of a _node_ as owned Zig string.
 ///
-/// Returns the `nodeType` (#text, #comment) for non-elements nodes,
-/// or the `tagName` in uppercase for element nodes.
+/// - returns the `nodeType` (#text, #comment) for non-elements nodes,
+/// - returns the `tagName` in UPPERCASE for element nodes.
 ///
 /// Caller must free the returned string.
+/// ## Example
+/// ```
+/// const text = try createTextNode(doc, "Hello");
+/// const text_name = try nodeName(allocator, text);
+/// defer allocator.free(text_name);
+/// try testing.expectEqualStrings(text_name, "#text");
+///
+/// const div = try createElement(doc, "div", &.{});
+/// const name = try nodeName(allocator, div);
+/// defer allocator.free(name);
+/// try testing.expectEqualStrings(name, "DIV");
+/// ---
+/// ```
 pub fn nodeName(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     const name_slice = z.nodeNameBorrow(node);
     return try allocator.dupe(u8, name_slice);
 }
 
-/// [core] Get element's tag name as Zig string (UNSAFE: borrows lexbor's memory)
+/// [core] (UPPERCASED) Get the tag name on an _element_ as Zig string (UNSAFE: borrows lexbor's memory)
 ///
-/// ⚠️  WARNING: The returned slice points to lexbor's internal memory.
-/// Do NOT store this slice beyond the lifetime of the element.
+/// ⚠️  Do NOT store this slice beyond the lifetime of the element.
+///
 /// Use tagName() if you need to store the result.
 pub fn tagNameBorrow(element: *z.DomElement) []const u8 {
     const name_ptr = lxb_dom_element_tag_name(element, null);
     return std.mem.span(name_ptr);
 }
 
-/// [core] Get element's tag name as owned Zig string (SAFE: copies to Zig memory)
+/// [core]  (UPPERCASED) Get the tag name on an _element_ as owned Zig string (SAFE: copies to Zig memory)
 ///
 /// Returns a copy of the tag name that is owned by the caller.
 /// Caller must free the returned string.
@@ -415,7 +426,61 @@ pub fn tagName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     return try allocator.dupe(u8, name_slice);
 }
 
-test "get node/element names" {
+/// [core] (lowercased) Get the allocated qualified name of an _element_ (namespace:tagname or just tagname)
+///
+/// This is useful for elements with namespaces like SVG or MathML.
+///
+/// Caller must free the returned slice.
+/// ## Example
+/// ```
+/// const div = try z.createElement(doc, "div", &.{})
+/// const name = try qualifiedName(allocator, element);
+/// defer allocator.free(name);
+/// try testing.expectEqualStrings(name, "div");
+/// ___
+/// ```
+pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+    var name_len: usize = 0;
+    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
+
+    const result = try allocator.alloc(u8, name_len);
+    @memcpy(result, name_ptr[0..name_len]);
+    return result;
+}
+
+test "qual" {
+    const allocator = testing.allocator;
+    const doc = try createDocument();
+    const div = try createElement(doc, "div", &.{});
+    const name = try qualifiedName(allocator, div);
+    defer allocator.free(name);
+    try testing.expectEqualStrings(name, "div");
+}
+
+/// Get the qualified name of an _element_(zero-copy version)
+///
+/// Returns a slice directly into lexbor's internal memory - no allocation!
+///
+/// **Use when:** Processing immediately, element lifetime is guaranteed
+/// **Performance:** Fastest (direct pointer access), but lifetime-bound
+///
+/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
+/// - The element remains in the DOM tree
+/// - The document is not destroyed
+/// - No DOM modifications that might cause internal reallocation
+///
+/// ```zig
+/// const name = qualifiedNameBorrow(element);
+/// // Use immediately - don't store for later!
+/// if (someCondition(name)) { ... }
+/// ```
+pub fn qualifiedNameBorrow(element: *z.DomElement) []const u8 {
+    var name_len: usize = 0;
+    const name_ptr = lxb_dom_element_qualified_name(element, &name_len);
+    return name_ptr[0..name_len];
+}
+
+test "node/element node/tag/qualified names" {
     const allocator = testing.allocator;
 
     const doc = try parseFromString("<div></div><br/><code></code>hello<custom-elt></custom-elt><script></script><!-- comment -->");
@@ -425,13 +490,13 @@ test "get node/element names" {
     var current_node = firstChild(body);
 
     const nodes = .{
-        .{ .tag = "DIV", .type = .element },
-        .{ .tag = "BR", .type = .element },
-        .{ .tag = "CODE", .type = .element },
-        .{ .tag = "#text", .type = .text },
-        .{ .tag = "CUSTOM-ELT", .type = .element },
-        .{ .tag = "SCRIPT", .type = .element },
-        .{ .tag = "#comment", .type = .comment },
+        .{ .TAG = "DIV", .tag = "div", .type = .element },
+        .{ .TAG = "BR", .tag = "br", .type = .element },
+        .{ .TAG = "CODE", .tag = "code", .type = .element },
+        .{ .TAG = "#text", .tag = "#text", .type = .text },
+        .{ .TAG = "CUSTOM-ELT", .tag = "custom-elt", .type = .element },
+        .{ .TAG = "SCRIPT", .tag = "script", .type = .element },
+        .{ .TAG = "#comment", .type = .comment },
     };
 
     var index: usize = 0;
@@ -440,6 +505,9 @@ test "get node/element names" {
         const owned_name = try z.nodeName(allocator, current_node.?);
         defer allocator.free(owned_name);
         const node_type = z.nodeType(current_node.?);
+        const node_qualified_name = z.qualifiedNameBorrow(current_node.?);
+        const node_owned_qualified_name = try z.qualifiedName(allocator, current_node.?);
+        defer allocator.free(node_owned_qualified_name);
 
         try testing.expect(index < nodes.len);
 
@@ -463,8 +531,6 @@ test "get node/element names" {
         current_node = nextSibling(current_node.?);
         index += 1;
     }
-
-    // Assert we processed all expected nodes
     try testing.expectEqual(nodes.len, index);
 }
 //=============================================================================

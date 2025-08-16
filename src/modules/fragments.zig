@@ -276,11 +276,16 @@ test "select options fragment" {
         \\<option value="mx">Mexico</option>
         \\<optgroup label="Europe">
         \\  <option value="uk">United Kingdom</option>
+        \\  <option value="fr">France</option>
         \\  <option value="de">Germany</option>
         \\</optgroup>
     ;
 
-    const result = try parseFragment(allocator, options_fragment, .select);
+    const result = try parseFragment(
+        allocator,
+        options_fragment,
+        .select,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -289,7 +294,7 @@ test "select options fragment" {
     // Should have 3 options + 1 optgroup = 4 elements
     try testing.expect(elements.len == 4);
     try testing.expectEqualStrings("OPTION", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("OPTGROUP", z.tagNameBorrow(elements[3]));
+    try testing.expectEqualStrings("optgroup", z.qualifiedNameBorrow(elements[3]));
 }
 
 test "list item fragments with context" {
