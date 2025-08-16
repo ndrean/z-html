@@ -105,7 +105,7 @@ pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
 |----------|--------|-------------|----------|
 | `nodeName()` | ⚠️ Unsafe | Fast | Immediate use only |
 | `tagName()` | ⚠️ Unsafe | Fast | Immediate use only |
-| `nodeNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
+| `nodeName()` | ✅ Safe | Slower (alloc) | Storage, passing around |
 | `tagNameOwned()` | ✅ Safe | Slower (alloc) | Storage, passing around |
 
 ## Key Takeaways

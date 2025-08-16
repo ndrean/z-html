@@ -276,7 +276,7 @@ When `destroyDocument()` is called, it automatically destroys ALL nodes that bel
 
 When a node is NOT attached to any document, you must manually destroy it.
 
-> Very few functions that return strings point to internal `lexbor` memory. The `nodeName()` function can be usesd if it is immediately disposed. If you need to store it, use `nodeNameOwned()` instead.
+> Very few functions that return strings point to internal `lexbor` memory. The `nodeName()` function can be usesd if it is immediately disposed. If you need to store it, use `nodeName()` instead.
 
 ## Chunk Parsing vs Fragment Parsing
 

@@ -368,7 +368,7 @@ test "creation & convertions" {
 ///
 /// ⚠️  UNSAFE: The returned slice points to lexbor's internal memory.
 /// Do NOT store this slice beyond the lifetime of the node.
-/// Use nodeNameOwned() if you need to store the result.
+/// Use z.nodeName() if you need to store the result.
 /// ## Example
 /// ```
 /// test "nodeType/tagname" {
@@ -391,7 +391,7 @@ pub fn nodeNameBorrow(node: *z.DomNode) []const u8 {
 /// or the `tagName` in uppercase for element nodes.
 ///
 /// Caller must free the returned string.
-pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
+pub fn nodeName(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     const name_slice = z.nodeNameBorrow(node);
     return try allocator.dupe(u8, name_slice);
 }
@@ -437,7 +437,7 @@ test "get node/element names" {
     var index: usize = 0;
     while (current_node != null) {
         const node_name = z.nodeNameBorrow(current_node.?);
-        const owned_name = try nodeNameOwned(allocator, current_node.?);
+        const owned_name = try z.nodeName(allocator, current_node.?);
         defer allocator.free(owned_name);
         const node_type = z.nodeType(current_node.?);
 

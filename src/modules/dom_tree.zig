@@ -82,7 +82,7 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
         .element => {
             const element = z.nodeToElement(node).?;
             // Use the owned version for safety
-            const tag_name = try z.nodeNameOwned(allocator, node);
+            const tag_name = try z.nodeName(allocator, node);
 
             const elt_attrs = try z.getAttributes(allocator, element);
 
@@ -141,7 +141,7 @@ pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
     switch (node_type) {
         .element => {
             const element = z.nodeToElement(node).?;
-            const tag_name = try z.nodeNameOwned(allocator, node);
+            const tag_name = try z.nodeName(allocator, node);
 
             // Convert attributes to proper format for JSON
             const elt_attrs = try z.getAttributes(allocator, element);
