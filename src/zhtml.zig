@@ -95,6 +95,8 @@ pub const nodeName = lxb.nodeName; // Safe version
 pub const nodeNameBorrow = lxb.nodeNameBorrow;
 pub const tagName = lxb.tagName;
 pub const tagNameBorrow = lxb.tagNameBorrow; // Safe
+pub const qualifiedName = lxb.qualifiedName;
+pub const qualifiedNameBorrow = lxb.qualifiedNameBorrow; // Zero-copy version
 
 //===================
 // NodeTypes
@@ -281,8 +283,6 @@ pub const setAttribute = attrs.elementSetAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
-pub const qualifiedName = attrs.qualifiedName;
-pub const qualifiedNameBorrow = attrs.qualifiedNameBorrow; // Zero-copy version
 pub const compareStrings = attrs.compareStrings;
 pub const getAttributes = attrs.getAttributes;
 

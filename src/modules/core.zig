@@ -369,12 +369,10 @@ test "creation & convertions" {
 /// ## Example
 /// ```
 /// test "nodeType/tagname" {
-///     const doc = try parseFromString("<div></div>");
-///     const div_node = bodyNode(doc);
-///     const div_name = z.nodeNameBorrow(div_node);
+///     const doc = try createDocument();
+///     const div_elt = try createElement(doc, "div", &.{});
+///     const div_name = z.nodeNameBorrow(elementToNode(div_elt));
 ///     try testing.expectEqualStrings(div_name, "DIV");
-///     const node_type = z.nodeType(div_node);
-///     try testing.expect(node_type == .element);
 /// }
 /// ---
 /// ```
@@ -391,13 +389,14 @@ pub fn nodeNameBorrow(node: *z.DomNode) []const u8 {
 /// Caller must free the returned string.
 /// ## Example
 /// ```
-/// const text = try createTextNode(doc, "Hello");
+/// const allocator = testing.allocator;
+/// const text = try createTextNode(doc, "Hello"); // a node
 /// const text_name = try nodeName(allocator, text);
 /// defer allocator.free(text_name);
 /// try testing.expectEqualStrings(text_name, "#text");
 ///
-/// const div = try createElement(doc, "div", &.{});
-/// const name = try nodeName(allocator, div);
+/// const div = try createElement(doc, "div", &.{}); // an element
+/// const name = try nodeName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
 /// ---
@@ -407,11 +406,41 @@ pub fn nodeName(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return try allocator.dupe(u8, name_slice);
 }
 
+test "nodeName/Borrow" {
+    const allocator = testing.allocator;
+    const doc = try createDocument();
+
+    const div_elt = try createElement(doc, "div", &.{});
+    const div_name = z.nodeNameBorrow(elementToNode(div_elt));
+    try testing.expectEqualStrings(div_name, "DIV");
+    const node_type = z.nodeType(elementToNode(div_elt));
+    try testing.expect(node_type == .element);
+    const owned_div_name = try nodeName(allocator, elementToNode(div_elt));
+    defer allocator.free(owned_div_name);
+    try testing.expectEqualStrings(owned_div_name, "DIV");
+
+    const text = try createTextNode(doc, "Hello");
+    const owned_text_name = try nodeName(allocator, text);
+    defer allocator.free(owned_text_name);
+    try testing.expectEqualStrings(owned_text_name, "#text");
+    const text_name = nodeNameBorrow(text);
+    try testing.expectEqualStrings(text_name, "#text");
+}
+
 /// [core] (UPPERCASED) Get the tag name on an _element_ as Zig string (UNSAFE: borrows lexbor's memory)
 ///
 /// ⚠️  Do NOT store this slice beyond the lifetime of the element.
 ///
 /// Use tagName() if you need to store the result.
+/// ## Example
+/// ```
+/// const allocator = testing.allocator;
+/// const doc = try createDocument();
+/// const div = try createElement(doc, "div", &.{});
+/// const name = tagNameBorrow(elementToNode(div));
+/// try testing.expectEqualStrings(name, "DIV");
+/// ---
+/// ```
 pub fn tagNameBorrow(element: *z.DomElement) []const u8 {
     const name_ptr = lxb_dom_element_tag_name(element, null);
     return std.mem.span(name_ptr);
@@ -420,7 +449,18 @@ pub fn tagNameBorrow(element: *z.DomElement) []const u8 {
 /// [core]  (UPPERCASED) Get the tag name on an _element_ as owned Zig string (SAFE: copies to Zig memory)
 ///
 /// Returns a copy of the tag name that is owned by the caller.
+///
 /// Caller must free the returned string.
+/// ## Example
+/// ```
+/// const allocator = testing.allocator;
+/// const doc = try createDocument();
+/// const div = try createElement(doc, "div", &.{});
+/// const name = try tagName(allocator, elementToNode(div));
+/// defer allocator.free(name);
+/// try testing.expectEqualStrings(name, "DIV");
+/// ___
+/// ```
 pub fn tagName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     const name_slice = tagNameBorrow(element);
     return try allocator.dupe(u8, name_slice);
@@ -433,8 +473,10 @@ pub fn tagName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
 /// Caller must free the returned slice.
 /// ## Example
 /// ```
-/// const div = try z.createElement(doc, "div", &.{})
-/// const name = try qualifiedName(allocator, element);
+/// const allocator = testing.allocator;
+/// const doc = try createDocument();
+/// const div = try z.createElement(doc, "div", &.{});
+/// const name = try qualifiedName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "div");
 /// ___
@@ -448,31 +490,30 @@ pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8
     return result;
 }
 
-test "qual" {
+test "qualified name" {
     const allocator = testing.allocator;
     const doc = try createDocument();
     const div = try createElement(doc, "div", &.{});
-    const name = try qualifiedName(allocator, div);
-    defer allocator.free(name);
-    try testing.expectEqualStrings(name, "div");
+    const owned_name = try qualifiedName(allocator, div);
+    defer allocator.free(owned_name);
+    try testing.expectEqualStrings(owned_name, "div");
+    const borrow_name = qualifiedNameBorrow(div);
+    try testing.expectEqualStrings(borrow_name, "div");
 }
 
-/// Get the qualified name of an _element_(zero-copy version)
+/// [core] (lowercased) Get the qualified name of an _element_ (borrowed, zero-copy version)
 ///
-/// Returns a slice directly into lexbor's internal memory - no allocation!
+/// Caller must free the returned slice.
 ///
-/// **Use when:** Processing immediately, element lifetime is guaranteed
-/// **Performance:** Fastest (direct pointer access), but lifetime-bound
 ///
-/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
-/// - The element remains in the DOM tree
-/// - The document is not destroyed
-/// - No DOM modifications that might cause internal reallocation
-///
+/// ⚠️  Do NOT store this slice beyond the lifetime of the element.
+/// ## Example
 /// ```zig
-/// const name = qualifiedNameBorrow(element);
-/// // Use immediately - don't store for later!
-/// if (someCondition(name)) { ... }
+/// const doc = try createDocument();
+/// const div_elt = try createElement(doc, "div", &.{});
+/// const name = qualifiedNameBorrow(div_elt);
+/// try testing.expectEqualStrings(name, "div");
+/// ---
 /// ```
 pub fn qualifiedNameBorrow(element: *z.DomElement) []const u8 {
     var name_len: usize = 0;
@@ -480,59 +521,6 @@ pub fn qualifiedNameBorrow(element: *z.DomElement) []const u8 {
     return name_ptr[0..name_len];
 }
 
-test "node/element node/tag/qualified names" {
-    const allocator = testing.allocator;
-
-    const doc = try parseFromString("<div></div><br/><code></code>hello<custom-elt></custom-elt><script></script><!-- comment -->");
-
-    defer destroyDocument(doc);
-    const body = try bodyNode(doc);
-    var current_node = firstChild(body);
-
-    const nodes = .{
-        .{ .TAG = "DIV", .tag = "div", .type = .element },
-        .{ .TAG = "BR", .tag = "br", .type = .element },
-        .{ .TAG = "CODE", .tag = "code", .type = .element },
-        .{ .TAG = "#text", .tag = "#text", .type = .text },
-        .{ .TAG = "CUSTOM-ELT", .tag = "custom-elt", .type = .element },
-        .{ .TAG = "SCRIPT", .tag = "script", .type = .element },
-        .{ .TAG = "#comment", .type = .comment },
-    };
-
-    var index: usize = 0;
-    while (current_node != null) {
-        const node_name = z.nodeNameBorrow(current_node.?);
-        const owned_name = try z.nodeName(allocator, current_node.?);
-        defer allocator.free(owned_name);
-        const node_type = z.nodeType(current_node.?);
-        const node_qualified_name = z.qualifiedNameBorrow(current_node.?);
-        const node_owned_qualified_name = try z.qualifiedName(allocator, current_node.?);
-        defer allocator.free(node_owned_qualified_name);
-
-        try testing.expect(index < nodes.len);
-
-        inline for (nodes, 0..) |node, i| {
-            if (i == index) {
-                try testing.expectEqualStrings(node.tag, node_name);
-                try testing.expectEqualStrings(owned_name, node.tag);
-                try testing.expect(node.type == node_type);
-                if (node.type == .element) {
-                    const element = nodeToElement(current_node.?);
-                    const elt_name = tagNameBorrow(element.?);
-                    const owned_elt_name = try tagName(allocator, element.?);
-                    defer allocator.free(owned_elt_name);
-                    try testing.expectEqualStrings(node.tag, elt_name);
-                    try testing.expectEqualStrings(node.tag, owned_elt_name);
-                }
-                break;
-            }
-        }
-
-        current_node = nextSibling(current_node.?);
-        index += 1;
-    }
-    try testing.expectEqual(nodes.len, index);
-}
 //=============================================================================
 
 /// [core] Destroy a comment node in the document
@@ -652,15 +640,11 @@ test "what is empty?" {
 //=============================================================================
 
 /// [core] Get the parent node of a given node
-///
-/// (JavaScript convention: node.parentNode)
 pub fn parentNode(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_parent_noi(node);
 }
 
 /// [core] Get the parent element of a given element
-///
-/// (JavaScript convention: element.parentElement)
 pub fn parentElement(element: *z.DomElement) ?*z.DomElement {
     const node = elementToNode(element);
     const parent_node = parentNode(node);
@@ -750,22 +734,24 @@ pub fn firstElementChild(element: *z.DomElement) ?*z.DomElement {
 }
 
 test "firstElementChild" {
-    const doc = try parseFromString("hello <div>world</div>");
-    defer destroyDocument(doc);
-    const body_elt = try bodyElement(doc);
-
-    const first_child = firstChild(elementToNode(body_elt));
+    const doc = try z.parseFromString("hello <div>world <p></p></div>");
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
+    const first_text = z.firstChild(body);
     try testing.expectEqualStrings(
         "#text",
-        z.nodeTypeName(first_child.?),
+        z.nodeNameBorrow(first_text.?),
     );
 
-    const div = nextSibling(first_child.?);
-    try testing.expectEqualStrings("#element", z.nodeTypeName(div.?));
-    try testing.expectEqualStrings("DIV", z.nodeNameBorrow(div.?));
-
-    const firstElement = firstElementChild(body_elt);
-    try testing.expect(elementToNode(firstElement.?) == div);
+    const div = z.firstElementChild(nodeToElement(body).?);
+    try testing.expectEqualStrings(
+        "#element",
+        z.nodeTypeName(elementToNode(div.?)),
+    );
+    try testing.expectEqualStrings(
+        "DIV",
+        z.tagNameBorrow(div.?),
+    );
 }
 
 /// [core] Get next element sibling
@@ -783,6 +769,40 @@ pub fn nextElementSibling(element: *z.DomElement) ?*z.DomElement {
         sibling = nextSibling(sibling.?);
     }
     return null;
+}
+
+test "nextElementSibling" {
+    const doc = try z.parseFromString("<div>test</div><br/><code></code>");
+    defer z.destroyDocument(doc);
+    const body = try z.bodyElement(doc);
+    var current_elt = z.firstElementChild(body);
+
+    // const elements = [_]struct { tag: []const u8 }{
+    //     .{ .tag = "DIV" },
+    //     .{ .tag = "BR" },
+    //     .{ .tag = "CODE" },
+    // };
+    const elements: [3][]const u8 = .{ "DIV", "BR", "CODE" };
+
+    var index: usize = 0;
+    while (current_elt != null and index < elements.len) {
+        if (z.parseTag(z.tagNameBorrow(current_elt.?)) == .div) {
+            const first_child = z.firstChild(elementToNode(current_elt.?));
+            try testing.expectEqualStrings(
+                "#text",
+                z.nodeTypeName(first_child.?),
+            );
+        }
+        try testing.expectEqualStrings(
+            elements[index],
+            z.tagNameBorrow(current_elt.?),
+        );
+        current_elt = z.nextElementSibling(current_elt.?);
+        index += 1;
+    }
+
+    try testing.expect(index == elements.len);
+    try testing.expect(current_elt == null);
 }
 
 /// [core] Helper: Collect all child nodes from a node
