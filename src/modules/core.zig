@@ -159,7 +159,7 @@ pub fn createElement(doc: *z.HtmlDocument, name: []const u8, attrs: []const z.At
     if (attrs.len == 0) return element;
 
     for (attrs) |attr| {
-        try z.setAttribute(
+        try z.setAttributes(
             element,
             &.{
                 z.AttributePair{ .name = attr.name, .value = attr.value },
@@ -906,14 +906,8 @@ pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
         fragment_child = next_sibling;
     }
 }
-
-/// [utility] Tag name matcher function (safe: uses immediate comparison)
 ///
 /// This is safe because it compares the tag name immediately without storing it.
-pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
-    const tag = tagNameBorrow(element); // Safe for immediate use
-    return std.mem.eql(u8, tag, tag_name);
-}
 
 //=============================================================================
 // TEXT CONTENT FUNCTIONS -
@@ -2080,21 +2074,22 @@ test "class search functionality" {
                     // Test unified classList function - returns full class string
                     const class_result = try z.classList(allocator, element, .string);
                     const full_class_list = class_result.string;
-                    defer if (full_class_list) |class_str| allocator.free(class_str);
-                    if (full_class_list) |class_str| {
-                        try testing.expect(std.mem.eql(u8, class_str, "container main active"));
-                    }
+                    defer allocator.free(class_result.string);
+                    // defer if (full_class_list) |class_str| allocator.free(class_str);
+                    // if (full_class_list) |class_str| {
+                    try testing.expect(std.mem.eql(u8, "container main active", full_class_list));
+                    // }
 
                     // Test new getClasses function - returns array of individual classes
-                    const classes = try z.getClasses(allocator, element);
+                    const classes = try z.classList(allocator, element, .array);
                     defer {
-                        for (classes) |class| allocator.free(class);
-                        allocator.free(classes);
+                        for (classes.array) |class| allocator.free(class);
+                        allocator.free(classes.array);
                     }
-                    try testing.expect(classes.len == 3);
-                    try testing.expect(std.mem.eql(u8, classes[0], "container"));
-                    try testing.expect(std.mem.eql(u8, classes[1], "main"));
-                    try testing.expect(std.mem.eql(u8, classes[2], "active"));
+                    try testing.expect(classes.array.len == 3);
+                    try testing.expect(std.mem.eql(u8, classes.array[0], "container"));
+                    try testing.expect(std.mem.eql(u8, classes.array[1], "main"));
+                    try testing.expect(std.mem.eql(u8, classes.array[2], "active"));
                 } else if (std.mem.eql(u8, text_content, "Second div")) {
                     // Second div should have container and secondary
                     try testing.expect(z.hasClass(element, "container"));
@@ -2108,7 +2103,7 @@ test "class search functionality" {
 
                     // classList should return null for elements with no class attribute
                     const no_class_result = try z.classList(allocator, element, .string);
-                    try testing.expect(no_class_result.string == null);
+                    try testing.expect(no_class_result.string.len == 0);
                 }
             } else if (std.mem.eql(u8, element_name, "span")) {
                 // Span should have active class

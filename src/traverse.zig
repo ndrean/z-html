@@ -6,30 +6,6 @@ const z = @import("zhtml.zig");
 const print = std.debug.print;
 const testing = std.testing;
 
-// /// [traversal] Traverse child __nodes__ and collect results into an ArrayList
-// ///
-// /// Argument function determines what to collect.
-// ///
-// /// Caller must ensure the returned slice is freed.
-// pub fn collectChildNodes(
-//     allocator: std.mem.Allocator,
-//     parent_node: *z.DomNode,
-//     comptime T: type,
-//     collectFn: *const fn (node: *z.DomNode) ?T,
-// ) ![]T {
-//     var results = std.ArrayList(T).init(allocator);
-
-//     var child = z.firstChild(parent_node);
-//     while (child != null) {
-//         if (collectFn(child.?)) |item| {
-//             try results.append(item);
-//         }
-//         child = z.nextSibling(child.?);
-//     }
-
-//     return results.toOwnedSlice();
-// }
-
 /// [traversal] Traverse child __elements__ and collect upon the HTMLTag
 ///
 ///
@@ -194,7 +170,6 @@ test "DOM traversal utilities" {
 // returns true if element is a `P`
 fn areAllPs(element: *z.DomElement) bool {
     return z.parseTag(z.qualifiedNameBorrow(element)).? == .p;
-    // return z.matchesTagName(element, "P");
 }
 
 fn areAllOfType(element: *z.DomElement, tag: z.HtmlTag) bool {

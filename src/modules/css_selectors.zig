@@ -809,9 +809,8 @@ test "debug what classes lexbor sees" {
         .string,
     );
     const class = class_result.string;
-
-    defer if (class) |c| allocator.free(c);
-    try testing.expectEqualStrings("container", class.?);
+    defer allocator.free(class);
+    try testing.expectEqualStrings("container", class);
 
     const red_box = z.firstChild(container_div).?;
     const blue_box = z.nextSibling(red_box).?;

@@ -40,6 +40,13 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     return null; // Unknown/custom element
 }
 
+/// [HtmlTag] Tag name matcher function
+pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
+    const tag = z.parseTag(z.qualifiedNameBorrow(element));
+    const target_tag = parseTag(tag_name); // Safe for immediate use
+    return tag == target_tag;
+}
+
 /// Helper to parse HTML tag with case conversion
 pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !?z.HtmlTag {
     // Convert to lowercase for parsing

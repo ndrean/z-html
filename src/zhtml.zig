@@ -14,6 +14,7 @@ const tree = @import("modules/dom_tree.zig");
 const traverse = @import("traverse.zig");
 const cleaner = @import("modules/cleaner.zig");
 const smart_text = @import("modules/smart_text.zig");
+const walker = @import("modules/search_attributes.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -118,6 +119,7 @@ pub const HtmlTag = tag.HtmlTag;
 pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
 pub const fromQualifiedName = tag.fromQualifiedName; // NEW: Fast string→enum conversion
+pub const matchesTagName = tag.matchesTagName;
 pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
 pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // RECOMMENDED: Fast enum-based
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
@@ -155,12 +157,6 @@ pub const collectChildItems = traverse.collectChildItems;
 pub const collectChildElements = traverse.collectChildElements;
 pub const elementMatchCollector = traverse.elementMatchCollector;
 pub const nodeMatchCollector = traverse.nodeMatchCollector;
-
-//=====================================
-// DOM Matcher utilities
-pub const matchesTagName = lxb.matchesTagName;
-pub const matchesAttribute = attrs.matchesAttribute;
-pub const hasClass = attrs.hasClass;
 
 //=====================================
 // DOM Tree representation utilities (aliased to avoid conflicts)
@@ -272,25 +268,29 @@ pub const DomAttr = attrs.DomAttr;
 pub const AttributePair = attrs.AttributePair;
 pub const hasAttributes = attrs.hasAttributes;
 
-pub const elementGetNamedAttributeValue = attrs.elementGetNamedAttributeValue;
-
 pub const getAttribute = attrs.getAttribute;
-pub const setAttribute = attrs.elementSetAttributes;
+pub const getAttributeBorrow = attrs.getAttributeBorrow;
+
+pub const getAttributes = attrs.getAttributes;
+pub const setAttributes = attrs.setAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
 pub const compareStrings = attrs.compareStrings;
-pub const getAttributes = attrs.getAttributes;
+
+pub const getAttributeValue = attrs.getAttributeValue;
+pub const getAttributeName = attrs.getAttributeName;
 
 //=========================================
 // Element search functions
 //=========================================
 pub const getElementById = collection.getElementById;
-pub const getElementByIdFast = attrs.getElementByIdFast; // Optimized version using DOM walker
-pub const getElementByClassFast = attrs.getElementByClassFast; // Optimized class search using DOM walker
-pub const getElementByAttributeFast = attrs.getElementByAttributeFast; // Optimized attribute search using DOM walker
-pub const getElementByDataAttributeFast = attrs.getElementByDataAttributeFast; // Optimized data-* attribute search
+pub const getElementByIdFast = walker.getElementByIdFast; // Optimized version using DOM walker
+pub const getElementByClassFast = walker.getElementByClassFast; // Optimized class search using DOM walker
+pub const getElementByAttributeFast = walker.getElementByAttributeFast; // Optimized attribute search using DOM walker
+pub const getElementByDataAttributeFast = walker.getElementByDataAttributeFast; // Optimized data-* attribute search
 pub const getElementsByAttributePair = collection.getElementsByAttributePair;
+
 pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 pub const getElementsByTagName = collection.getElementsByTagName;
@@ -302,23 +302,17 @@ pub const getElementsByName = collection.getElementsByName;
 pub const ClassListType = attrs.ClassListType;
 pub const ClassListResult = attrs.ClassListResult;
 pub const classList = attrs.classList;
-pub const getClasses = attrs.getClasses;
-pub const getClassString = attrs.getClassString;
+pub const hasClass = attrs.hasClass;
 
 //=========================================
 // Attribute struct reflexion
 //=========================================
-pub const getAttributeName =
-    attrs.getAttributeName;
 
-pub const getAttributeValue =
-    attrs.getAttributeValue;
+pub const getFirstAttribute =
+    attrs.getFirstAttribute;
 
-pub const getElementFirstAttribute =
-    attrs.getElementFirstAttribute;
-
-pub const getElementNextAttribute =
-    attrs.getElementNextAttribute;
+pub const getNextAttribute =
+    attrs.getNextAttribute;
 
 //=========================================
 // UTILITY FUNCTIONS

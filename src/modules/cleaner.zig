@@ -110,7 +110,7 @@ fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.DomElement) 
 
         // Skip empty attribute names (malformed HTML)
         if (clean_name.len > 0) {
-            try z.setAttribute(
+            try z.setAttributes(
                 element,
                 &.{
                     .{
