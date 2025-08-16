@@ -18,7 +18,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - chunk processing
   - fragment / context-aware parsing
   - `setInnerHTML()`
-- Serialization: 
+- Serialization:
   - tree: `serializeToString()`
   - `innerHTML()`
 - DOM_tree and back
@@ -327,13 +327,13 @@ TODO
 ### file structure
 
 - build.zig
-- Makefile.lexbor   # `lexbor` build automation
-- lexbor_src        # local `lexbor` source code & built static file
+- Makefile.lexbor   (`lexbor` build automation)
+- lexbor_src        (local `lexbor` source code & built static file)
 - src /
   - zhtml.zig
   - minimal.c
+  - errors.zig
   - modules
-    - errors.zig
     - html_tags.zig
     - node_types.zig
     - core.zig
@@ -347,9 +347,12 @@ TODO
     - title.zig (TODO?)
     - head ?
 
-  - main.zig (demo TODO?)
-  - examples
-    - todo
+  - main.zig (demo ? TODO:
+    - stral fetch from internet
+    - build from chunks
+    - search for id attributes
+    - develop stats on document with search)
+  - examples (TODO)
 
 ### `lexbor` built with static linking
 
@@ -395,10 +398,4 @@ or
 ```sh
 grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/lexbor/
 ```
-
-Test individual `Zig` files:
-
-```sh
- zig test src/test_traversal.zig -I lexbor_src_2.4.0/source --library c lexbor_src_2.4.0/build/liblexbor_static.a src/minimal.c
- ```
 
