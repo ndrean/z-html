@@ -1,21 +1,12 @@
 //! CSS Selectors
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
-const Err = @import("errors.zig").LexborError;
+const Err = z.Err;
 
 const testing = std.testing;
 const print = std.debug.print;
-
-//=============================================================================
-// CSS SELECTOR TYPES
-//=============================================================================
-
-pub const CssParser = opaque {};
-pub const CssSelectors = opaque {};
-pub const CssSelectorList = opaque {};
-pub const CssSelectorSpecificity = opaque {};
 
 //---------------------------------------------------------------------
 // lexbor match options
@@ -31,36 +22,36 @@ const LXB_SELECTORS_OPT_MATCH_ROOT: usize = 0x02;
 //=============================================================================
 
 // CSS Parser functions
-extern "c" fn lxb_css_parser_create() ?*CssParser;
-extern "c" fn lxb_css_parser_init(parser: *CssParser, memory: ?*anyopaque) usize;
-extern "c" fn lxb_css_parser_destroy(parser: *CssParser, destroy_self: bool) ?*CssParser;
+extern "c" fn lxb_css_parser_create() ?*z.CssParser;
+extern "c" fn lxb_css_parser_init(parser: *z.CssParser, memory: ?*anyopaque) usize;
+extern "c" fn lxb_css_parser_destroy(parser: *z.CssParser, destroy_self: bool) ?*z.CssParser;
 
 // CSS Selectors engine functions
-extern "c" fn lxb_selectors_create() ?*CssSelectors;
-extern "c" fn lxb_selectors_init(selectors: *CssSelectors) usize;
-extern "c" fn lxb_selectors_destroy(selectors: *CssSelectors, destroy_self: bool) ?*CssSelectors;
+extern "c" fn lxb_selectors_create() ?*z.CssSelectors;
+extern "c" fn lxb_selectors_init(selectors: *z.CssSelectors) usize;
+extern "c" fn lxb_selectors_destroy(selectors: *z.CssSelectors, destroy_self: bool) ?*z.CssSelectors;
 
 // Parse selectors
-extern "c" fn lxb_css_selectors_parse(parser: *CssParser, selectors: [*]const u8, length: usize) ?*CssSelectorList;
+extern "c" fn lxb_css_selectors_parse(parser: *z.CssParser, selectors: [*]const u8, length: usize) ?*z.CssSelectorList;
 
 // Set options for selectors: MATCH_ROOT
-extern "c" fn lxb_selectors_opt_set_noi(selectors: *CssSelectors, opts: usize) void;
+extern "c" fn lxb_selectors_opt_set_noi(selectors: *z.CssSelectors, opts: usize) void;
 
 // Find nodes matching selectors
-extern "c" fn lxb_selectors_find(selectors: *CssSelectors, root: *z.DomNode, list: *CssSelectorList, callback: *const fn (
+extern "c" fn lxb_selectors_find(selectors: *z.CssSelectors, root: *z.DomNode, list: *z.CssSelectorList, callback: *const fn (
     node: *z.DomNode,
-    spec: *CssSelectorSpecificity,
+    spec: *z.CssSelectorSpecificity,
     ctx: ?*anyopaque,
 ) callconv(.C) usize, ctx: ?*anyopaque) usize;
 
-extern "c" fn lxb_selectors_match_node(selectors: *CssSelectors, node: *z.DomNode, list: *CssSelectorList, callback: *const fn (*z.DomNode, *CssSelectorSpecificity, ?*anyopaque) callconv(.C) usize, ctx: ?*anyopaque) usize;
+extern "c" fn lxb_selectors_match_node(selectors: *z.CssSelectors, node: *z.DomNode, list: *z.CssSelectorList, callback: *const fn (*z.DomNode, *z.CssSelectorSpecificity, ?*anyopaque) callconv(.C) usize, ctx: ?*anyopaque) usize;
 
 // Cleanup selector list
-extern "c" fn lxb_css_selector_list_destroy_memory(list: *CssSelectorList) void;
+extern "c" fn lxb_css_selector_list_destroy_memory(list: *z.CssSelectorList) void;
 
 /// Compiled CSS selector for reuse
 pub const CompiledSelector = struct {
-    selector_list: *CssSelectorList,
+    selector_list: *z.CssSelectorList,
     original_selector: []const u8,
     allocator: std.mem.Allocator,
 
@@ -72,8 +63,8 @@ pub const CompiledSelector = struct {
 
 pub const CssSelectorEngine = struct {
     allocator: std.mem.Allocator,
-    parser: *CssParser,
-    selectors: *CssSelectors,
+    parser: *z.CssParser,
+    selectors: *z.CssSelectors,
     initialized: bool = false,
     // Selector cache for performance
     selector_cache: std.StringHashMap(CompiledSelector),
@@ -370,7 +361,7 @@ const FindContext = struct {
 };
 
 /// Callback function for lxb_selectors_find
-fn findCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
+fn findCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
     _ = spec; // unused
 
     const context: *FindContext = @ptrCast(@alignCast(ctx.?));
@@ -398,7 +389,7 @@ const FirstElementContext = struct {
 };
 
 /// Callback that stops after finding first node
-fn findFirstNodeCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
+fn findFirstNodeCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
     _ = spec; // unused
 
     const context: *FirstNodeContext = @ptrCast(@alignCast(ctx.?));
@@ -410,7 +401,7 @@ fn findFirstNodeCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?
 }
 
 /// Callback that stops after finding first element
-fn findFirstElementCallback(node: *z.DomNode, spec: *CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
+fn findFirstElementCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
     _ = spec; // unused
 
     const context: *FirstElementContext = @ptrCast(@alignCast(ctx.?));

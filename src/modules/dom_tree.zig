@@ -4,9 +4,8 @@
 //! - convert a tuple-like or JSON tree structure back to DOM nodes
 
 const std = @import("std");
-const z = @import("zhtml.zig");
-const html_tags = @import("html_tags.zig");
-const Err = z.LexborError;
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 
 const print = std.debug.print;
 const testing = std.testing;

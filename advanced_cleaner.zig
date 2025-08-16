@@ -1,7 +1,7 @@
 //! Advanced DOM cleaning with LazyHTML-level sophistication
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
 /// Calculate leading whitespace size in text content
 pub fn leadingWhitespaceSize(data: []const u8) usize {

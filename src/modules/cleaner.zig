@@ -1,6 +1,7 @@
 //! DOM tree cleaner
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 const print = std.debug.print;
 
 /// [core] Clean DOM tree according to HTML standards + optional extras

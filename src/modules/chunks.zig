@@ -1,11 +1,11 @@
 //! Chunks processor
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 
 pub const HtmlParser = opaque {};
 
-const Err = @import("errors.zig").LexborError;
 const testing = std.testing;
 const print = std.debug.print;
 

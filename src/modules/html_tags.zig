@@ -1,6 +1,7 @@
+//! HTML Tags
 // compile time safety check
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
 const testing = std.testing;
 const print = std.debug.print;

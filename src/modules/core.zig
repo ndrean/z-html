@@ -1,8 +1,7 @@
 //! Core functions: Doc creation, parsing, and DOM manipulation
 const std = @import("std");
-
-const Err = @import("errors.zig").LexborError;
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -11,47 +10,30 @@ const Instant = time.Instant;
 const Timer = time.Timer;
 const writer = std.io.getStdOut().writer();
 
-// Opaque types
-pub const HtmlDocument = opaque {};
-pub const DomNode = opaque {};
-pub const DomElement = opaque {};
-pub const DomCollection = opaque {};
-pub const DomAttr = opaque {};
-
-pub const Comment: type = opaque {};
-
-pub const AttributePair = struct {
-    name: []const u8,
-    value: []const u8,
-};
-
 // pub const LXB_DOM_NODE_TYPE_ELEMENT: u32 = 1;
 // pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
 // pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
-
-// Template element interface
-pub const HtmlTemplate = opaque {};
 
 pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 
 // External lexbor functions
 extern "c" fn lxb_html_interface_template_wrapper() ?*const anyopaque;
-extern "c" fn lxb_html_template_content_wrapper(template_element: *anyopaque) ?*DomNode;
-extern "c" fn lxb_html_tree_node_is_wrapper(node: *DomNode, tag_id: u32) bool;
+extern "c" fn lxb_html_template_content_wrapper(template_element: *anyopaque) ?*z.DomNode;
+extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
 
 /// Check if a node is a template element
-pub fn isTemplateElement(node: *DomNode) bool {
+pub fn isTemplateElement(node: *z.DomNode) bool {
     return lxb_html_tree_node_is_wrapper(node, LXB_TAG_TEMPLATE);
 }
 
 /// Get template interface for template elements
-pub fn templateInterface(element: *DomElement) ?*HtmlTemplate {
+pub fn templateInterface(element: *z.DomElement) ?*z.HtmlTemplate {
     _ = element; // For compatibility - wrapper doesn't need element parameter
     return @ptrCast(@constCast(lxb_html_interface_template_wrapper()));
 }
 
 /// Template-aware first child - handles template elements correctly
-pub fn templateAwareFirstChild(node: *DomNode) ?*DomNode {
+pub fn templateAwareFirstChild(node: *z.DomNode) ?*z.DomNode {
     if (isTemplateElement(node)) {
         // Template elements store content in DocumentFragment
         if (getTemplateContent(node)) |content| {
@@ -64,12 +46,12 @@ pub fn templateAwareFirstChild(node: *DomNode) ?*DomNode {
 
 // Helper function for template content access (needs implementation)
 /// Get the content of a template element
-pub fn getTemplateContent(node: *DomNode) ?*DomNode {
+pub fn getTemplateContent(node: *z.DomNode) ?*z.DomNode {
     if (!isTemplateElement(node)) return null;
     return lxb_html_template_content_wrapper(node);
 }
 
-fn templateContentFirstChild(template: *HtmlTemplate) ?*DomNode {
+fn templateContentFirstChild(template: *z.HtmlTemplate) ?*z.DomNode {
     _ = template; // Simplified - use node-based approach
     return null; // Will be replaced by getTemplateContent flow
 }
@@ -80,9 +62,9 @@ pub const LXB_TAG_SCRIPT: u32 = 0x29;
 // CORE DOCUMENT FUNCTIONS
 //===========================================================================
 
-extern "c" fn lxb_html_document_create() ?*HtmlDocument;
-extern "c" fn lxb_html_document_destroy(doc: *HtmlDocument) void;
-extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len: usize) usize;
+extern "c" fn lxb_html_document_create() ?*z.HtmlDocument;
+extern "c" fn lxb_html_document_destroy(doc: *z.HtmlDocument) void;
+extern "c" fn lxb_html_document_parse(doc: *z.HtmlDocument, html: [*]const u8, len: usize) usize;
 
 /// [core] Creates and returns a new HTML document.
 ///
@@ -94,12 +76,12 @@ extern "c" fn lxb_html_document_parse(doc: *HtmlDocument, html: [*]const u8, len
 /// const doc = try createDocument();
 /// defer destroyDocument(doc);
 /// ```
-pub fn createDocument() !*HtmlDocument {
+pub fn createDocument() !*z.HtmlDocument {
     return lxb_html_document_create() orelse Err.DocCreateFailed;
 }
 
 /// [core] Destroy an HTML document.
-pub fn destroyDocument(doc: *HtmlDocument) void {
+pub fn destroyDocument(doc: *z.HtmlDocument) void {
     lxb_html_document_destroy(doc);
 }
 
@@ -113,7 +95,7 @@ pub fn destroyDocument(doc: *HtmlDocument) void {
 /// const doc = try parseFromString("<!DOCTYPE html><html><body></body></html>");
 /// defer destroyDocument(doc);
 /// ```
-pub fn parseFromString(html: []const u8) !*HtmlDocument {
+pub fn parseFromString(html: []const u8) !*z.HtmlDocument {
     const doc = createDocument() catch {
         return Err.DocCreateFailed;
     };
@@ -126,28 +108,28 @@ pub fn parseFromString(html: []const u8) !*HtmlDocument {
 // CREATION
 // =============================================================================
 
-extern "c" fn lxb_html_document_create_element_noi(doc: *HtmlDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
+extern "c" fn lxb_html_document_create_element_noi(doc: *z.HtmlDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*z.DomElement;
 
-extern "c" fn lxb_dom_document_create_text_node(doc: *HtmlDocument, text: [*]const u8, text_len: usize) ?*DomNode;
-extern "c" fn lxb_dom_document_create_document_fragment(doc: *HtmlDocument) ?*DomNode;
-extern "c" fn lxb_dom_node_insert_before(to: *DomNode, node: *DomNode) void;
-extern "c" fn lxb_dom_node_insert_after(to: *DomNode, node: *DomNode) void;
-extern "c" fn lxb_dom_document_create_comment(doc: *HtmlDocument, data: [*]const u8, len: usize) ?*Comment;
-extern "c" fn lxb_dom_comment_interface_destroy(doc: *Comment) *Comment;
-extern "c" fn lxb_dom_node_insert_child(parent: *DomNode, child: *DomNode) void;
-extern "c" fn lxb_html_document_body_element_noi(doc: *HtmlDocument) ?*DomElement;
-extern "c" fn lxb_dom_document_root(doc: *HtmlDocument) ?*DomNode;
-extern "c" fn lexbor_node_owner_document(node: *DomNode) *HtmlDocument;
-extern "c" fn lxb_dom_node_parent_noi(node: *DomNode) ?*DomNode;
-extern "c" fn lxb_dom_document_create_element(doc: *HtmlDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*DomElement;
+extern "c" fn lxb_dom_document_create_text_node(doc: *z.HtmlDocument, text: [*]const u8, text_len: usize) ?*z.DomNode;
+extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HtmlDocument) ?*z.DomNode;
+extern "c" fn lxb_dom_node_insert_before(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_insert_after(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_document_create_comment(doc: *z.HtmlDocument, data: [*]const u8, len: usize) ?*z.Comment;
+extern "c" fn lxb_dom_comment_interface_destroy(doc: *z.Comment) *z.Comment;
+extern "c" fn lxb_dom_node_insert_child(parent: *z.DomNode, child: *z.DomNode) void;
+extern "c" fn lxb_html_document_body_element_noi(doc: *z.HtmlDocument) ?*z.DomElement;
+extern "c" fn lxb_dom_document_root(doc: *z.HtmlDocument) ?*z.DomNode;
+extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HtmlDocument;
+extern "c" fn lxb_dom_node_parent_noi(node: *z.DomNode) ?*z.DomNode;
+extern "c" fn lxb_dom_document_create_element(doc: *z.HtmlDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*z.DomElement;
 
-extern "c" fn lxb_dom_document_destroy_element(element: *DomElement) *DomElement;
-extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *DomNode;
-extern "c" fn lexbor_dom_interface_element_wrapper(node: *DomNode) ?*DomElement;
-extern "c" fn lxb_dom_node_name(node: *DomNode, len: ?*usize) [*:0]const u8;
-extern "c" fn lxb_dom_element_tag_name(element: *DomElement, len: ?*usize) [*:0]const u8;
-extern "c" fn lxb_dom_node_remove(node: *DomNode) void;
-extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
+extern "c" fn lxb_dom_document_destroy_element(element: *z.DomElement) *z.DomElement;
+extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
+extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.DomElement;
+extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_element_tag_name(element: *z.DomElement, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_node_remove(node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
 
 /// [core] Element creation and returns a !Element
 ///
@@ -158,14 +140,14 @@ extern "c" fn lxb_dom_node_destroy(node: *DomNode) void;
 /// ## Example
 ///
 /// ```
-/// const span: *DomElement = try createElement(doc, "span", &.{});
-/// const button: *DomElement = try createElement(doc, "button",
+/// const span: *z.DomElement = try createElement(doc, "span", &.{});
+/// const button: *z.DomElement = try createElement(doc, "button",
 ///     &.{
 ///         .{.name = "phx-click", .value = "submit"},
 ///         .{.name = "phx-value-myvar", .value= "myvar"}
 ///     });
 /// ```
-pub fn createElement(doc: *HtmlDocument, name: []const u8, attrs: []const z.AttributePair) !*DomElement {
+pub fn createElement(doc: *z.HtmlDocument, name: []const u8, attrs: []const z.AttributePair) !*z.DomElement {
     const element = lxb_html_document_create_element_noi(
         doc,
         name.ptr,
@@ -190,9 +172,9 @@ pub fn createElement(doc: *HtmlDocument, name: []const u8, attrs: []const z.Attr
 ///
 /// ## Example
 /// ```
-/// const textNode: *DomElement = try createTextNode(doc, "Hello, World!");
+/// const textNode: *z.DomElement = try createTextNode(doc, "Hello, World!");
 /// ```
-pub fn createTextNode(doc: *HtmlDocument, text: []const u8) !*DomNode {
+pub fn createTextNode(doc: *z.HtmlDocument, text: []const u8) !*z.DomNode {
     return lxb_dom_document_create_text_node(
         doc,
         text.ptr,
@@ -204,9 +186,9 @@ pub fn createTextNode(doc: *HtmlDocument, text: []const u8) !*DomNode {
 ///
 /// ## Example
 /// ```
-/// const commentNode: *Comment = try createComment(doc, "Hello, World!");
+/// const commentNode: *z.Comment = try createComment(doc, "Hello, World!");
 /// ```
-pub fn createComment(doc: *HtmlDocument, data: []const u8) !*Comment {
+pub fn createComment(doc: *z.HtmlDocument, data: []const u8) !*z.Comment {
     return lxb_dom_document_create_comment(
         doc,
         data.ptr,
@@ -219,7 +201,7 @@ pub fn createComment(doc: *HtmlDocument, data: []const u8) !*Comment {
 /// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations
 ///
 /// When you append a fragment to the DOM, only its children are added, not the fragment itself.
-pub fn createDocumentFragment(doc: *HtmlDocument) !*DomNode {
+pub fn createDocumentFragment(doc: *z.HtmlDocument) !*z.DomNode {
     return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentParseFailed;
 }
 
@@ -228,12 +210,12 @@ pub fn createDocumentFragment(doc: *HtmlDocument) !*DomNode {
 // ---------------------------------------------------------------------------
 
 /// [core] Returns the document root node ("HTML" or "XML")
-pub fn documentRoot(doc: *HtmlDocument) ?*DomNode {
+pub fn documentRoot(doc: *z.HtmlDocument) ?*z.DomNode {
     return lxb_dom_document_root(doc);
 }
 
 /// [core] Returns the document
-pub fn ownerDocument(node: *DomNode) *HtmlDocument {
+pub fn ownerDocument(node: *z.DomNode) *z.HtmlDocument {
     return lexbor_node_owner_document(node);
 }
 
@@ -251,9 +233,9 @@ test "documentRoot - ownerDocument" {
 ///
 /// ## Example
 /// ```
-/// const bodyElement: *DomElement = try bodyElement(doc);
+/// const bodyElement: *z.DomElement = try bodyElement(doc);
 /// ```
-pub fn bodyElement(doc: *HtmlDocument) !*DomElement {
+pub fn bodyElement(doc: *z.HtmlDocument) !*z.DomElement {
     if (lxb_html_document_body_element_noi(doc)) |element| {
         return element;
     } else {
@@ -262,7 +244,7 @@ pub fn bodyElement(doc: *HtmlDocument) !*DomElement {
 }
 
 /// [core] Get the document's body node (usually BODY)
-pub fn bodyNode(doc: *HtmlDocument) !*DomNode {
+pub fn bodyNode(doc: *z.HtmlDocument) !*z.DomNode {
     const body_element = bodyElement(doc) catch {
         return Err.NoBodyElement;
     };
@@ -296,24 +278,24 @@ test "getBodyElement/node & error returned" {
 // ------------------------------------------------------------------------------
 
 /// [core] Internal: convert any lexbor object to DOM node
-fn objectToNode(obj: *anyopaque) *DomNode {
+fn objectToNode(obj: *anyopaque) *z.DomNode {
     return lexbor_dom_interface_node_wrapper(obj);
 }
 
 /// [core] Convert DOM Element to Node
-pub fn elementToNode(element: *DomElement) *DomNode {
+pub fn elementToNode(element: *z.DomElement) *z.DomNode {
     return objectToNode(element);
 }
 
 /// [core] Convert Comment to Node
-pub fn commentToNode(comment: *Comment) *DomNode {
+pub fn commentToNode(comment: *z.Comment) *z.DomNode {
     return objectToNode(comment);
 }
 
 /// [core] Convert DOM node to Element
 ///
 /// Returns NULL if the node is not an element
-pub fn nodeToElement(node: *DomNode) ?*DomElement {
+pub fn nodeToElement(node: *z.DomNode) ?*z.DomElement {
     // Only convert if it's actually an element node
     if (z.nodeType(node) != .element) {
         return null;
@@ -330,10 +312,10 @@ test "element/node/element" {
     try testing.expect(element == div_elt);
 }
 
-/// [core] Cast Node of type `.comment` into *Comment
+/// [core] Cast Node of type `.comment` into *z.Comment
 ///
 /// Returns NULL if the node is not a comment
-pub fn nodeToComment(node: *DomNode) ?*Comment {
+pub fn nodeToComment(node: *z.DomNode) ?*z.Comment {
     if (z.nodeType(node) != .comment) {
         return null;
     }
@@ -398,7 +380,7 @@ test "creation & convertions" {
 ///     try testing.expect(node_type == .element);
 /// }
 /// ```
-pub fn nodeName(node: *DomNode) []const u8 {
+pub fn nodeName(node: *z.DomNode) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
@@ -409,7 +391,7 @@ pub fn nodeName(node: *DomNode) []const u8 {
 /// or the `tagName` in uppercase for element nodes.
 ///
 /// Caller must free the returned string.
-pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     const name_slice = nodeName(node);
     return try allocator.dupe(u8, name_slice);
 }
@@ -419,7 +401,7 @@ pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
 /// ⚠️  WARNING: The returned slice points to lexbor's internal memory.
 /// Do NOT store this slice beyond the lifetime of the element.
 /// Use tagNameOwned() if you need to store the result.
-pub fn tagName(element: *DomElement) []const u8 {
+pub fn tagName(element: *z.DomElement) []const u8 {
     const name_ptr = lxb_dom_element_tag_name(element, null);
     return std.mem.span(name_ptr);
 }
@@ -428,7 +410,7 @@ pub fn tagName(element: *DomElement) []const u8 {
 ///
 /// Returns a copy of the tag name that is owned by the caller.
 /// Caller must free the returned string.
-pub fn tagNameOwned(allocator: std.mem.Allocator, element: *DomElement) ![]u8 {
+pub fn tagNameOwned(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
     const name_slice = tagName(element);
     return try allocator.dupe(u8, name_slice);
 }
@@ -488,22 +470,22 @@ test "get node/element names" {
 //=============================================================================
 
 /// [core] Destroy a comment node in the document
-pub fn destroyComment(comment: *Comment) void {
+pub fn destroyComment(comment: *z.Comment) void {
     _ = lxb_dom_comment_interface_destroy(comment);
 }
 
 /// [core] Remove a node from its parent
-pub fn removeNode(node: *DomNode) void {
+pub fn removeNode(node: *z.DomNode) void {
     lxb_dom_node_remove(node);
 }
 
 /// [core] Destroy a node from the DOM
-pub fn destroyNode(node: *DomNode) void {
+pub fn destroyNode(node: *z.DomNode) void {
     lxb_dom_node_destroy(node);
 }
 
 /// [core] Destroy an element in the document
-pub fn destroyElement(element: *DomElement) void {
+pub fn destroyElement(element: *z.DomElement) void {
     _ = lxb_dom_document_destroy_element(element);
 }
 
@@ -512,11 +494,11 @@ pub fn destroyElement(element: *DomElement) void {
 //=============================================================================
 // Reflexion
 
-extern "c" fn lxb_html_node_is_void_noi(node: *DomNode) bool;
-extern "c" fn lxb_dom_node_is_empty(node: *DomNode) bool;
+extern "c" fn lxb_html_node_is_void_noi(node: *z.DomNode) bool;
+extern "c" fn lxb_dom_node_is_empty(node: *z.DomNode) bool;
 
 /// [core] Check if element is _void_ (self-closing like <img>, <br>)
-pub fn isSelfClosingNode(node: *DomNode) bool {
+pub fn isSelfClosingNode(node: *z.DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
@@ -542,7 +524,7 @@ pub fn isSelfClosingNode(node: *DomNode) bool {
 ///     std.debug.print("node is \"really\" empty!", .{} );
 ///   }
 /// }
-pub fn isNodeEmpty(node: *DomNode) bool {
+pub fn isNodeEmpty(node: *z.DomNode) bool {
     return lxb_dom_node_is_empty(node);
 }
 
@@ -606,14 +588,14 @@ test "what is empty?" {
 /// [core] Get the parent node of a given node
 ///
 /// (JavaScript convention: node.parentNode)
-pub fn parentNode(node: *DomNode) ?*DomNode {
+pub fn parentNode(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_parent_noi(node);
 }
 
 /// [core] Get the parent element of a given element
 ///
 /// (JavaScript convention: element.parentElement)
-pub fn parentElement(element: *DomElement) ?*DomElement {
+pub fn parentElement(element: *z.DomElement) ?*z.DomElement {
     const node = elementToNode(element);
     const parent_node = parentNode(node);
     if (parent_node) |parent| {
@@ -622,20 +604,20 @@ pub fn parentElement(element: *DomElement) ?*DomElement {
     return null;
 }
 
-extern "c" fn lxb_dom_node_first_child_noi(node: *DomNode) ?*DomNode;
-extern "c" fn lxb_dom_node_next_noi(node: *DomNode) ?*DomNode;
+extern "c" fn lxb_dom_node_first_child_noi(node: *z.DomNode) ?*z.DomNode;
+extern "c" fn lxb_dom_node_next_noi(node: *z.DomNode) ?*z.DomNode;
 
 /// [core] Get next sibling of node
 ///
 /// Returns NULL when there is no next sibling.
-pub fn nextSibling(node: *DomNode) ?*DomNode {
+pub fn nextSibling(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_next_noi(node);
 }
 
 /// [core] Get previous sibling of node
 ///
 /// Returns NULL when there is no previous sibling.
-pub fn previousSibling(node: *DomNode) ?*DomNode {
+pub fn previousSibling(node: *z.DomNode) ?*z.DomNode {
     const parent = z.parentNode(node) orelse return null;
     var child = z.firstChild(parent);
 
@@ -667,7 +649,7 @@ pub fn previousSibling(node: *DomNode) ?*DomNode {
 ///    try testing.expect(grandchild == null);
 /// }
 /// ```
-pub fn firstChild(node: *DomNode) ?*DomNode {
+pub fn firstChild(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_first_child_noi(node);
 }
 
@@ -689,7 +671,7 @@ test "firstChild" {
 /// Takes an element and returns the first child element, or null if none exists.
 ///
 /// Skips non-element nodes such as text nodes, comments, etc.
-pub fn firstElementChild(element: *DomElement) ?*DomElement {
+pub fn firstElementChild(element: *z.DomElement) ?*z.DomElement {
     const node = elementToNode(element);
     var child = firstChild(node);
     while (child != null) {
@@ -725,7 +707,7 @@ test "firstElementChild" {
 /// Takes an element and returns the next sibling element, or null if none exists.
 ///
 /// Skips non-element nodes such as text nodes, comments, etc.
-pub fn nextElementSibling(element: *DomElement) ?*DomElement {
+pub fn nextElementSibling(element: *z.DomElement) ?*z.DomElement {
     const node = elementToNode(element);
     var sibling = nextSibling(node);
     while (sibling != null) {
@@ -742,8 +724,8 @@ pub fn nextElementSibling(element: *DomElement) ?*DomElement {
 /// Returns a slice of all child nodes (including text, comments)
 ///
 /// Caller needs to free the slice
-pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomNode {
-    var nodes = std.ArrayList(*DomNode).init(allocator);
+pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.DomNode {
+    var nodes = std.ArrayList(*z.DomNode).init(allocator);
 
     var child = firstChild(parent_node);
     while (child != null) {
@@ -759,8 +741,8 @@ pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*Do
 /// (JavaScript convention: children)
 ///
 /// Caller needs to free the slice
-pub fn getChildren(allocator: std.mem.Allocator, parent_element: *DomElement) ![]*DomElement {
-    var elements = std.ArrayList(*DomElement).init(allocator);
+pub fn getChildren(allocator: std.mem.Allocator, parent_element: *z.DomElement) ![]*z.DomElement {
+    var elements = std.ArrayList(*z.DomElement).init(allocator);
 
     var child = firstElementChild(parent_element);
     while (child != null) {
@@ -779,11 +761,11 @@ pub fn getChildren(allocator: std.mem.Allocator, parent_element: *DomElement) ![
 ///
 /// ## Example
 /// ```
-/// const parentNode: *DomNode = try bodyNode(doc);
-/// const childNode: *DomNode = try createTextNode(doc, "Hello, World!");
+/// const parentNode: *z.DomNode = try bodyNode(doc);
+/// const childNode: *z.DomNode = try createTextNode(doc, "Hello, World!");
 /// appendChild(parentNode, childNode);
 /// ```
-pub fn appendChild(parent: *DomNode, child: *DomNode) void {
+pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
     lxb_dom_node_insert_child(parent, child);
 }
 
@@ -791,15 +773,15 @@ pub fn appendChild(parent: *DomNode, child: *DomNode) void {
 ///
 /// ## Example
 /// ```
-/// const parentNode: *DomNode = try bodyNode(doc);
-/// const child1: *DomElement = try createElement(doc, "div", &.{});
+/// const parentNode: *z.DomNode = try bodyNode(doc);
+/// const child1: *z.DomElement = try createElement(doc, "div", &.{});
 /// const div = elementToNode(child1);
-/// const child2: *DomElement = try createElement(doc, "p", &.{});
+/// const child2: *z.DomElement = try createElement(doc, "p", &.{});
 /// const p = elementToNode(child2);
-/// const childNodes: []const *DomNode = &.{div, p};
+/// const childNodes: []const *z.DomNode = &.{div, p};
 /// appendChildren(parentNode, childNodes);
 /// ```
-pub fn appendChildren(parent: *DomNode, child_nodes: []const *DomNode) void {
+pub fn appendChildren(parent: *z.DomNode, child_nodes: []const *z.DomNode) void {
     for (child_nodes) |child| {
         appendChild(parent, child);
     }
@@ -814,7 +796,7 @@ test "appendChildren" {
     const div = elementToNode(child1);
     const child2 = try createElement(doc, "p", &.{});
     const p = elementToNode(child2);
-    const childNodes: []const *DomNode = &.{ div, p };
+    const childNodes: []const *z.DomNode = &.{ div, p };
     appendChildren(parentNodes, childNodes);
 }
 
@@ -822,7 +804,7 @@ test "appendChildren" {
 ///
 ///
 /// The fragment children are moved (not copied)
-pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
+pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
     var fragment_child = firstChild(fragment);
     while (fragment_child != null) {
         const next_sibling = nextSibling(fragment_child.?);
@@ -834,7 +816,7 @@ pub fn appendFragment(parent: *DomNode, fragment: *DomNode) void {
 /// [utility] Tag name matcher function (safe: uses immediate comparison)
 ///
 /// This is safe because it compares the tag name immediately without storing it.
-pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
+pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
     const tag = tagName(element); // Safe for immediate use
     return std.mem.eql(u8, tag, tag_name);
 }
@@ -843,10 +825,10 @@ pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
 // TEXT CONTENT FUNCTIONS -
 //=============================================================================
 
-extern "c" fn lxb_dom_node_text_content(node: *DomNode, len: ?*usize) ?[*:0]u8;
-extern "c" fn lxb_dom_node_text_content_set(node: *DomNode, content: [*]const u8, len: usize) u8;
-extern "c" fn lxb_dom_character_data_replace(node: *DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
-extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; //<- ?????
+extern "c" fn lxb_dom_node_text_content(node: *z.DomNode, len: ?*usize) ?[*:0]u8;
+extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const u8, len: usize) u8;
+extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
+extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
 
 /// [core] Get concatenated text content of a node. !! It is wrong to return an error if NULL. Change
 ///
@@ -858,7 +840,7 @@ extern "c" fn lexbor_destroy_text_wrapper(node: *DomNode, text: ?[*:0]u8) void; 
 ///
 /// DEPRECATED: This API is incorrect - empty text content is not an error.
 /// Use getTextContentOptional() for the correct behavior, or getTextContentOrEmpty() for JS-like behavior.
-pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+pub fn getTextContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
 
@@ -879,7 +861,7 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
 /// Works on nodes (text, comment or element).
 ///
 /// Caller needs to free the returned string if not null.
-pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *DomNode) !?[]u8 {
+pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *z.DomNode) !?[]u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
 
@@ -903,7 +885,7 @@ pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *DomNode) !?[]
 /// This matches JavaScript's element.textContent behavior.
 ///
 /// Caller needs to free the returned string.
-pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *DomNode) ![]u8 {
+pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     if (try getTextContentOptional(allocator, node)) |content| {
         return content;
     }
@@ -928,7 +910,7 @@ pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *DomNode) ![]u8
 ///     processText(text);
 /// }
 /// ```
-pub fn getTextContentBorrow(node: *DomNode) ?[]const u8 {
+pub fn getTextContentBorrow(node: *z.DomNode) ?[]const u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
 
@@ -938,7 +920,7 @@ pub fn getTextContentBorrow(node: *DomNode) ?[]const u8 {
 }
 
 /// [core] Set text content on a node
-pub fn setTextContent(node: *DomNode, content: []const u8) !void {
+pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
         content.ptr,
@@ -951,7 +933,7 @@ pub fn setTextContent(node: *DomNode, content: []const u8) !void {
 ///
 /// If the inner text node is void, it will be created.
 /// If options.escape is true, the text will be HTML-escaped before insertion.
-pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []const u8, options: z.TextOptions) !void {
+pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []const u8, options: z.TextOptions) !void {
     // Apply HTML escaping if requested (for new user input)
     const final_text = if (options.escape)
         try escapeHtml(allocator, text)
@@ -982,7 +964,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *DomNode, text: []co
 /// [core] Get comment text content
 ///
 /// Needs to be freed by caller
-pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *Comment) ![]u8 {
+pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
     const inner_text = try getTextContent(
         allocator,
         commentToNode(comment),
@@ -1056,7 +1038,7 @@ pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
 
 // ==============================================================
 /// [core] Helper: Walk only element children, skipping text nodes
-pub fn walkElementChildren(parent_node: *DomNode, callback: fn (element: ?*DomElement) void) void {
+pub fn walkElementChildren(parent_node: *z.DomNode, callback: fn (element: ?*z.DomElement) void) void {
     var child = firstChild(parent_node);
     while (child != null) {
         if (nodeToElement(child.?)) |element| {
@@ -1081,7 +1063,7 @@ pub fn isWhitespaceOnlyText(text: []const u8) bool {
     return true;
 }
 
-pub fn isWhitespaceOnlyNode(node: *DomNode) bool {
+pub fn isWhitespaceOnlyNode(node: *z.DomNode) bool {
     if (isSelfClosingNode(node)) return false; // Self-closing nodes are not considered whitespace-only
     if (isNodeEmpty(node)) return true;
     return false;
@@ -1090,7 +1072,7 @@ pub fn isWhitespaceOnlyNode(node: *DomNode) bool {
 /// [core] Check if a node contains only whitespace.
 /// However, the node can contain only whitespace text nodes.
 /// The function `getNodeTextContentsOpts` can be used to retrieve all the text content recursively inside.
-pub fn isWhitespaceOnlyElement(element: *DomElement) bool {
+pub fn isWhitespaceOnlyElement(element: *z.DomElement) bool {
     const node = elementToNode(element);
     return isWhitespaceOnlyNode(node);
 }
@@ -1343,7 +1325,7 @@ test "appendChildren helper" {
     const div2 = try createElement(doc, "p", &.{});
     const div3 = try createElement(doc, "span", &.{});
 
-    const child_nodes = [_]*DomNode{ elementToNode(div1), elementToNode(div2), elementToNode(div3) };
+    const child_nodes = [_]*z.DomNode{ elementToNode(div1), elementToNode(div2), elementToNode(div3) };
 
     appendChildren(body_node, child_nodes[0..]);
 

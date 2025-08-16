@@ -2,7 +2,7 @@
 //! Focus: LazyHTML-level smart whitespace handling and context-aware escaping
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
 /// Calculate leading whitespace size in text content
 /// This is the core LazyHTML improvement for whitespace handling

@@ -2,12 +2,11 @@
 //! This module provides functions to manipulate and retrieve attributes from HTML elements.
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 
 const testing = std.testing;
 const print = std.debug.print;
-
-const Err = @import("errors.zig").LexborError;
 
 pub const DomAttr = opaque {};
 pub const DomCol = opaque {};
@@ -44,6 +43,16 @@ const LEXBOR_ACTION_STOP: u32 = 1;
 /// Returns null if attribute doesn't exist, empty string if attribute exists but has no value.
 ///
 /// Caller needs to free the slice if not null
+/// ## Example
+/// ```
+///  const element = try z.createElement(doc, "div", &.{.{.name = "class", .value = "card"}});
+/// const class = try getAttribute(allocator, element, "class");
+/// defer if (class != null) |c| {
+///     allocator.free(c);
+/// };
+/// try testing.expectEqualStrings("card", c.?);
+/// ```
+///
 pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: []const u8) !?[]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(

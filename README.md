@@ -25,7 +25,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - compressed tuple: `DOM_toTuple()` and `Tuple_toDOM()`
   - W3C JSON: `DOM_toJSON()` and `JSON_toDOM()`
 - CSS selectors search with cached CSS selectors parsing: `querySelector()` and `filter()`
-- Template element support
+- Support of `<template>` elements.
 - HTML attributes
   - fast "walker" search with _tokens_:
     - `getElementById()`
@@ -39,6 +39,9 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - node / element navigation
   - append / insert / remove
 - DOM cleaning with options (remove comments, whitespace, empty nodes)
+
+> [!NOTE]
+> Some functions borrow memory from `lexbor` or zero-copy: their result is consummed immediately. For example, `getTextContentBorrow`, `qualifiedNameBorrow`. These functions normally also have an allocated version when the data must outlive the current function: you can pass pass freely the data. For exampple, `getTextContent`, `qualifiedName`.
 
 ## Examples
 

@@ -1,8 +1,7 @@
 //! Collection management
 
 const std = @import("std");
-const z = @import("zhtml.zig");
-
+const z = @import("../zhtml.zig");
 const Err = z.Err;
 
 const testing = std.testing;

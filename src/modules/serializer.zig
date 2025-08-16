@@ -4,8 +4,8 @@
 // =============================================================================
 
 const std = @import("std");
-const z = @import("zhtml.zig");
-const Err = @import("errors.zig").LexborError;
+const z = @import("../zhtml.zig");
+const Err = z.Err;
 
 const testing = std.testing;
 const print = std.debug.print;

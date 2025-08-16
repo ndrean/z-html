@@ -1,15 +1,38 @@
 const std = @import("std");
 const z = @import("zhtml.zig");
 const builtin = @import("builtin");
-const writer = std.io.getStdOut().writer();
+// const wri/ter = std.io.getStdOut().writer();
 
-// Import the collection examples
-// const collection_examples = @import("examples/collection_examples.zig");
-// const example_collection = @import("examples/example_collection.zig");
+// const writer = if (builtin.mode == .Debug)
+//     std.debug
+// else
+//     std.io.getStdOut().writer();
 
-// const request = @import("examples/http.zig").request;
+// fn Context(comptime WriterType: type) type {
+//     return struct {
+//         writer: WriterType,
+//     };
+// }
 
-fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void {
+fn Context(comptime WriterType: type) type {
+    return struct {
+        writer: WriterType,
+
+        pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+            try self.writer.print(fmt, args);
+        }
+
+        pub fn deinit(self: *@This()) void {
+            if (@hasDecl(WriterType, "deinit")) {
+                self.writer.deinit();
+            } else {
+                // assume no cleanup needed
+            }
+        }
+    };
+}
+
+fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8, ctx: anytype) !void {
     const doc = try z.parseFromString(fragment);
     defer z.destroyDocument(doc);
 
@@ -21,9 +44,9 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
     );
     defer allocator.free(html);
 
-    try writer.print("\n\n---------HTML string to parse---------\n\n", .{});
-    try z.printDocumentStructure(doc);
-    try writer.print("{s}\n\n", .{html});
+    try ctx.writer.print("\n\n---------HTML string to parse---------\n\n", .{});
+    // try z.printDocumentStructure(doc);
+    try ctx.writer.print("{s}\n\n", .{html});
 
     try z.cleanDomTree(
         allocator,
@@ -37,60 +60,14 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8) !void 
     );
     defer allocator.free(new_html);
 
-    try writer.print("\n\n ==== cleaned HTML =======\n\n", .{});
-    try writer.print("{s}\n\n", .{new_html});
-    try writer.print("\n\n---------DOCUMENT STRUCTURE---------\n\n", .{});
-    try z.printDocumentStructure(doc);
+    try ctx.writer.print("\n\n ==== cleaned HTML =======\n\n", .{});
+    try ctx.writer.print("{s}\n\n", .{new_html});
+    try ctx.writer.print("\n\n---------DOCUMENT STRUCTURE---------\n\n", .{});
+    // try z.printDocumentStructure(doc);
 
     // _ = try request(allocator, "https://google.com", "text/html");
 }
 
-// fn findAttributes(allocator: std.mem.Allocator, html: []const u8, tag_name: []const u8) !void {
-//     const doc = try z.parseFromString(html);
-//     const elements = try z.findElements(allocator, doc, tag_name);
-
-//     // defer allocator.free(elements);
-
-//     for (elements) |element| {
-//         _ = element;
-//         // print("{s}\n", .{z.tagName(element)});
-//     }
-
-//     // for (elements) |element| {
-//     //     if (z.getElementFirstAttribute(element)) |attribute| {
-//     //         const name = try z.getAttributeName(allocator, attribute);
-//     //         defer allocator.free(name);
-//     //         // const value = try z.getAttributeValue(allocator, attribute);
-//     //         // defer allocator.free(value);
-//     //         // print("Element: {s}, Attribute: {s} = {s}\n", .{
-//     //         //     z.tagName(element),
-//     //         //     name,
-//     //         //     value,
-//     //         // });
-//     //     } else {
-//     //         // print("Element: {s} has no attributes\n", .{z.tagName(element)});
-//     //     }
-//     // }
-// }
-
-fn demonstrateAttributes(html: []const u8) !void {
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-    const body_node = try z.bodyNode(doc);
-    const div = z.firstChild(body_node).?;
-
-    try writer.print("Demonstrating attribute iteration:\n", .{});
-    if (z.nodeToElement(div)) |element| {
-        var attr = z.getElementFirstAttribute(element);
-        var count: usize = 0;
-        while (attr != null) {
-            count += 1;
-            try writer.print("  Found attribute #{}\n", .{count});
-            attr = z.getElementNextAttribute(attr.?);
-        }
-        try writer.print("Total attributes found: {}\n", .{count});
-    }
-}
 pub fn main() !void {
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
     const allocator, const is_debug = switch (builtin.mode) {
@@ -99,6 +76,28 @@ pub fn main() !void {
     };
     defer if (is_debug) {
         _ = debug_allocator.deinit();
+    };
+
+    const stdout_writer = std.io.getStdOut().writer();
+    const DebugWriter = struct {
+        pub fn print(_: @This(), comptime fmt: []const u8, args: anytype) !void {
+            std.debug.print(fmt, args);
+            return;
+        }
+    };
+
+    const debug_writer = DebugWriter{};
+
+    const writerType = if (builtin.mode == .Debug)
+        @TypeOf(debug_writer)
+    else
+        @TypeOf(stdout_writer);
+
+    const ctx = Context(writerType){
+        .writer = if (builtin.mode == .Debug)
+            debug_writer
+        else
+            stdout_writer,
     };
 
     const fragment =
@@ -125,28 +124,18 @@ pub fn main() !void {
         \\</article>
     ;
 
-    try serialiazeAndClean(allocator, fragment);
-
-    try demonstrateAttributes(fragment);
-
-    try writer.print("\n\n---------ELEMENTS---------\n\n", .{});
+    try ctx.writer.print("\n\n---------ELEMENTS---------\n\n", .{});
+    try serialiazeAndClean(allocator, fragment, ctx);
 
     // Example menu system
-    try writer.print("\n=== Z-HTML Examples ===\n", .{});
-    try writer.print("Choose an example to run:\n", .{});
-    try writer.print("1. Basic Collection Example (getElementById, simple demos)\n", .{});
-    try writer.print("2. Comprehensive Collection Examples (all features, iterators, performance)\n", .{});
-    try writer.print("3. Skip examples\n", .{});
-    try writer.print("Enter choice (1-3): ", .{});
+    // try writer.print("\n=== Z-HTML Examples ===\n", .{});
+    // try writer.print("Choose an example to run:\n", .{});
+    // try writer.print("1. Basic Collection Example (getElementById, simple demos)\n", .{});
+    // try writer.print("2. Comprehensive Collection Examples (all features, iterators, performance)\n", .{});
+    // try writer.print("3. Skip examples\n", .{});
+    // try writer.print("Enter choice (1-3): ", .{});
 
-    // For now, let's run both examples automatically
-    // You can modify this to read from stdin if you want interactive selection
+    // try writer.print("\n\n=== Running Basic Collection Example ===\n", .{});
 
-    try writer.print("\n\n=== Running Basic Collection Example ===\n", .{});
-    // Collection example temporarily disabled due to missing functions
-    // try example_collection.runBasicCollectionExample();
-
-    try writer.print("\n\n=== Running Comprehensive Collection Examples ===\n", .{});
-    // Collection examples temporarily disabled due to missing functions
-    // try collection_examples.runCollectionExamples();
+    // try writer.print("\n\n=== Running Comprehensive Collection Examples ===\n", .{});
 }

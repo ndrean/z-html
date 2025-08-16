@@ -1,5 +1,5 @@
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -25,19 +25,21 @@ pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
-/// [node_types] Get node type for enum comparison
+/// [node_types] Get node type for enum comparison (Inlined)
 ///
 /// Values are: `.text`, `.element`, `.comment`, `.document`, `.unknown`.
-pub fn nodeType(node: *z.DomNode) NodeType {
+pub inline fn nodeType(node: *z.DomNode) NodeType {
     const node_name = z.nodeName(node);
 
-    // Switch on common node name patterns
+    // Fast string comparison - most common cases first
     if (std.mem.eql(u8, node_name, "#text")) {
         return .text;
     } else if (std.mem.eql(u8, node_name, "#comment")) {
         return .comment;
     } else if (std.mem.eql(u8, node_name, "#document")) {
         return .document;
+    } else if (std.mem.eql(u8, node_name, "#fragment")) {
+        return .fragment;
     } else if (node_name.len > 0 and node_name[0] != '#') {
         // Regular HTML tag names (div, p, span, strong, em...)
         return .element;
@@ -46,39 +48,56 @@ pub fn nodeType(node: *z.DomNode) NodeType {
     }
 }
 
-/// [node_types] human-readable type name
-pub fn nodeTypeName(node: *z.DomNode) []const u8 {
-    return switch (nodeType(node)) {
-        .element => "#element",
-        .text => "#text",
-        .comment => "#comment",
-        .document => "#document",
-        else => "#unknown",
-    };
+/// [node_types] human-readable type name (Inlined )
+///
+/// Returns the actual node name for special nodes, "#element" for regular HTML tags.
+pub inline fn nodeTypeName(node: *z.DomNode) []const u8 {
+    const node_name = z.nodeName(node);
+
+    // Direct string comparison for maximum performance - return actual names for special nodes
+    if (std.mem.eql(u8, node_name, "#text")) {
+        return "#text";
+    } else if (std.mem.eql(u8, node_name, "#comment")) {
+        return "#comment";
+    } else if (std.mem.eql(u8, node_name, "#document")) {
+        return "#document";
+    } else if (std.mem.eql(u8, node_name, "#fragment")) {
+        return "#fragment";
+    } else if (node_name.len > 0 and node_name[0] != '#') {
+        // Regular HTML tag names (div, p, span, strong, em...)
+        return "#element";
+    } else {
+        return "#unknown";
+    }
 }
 
-/// [node_types] Check if node is of a specific type
-pub fn isTypeElement(node: *z.DomNode) bool {
+/// [node_types] Check if node is of a specific type (Inline)
+pub inline fn isTypeElement(node: *z.DomNode) bool {
     return nodeType(node) == .element;
 }
 
-/// [node_types] Check if node is a text node
-pub fn isTypeText(node: *z.DomNode) bool {
+/// [node_types] Check if node is a text node (Inline)
+pub inline fn isTypeText(node: *z.DomNode) bool {
     return nodeType(node) == .text;
 }
 
-/// [node_types] Check if node is a comment node
-pub fn isTypeComment(node: *z.DomNode) bool {
+/// [node_types] Check if node is a comment node (Inline)
+pub inline fn isTypeComment(node: *z.DomNode) bool {
     return nodeType(node) == .comment;
 }
 
-/// [node_types] Check if node is a document node
-pub fn isTypeDocument(node: *z.DomNode) bool {
+/// [node_types] Check if node is a document node (Inline)
+pub inline fn isTypeDocument(node: *z.DomNode) bool {
     return nodeType(node) == .document;
 }
 
+/// [node_types] Check if node is a fragment node (Inline)
+pub inline fn isTypeFragment(node: *z.DomNode) bool {
+    return nodeType(node) == .fragment;
+}
+
 test "node type detection using getNodeName" {
-    const fragment =
+    const frag =
         \\<!-- This is a comment -->
         \\<div>
         \\  Some text content
@@ -89,10 +108,12 @@ test "node type detection using getNodeName" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(fragment);
+    const doc = try z.parseFromString(frag);
     defer z.destroyDocument(doc);
 
     const body_node = try z.bodyNode(doc);
+    const fragment = try z.createDocumentFragment(doc);
+    z.appendFragment(body_node, fragment);
 
     var child = z.firstChild(body_node);
     while (child != null) {
@@ -107,6 +128,7 @@ test "node type detection using getNodeName" {
                 "#element",
                 node_type_name,
             );
+            try testing.expect(isTypeElement(child.?));
         }
         if (std.mem.eql(u8, node_name, "#text")) {
             try testing.expect(@intFromEnum(node_type) == 3);
@@ -115,6 +137,7 @@ test "node type detection using getNodeName" {
                 "#text",
                 node_type_name,
             );
+            try testing.expect(isTypeText(child.?));
         }
 
         if (std.mem.eql(u8, node_name, "#comment")) {
@@ -124,6 +147,17 @@ test "node type detection using getNodeName" {
                 "#comment",
                 node_type_name,
             );
+            try testing.expect(isTypeFragment(child.?));
+        }
+
+        if (std.mem.eql(u8, node_name, "#fragment")) {
+            try testing.expect(@intFromEnum(node_type) == 11);
+            try testing.expect(node_type == .fragment);
+            try testing.expectEqualStrings(
+                "#fragment",
+                node_type_name,
+            );
+            try testing.expect(isTypeFragment(child.?));
         }
 
         child = z.firstChild(child.?);
