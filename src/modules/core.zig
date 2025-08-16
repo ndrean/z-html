@@ -617,15 +617,15 @@ test "what is empty?" {
     try testing.expect(isNodeEmpty(inner_div.?)); // #text are empty
     try testing.expect(isNodeEmpty(inner_last_p.?)); // #text are empty
 
-    const text1 = getTextContent(allocator, p.?);
-    try testing.expectError(Err.EmptyTextContent, text1);
+    const text1 = try getTextContentOrEmpty(allocator, p.?);
+    try testing.expectEqualStrings("", text1);
 
     // DIv is empty but contains whotespace like characters.
-    const text2 = try getTextContent(allocator, div.?);
+    const text2 = try getTextContentOrEmpty(allocator, div.?);
     defer allocator.free(text2);
     try testing.expect(text2.len == 4); // 3 ' ' and 1 '\n'
 
-    const text3 = try getTextContent(allocator, inner_last_p.?);
+    const text3 = try getTextContentOrEmpty(allocator, inner_last_p.?);
     defer allocator.free(text3);
     try testing.expect(text3.len == 6);
 
@@ -873,17 +873,25 @@ pub fn appendChildren(parent: *z.DomNode, child_nodes: []const *z.DomNode) void 
     }
 }
 
-test "appendChildren" {
+test "appendChild/dren" {
+    const allocator = testing.allocator;
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const parentNodes = try bodyNode(doc);
+    const body = try bodyNode(doc);
     const child1 = try createElement(doc, "div", &.{});
     const div = elementToNode(child1);
     const child2 = try createElement(doc, "p", &.{});
     const p = elementToNode(child2);
     const childNodes: []const *z.DomNode = &.{ div, p };
-    appendChildren(parentNodes, childNodes);
+    appendChildren(body, childNodes);
+
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+    try testing.expectEqualStrings(
+        "<body><div></div><p></p></body>",
+        html,
+    );
 }
 
 /// [core] Append all children from a document fragment to a parent node
@@ -916,49 +924,49 @@ extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const 
 extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
 
-/// [core] Get concatenated text content of a node. !! It is wrong to return an error if NULL. Change
-///
-/// It returns a concatenation of the text contents of all descendant text nodes or an error if none are found. !! This is wrong, should return NULL if NULL!!
-///
-/// Works on nodes (text, comment or element).
-///
-/// Caller needs to free the returned string
-///
-/// DEPRECATED: This API is incorrect - empty text content is not an error.
-/// Use getTextContentOptional() for the correct behavior, or getTextContentOrEmpty() for JS-like behavior.
-pub fn getTextContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-    var len: usize = 0;
-    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
+// /// [core] Get concatenated text content of a node. !! It is wrong to return an error if NULL. Change
+// ///
+// /// It returns a concatenation of the text contents of all descendant text nodes or an error if none are found. !! This is wrong, should return NULL if NULL!!
+// ///
+// /// Works on nodes (text, comment or element).
+// ///
+// /// Caller needs to free the returned string
+// ///
+// /// DEPRECATED: This API is incorrect - empty text content is not an error.
+// /// Use getTextContentOptional() for the correct behavior, or getTextContentOrEmpty() for JS-like behavior.
+// pub fn getTextContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
+//     var len: usize = 0;
+//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
 
-    defer lexbor_destroy_text_wrapper(node, text_ptr);
+//     defer lexbor_destroy_text_wrapper(node, text_ptr);
 
-    if (len == 0) return Err.EmptyTextContent;
+//     if (len == 0) return Err.EmptyTextContent;
 
-    const result = try allocator.alloc(u8, len);
-    @memcpy(result, text_ptr[0..len]);
-    return result;
-}
+//     const result = try allocator.alloc(u8, len);
+//     @memcpy(result, text_ptr[0..len]);
+//     return result;
+// }
 
-/// [core] Get concatenated text content of a node as optional (CORRECT API)
-///
-/// Returns the concatenated text content of all descendant text nodes,
-/// or null if the node has no text content (which is NOT an error).
-///
-/// Works on nodes (text, comment or element).
-///
-/// Caller needs to free the returned string if not null.
-pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *z.DomNode) !?[]u8 {
-    var len: usize = 0;
-    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
+// /// [core] Get concatenated text content of a node as optional (CORRECT API)
+// ///
+// /// Returns the concatenated text content of all descendant text nodes,
+// /// or null if the node has no text content (which is NOT an error).
+// ///
+// /// Works on nodes (text, comment or element).
+// ///
+// /// Caller needs to free the returned string if not null.
+// pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *z.DomNode) !?[]u8 {
+//     var len: usize = 0;
+//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
 
-    defer lexbor_destroy_text_wrapper(node, text_ptr);
+//     defer lexbor_destroy_text_wrapper(node, text_ptr);
 
-    if (len == 0) return null;
+//     if (len == 0) return null;
 
-    const result = try allocator.alloc(u8, len);
-    @memcpy(result, text_ptr[0..len]);
-    return result;
-}
+//     const result = try allocator.alloc(u8, len);
+//     @memcpy(result, text_ptr[0..len]);
+//     return result;
+// }
 
 /// [core] Get text content with empty string fallback (JavaScript-like behavior)
 ///
@@ -972,10 +980,16 @@ pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *z.DomNode) !?
 ///
 /// Caller needs to free the returned string.
 pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-    if (try getTextContentOptional(allocator, node)) |content| {
-        return content;
-    }
-    return allocator.dupe(u8, "");
+    var len: usize = 0;
+    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return allocator.dupe(u8, "");
+
+    defer lexbor_destroy_text_wrapper(node, text_ptr);
+
+    if (len == 0) return allocator.dupe(u8, "");
+
+    const result = try allocator.alloc(u8, len);
+    @memcpy(result, text_ptr[0..len]);
+    return result;
 }
 
 /// [core] Get text content as zero-copy slice (FASTEST)
@@ -996,11 +1010,46 @@ pub fn getTextContentOrEmpty(allocator: std.mem.Allocator, node: *z.DomNode) ![]
 ///     processText(text);
 /// }
 /// ```
-pub fn getTextContentBorrow(node: *z.DomNode) ?[]const u8 {
-    var len: usize = 0;
-    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
+// pub fn getTextContentBorrow(node: *z.DomNode) ?[]const u8 {
+//     var len: usize = 0;
+//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
 
-    if (len == 0) return null;
+//     if (len == 0) return null;
+
+//     return text_ptr[0..len];
+// }
+
+/// [core] Get text content as zero-copy slice with empty fallback (FASTEST, SAFE)
+///
+/// Returns a slice directly into lexbor's internal memory, or empty string literal.
+/// **No allocation ever needed!**
+///
+/// **Use when:** Processing immediately, node lifetime is guaranteed
+/// **Performance:** Fastest (direct pointer access), no memory management
+///
+/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
+/// - The node remains in the DOM tree
+/// - The document is not destroyed
+/// - No DOM modifications that might cause internal reallocation
+///
+/// ```zig
+/// const text = getTextContentBorrowOrEmpty(node);
+/// // Use immediately - never free!
+/// processText(text);
+/// ```
+// pub fn getTextContentBorrowOrEmpty(node: *z.DomNode) []const u8 {
+//     if (getTextContentBorrow(node)) |text| {
+//         return text;
+//     } else {
+//         return ""; // String literal - no allocation
+//     }
+// }
+
+pub fn getTextContentBorrow(node: *z.DomNode) []const u8 {
+    var len: usize = 0;
+    const text_ptr = lxb_dom_node_text_content(node, &len) orelse return "";
+
+    if (len == 0) return "";
 
     return text_ptr[0..len];
 }
@@ -1032,7 +1081,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []
         return try setTextContent(node, final_text);
     }
 
-    const current_text = try getTextContent(
+    const current_text = try getTextContentOrEmpty(
         allocator,
         node,
     );
@@ -1051,7 +1100,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []
 ///
 /// Needs to be freed by caller
 pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
-    const inner_text = try getTextContent(
+    const inner_text = try getTextContentOrEmpty(
         allocator,
         commentToNode(comment),
     );
@@ -1062,18 +1111,18 @@ test "first text content & comment" {
     const allocator = testing.allocator;
     const doc = try parseFromString("<p>hello</p><br/><!--comment-->");
     const p = firstChild(try bodyNode(doc));
-    const text = try getTextContent(allocator, p.?);
+    const text = try getTextContentOrEmpty(allocator, p.?);
     defer allocator.free(text);
     try testing.expectEqualStrings("hello", text);
     const inner = z.firstChild(p.?);
-    const inner_text = try getTextContent(allocator, inner.?);
+    const inner_text = try getTextContentOrEmpty(allocator, inner.?);
     defer allocator.free(inner_text);
     try testing.expectEqualStrings("hello", inner_text);
     const br = elementToNode(nextElementSibling(nodeToElement(p.?).?).?);
-    const br_text = getTextContent(allocator, br);
-    try testing.expectError(Err.EmptyTextContent, br_text);
+    const br_text = try getTextContentOrEmpty(allocator, br);
+    try testing.expectEqualStrings("", br_text);
     const comment_node = nextSibling(br);
-    const comment_text = try getTextContent(allocator, comment_node.?);
+    const comment_text = try getTextContentOrEmpty(allocator, comment_node.?);
     try testing.expectEqualStrings("comment", comment_text);
     defer allocator.free(comment_text);
     const comment = nodeToComment(comment_node.?);
@@ -1090,10 +1139,10 @@ test "first set text content" {
     try setTextContent(p.?, "new text");
     try setTextContent(span, "second");
 
-    const p_text = try getTextContent(allocator, p.?);
+    const p_text = try getTextContentOrEmpty(allocator, p.?);
     defer allocator.free(p_text);
     try testing.expectEqualStrings("new text", p_text);
-    const span_text = try getTextContent(allocator, span);
+    const span_text = try getTextContentOrEmpty(allocator, span);
     defer allocator.free(span_text);
     try testing.expectEqualStrings("second", span_text);
 }
@@ -1510,7 +1559,7 @@ test "isWhitespaceOnlyElement" {
 
     // but its text content IS empty.
     const allocator = testing.allocator;
-    const txt = try getTextContent(allocator, div);
+    const txt = try getTextContentOrEmpty(allocator, div);
     defer allocator.free(txt);
     try testing.expect(isWhitespaceOnlyText(txt));
 }
@@ -1530,13 +1579,13 @@ test "setTextNodeData" {
     // try setTextContent(node, "Initial text");
     try setOrReplaceText(allocator, node, "Initial text", .{});
 
-    const initial_text = try getTextContent(allocator, node);
+    const initial_text = try getTextContentOrEmpty(allocator, node);
     defer allocator.free(initial_text);
     try testing.expectEqualStrings("Initial text", initial_text);
 
     try setOrReplaceText(allocator, node, "Updated text", .{});
 
-    const updated_text = try getTextContent(allocator, node);
+    const updated_text = try getTextContentOrEmpty(allocator, node);
     defer allocator.free(updated_text);
     try testing.expectEqualStrings("Updated text", updated_text);
 }
@@ -1640,7 +1689,7 @@ test "get & set NodeTextContent and escape option" {
 
     try setTextContent(node, "Hello, world!");
 
-    const text_content = try getTextContent(
+    const text_content = try getTextContentOrEmpty(
         allocator,
         node,
     );
@@ -1651,7 +1700,7 @@ test "get & set NodeTextContent and escape option" {
     const options = z.TextOptions{ .escape = true };
     try setOrReplaceText(allocator, node, "<script>alert('xss')</script> & \"quotes\"", options);
 
-    const new_escaped_text = try getTextContent(
+    const new_escaped_text = try getTextContentOrEmpty(
         allocator,
         node,
     );
@@ -1667,7 +1716,7 @@ test "gets all text elements from Fragment" {
     defer destroyDocument(doc);
     const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
-    const text_content = try getTextContent(allocator, body_node);
+    const text_content = try getTextContentOrEmpty(allocator, body_node);
     defer allocator.free(text_content);
     try testing.expectEqualStrings("FirstSecondThirdFourthFifth", text_content);
 }
@@ -1682,7 +1731,7 @@ test "text content" {
     const body = try bodyElement(doc);
     const body_node = elementToNode(body);
     const p_node = firstChild(body_node).?;
-    const text = try getTextContent(
+    const text = try getTextContentOrEmpty(
         allocator,
         p_node,
     );
@@ -1691,7 +1740,7 @@ test "text content" {
     try testing.expectEqualStrings("Hello World!", text);
     const text_node = firstChild(p_node);
     const strong_node = nextSibling(text_node.?);
-    const strong_text = try getTextContent(
+    const strong_text = try getTextContentOrEmpty(
         allocator,
         strong_node.?,
     );
@@ -1712,15 +1761,15 @@ test "getNodeTextContent" {
     const first_child = firstChild(body_node);
     const second_child = nextSibling(first_child.?);
 
-    const all_text = try getTextContent(
+    const all_text = try getTextContentOrEmpty(
         allocator,
         body_node,
     );
-    const first_text = try getTextContent(
+    const first_text = try getTextContentOrEmpty(
         allocator,
         first_child.?,
     );
-    const second_text = try getTextContent(
+    const second_text = try getTextContentOrEmpty(
         allocator,
         second_child.?,
     );
@@ -2019,7 +2068,7 @@ test "class search functionality" {
         if (z.nodeToElement(child.?)) |element| {
             const element_name = z.tagNameBorrow(element);
             if (std.mem.eql(u8, element_name, "div")) {
-                const text_content = try z.getTextContent(allocator, child.?);
+                const text_content = try z.getTextContentOrEmpty(allocator, child.?);
                 defer allocator.free(text_content);
                 if (std.mem.eql(u8, text_content, "First div")) {
                     // First div should have all three classes
@@ -2101,7 +2150,7 @@ test "CSS selector nth-child functionality" {
 
     if (second_li_results.len > 0) {
         const second_li_node = second_li_results[0];
-        const text_content = try z.getTextContent(allocator, second_li_node);
+        const text_content = try z.getTextContentOrEmpty(allocator, second_li_node);
         defer allocator.free(text_content);
 
         // Should be "Second item"
@@ -2117,7 +2166,7 @@ test "CSS selector nth-child functionality" {
     // Test first li using querySelector (single result)
     const first_li_node = try engine.querySelector(body_node, "ul > li:first-child");
     if (first_li_node) |node| {
-        const text_content = try z.getTextContent(allocator, node);
+        const text_content = try z.getTextContentOrEmpty(allocator, node);
         defer allocator.free(text_content);
         try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "First item"));
     } else {

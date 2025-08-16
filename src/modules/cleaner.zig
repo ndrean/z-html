@@ -125,7 +125,7 @@ fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.DomElement) 
 }
 
 fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.TextOptions) !bool {
-    const text = try z.getTextContent(
+    const text = try z.getTextContentOrEmpty(
         allocator,
         node,
     );
@@ -174,7 +174,7 @@ fn shouldPreserveWhitespace(node: *z.DomNode) bool {
 fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNode) !void {
     if (z.previousSibling(comment_node)) |prev| {
         if (z.isTypeText(prev)) {
-            const txt = z.getTextContent(allocator, prev) catch {
+            const txt = z.getTextContentOrEmpty(allocator, prev) catch {
                 z.removeNode(comment_node);
                 z.destroyNode(comment_node);
                 return;
@@ -690,7 +690,7 @@ test "keep_new_lines option comprehensive test" {
         defer allocator.free(child_nodes);
 
         for (child_nodes) |child| {
-            const txt = try z.getTextContent(allocator, child);
+            const txt = try z.getTextContentOrEmpty(allocator, child);
             defer allocator.free(txt);
             // print("Child node: {s}, \n", .{txt});
         }
@@ -873,7 +873,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
     defer z.destroyDocument(doc);
     const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node).?;
-    const txt = try z.getTextContent(allocator, div_node);
+    const txt = try z.getTextContentOrEmpty(allocator, div_node);
     defer allocator.free(txt);
     // print("-------------{s}\n", .{txt});
 
@@ -889,10 +889,7 @@ test "isWhitespaceOnlyNode behavior with comments" {
             // const is_whitespace_only = z.isWhitespaceOnlyNode(child.?);
 
             // Get comment content for debugging (handle empty comments)
-            const comment_text = z.getTextContent(allocator, child.?) catch |err| switch (err) {
-                error.EmptyTextContent => try allocator.dupe(u8, ""),
-                else => return err,
-            };
+            const comment_text = try z.getTextContentOrEmpty(allocator, child.?);
             defer allocator.free(comment_text);
 
             // print("Comment {d}: '{s}' -> isWhitespaceOnlyNode: {}\n", .{ comment_count, comment_text, is_whitespace_only });

@@ -58,7 +58,7 @@ pub fn appendNodeHtmlSmart(allocator: std.mem.Allocator, node: *z.DomNode, skip_
 
         .comment => {
             // Comments still need allocation since we need to handle potential empty content
-            const text_content = try z.getTextContent(allocator, node);
+            const text_content = try z.getTextContentOrEmpty(allocator, node);
             defer allocator.free(text_content);
 
             try html.appendSlice("<!--");

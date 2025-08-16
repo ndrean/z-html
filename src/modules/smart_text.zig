@@ -63,7 +63,7 @@ pub fn escapeHtmlSmart(allocator: std.mem.Allocator, content: []const u8) ![]u8 
 /// Context-aware text processing for serialization
 /// This combines whitespace detection + context-aware escaping
 pub fn processTextContentSmart(allocator: std.mem.Allocator, node: *z.DomNode, skip_whitespace_only: bool) !?[]u8 {
-    const text_content = try z.getTextContent(allocator, node);
+    const text_content = try z.getTextContentOrEmpty(allocator, node);
     defer allocator.free(text_content);
 
     if (skip_whitespace_only) {

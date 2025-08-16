@@ -150,13 +150,11 @@ pub const isTemplateElement = lxb.isTemplateElement;
 pub const templateInterface = lxb.templateInterface;
 pub const templateAwareFirstChild = lxb.templateAwareFirstChild;
 
-// Experimental DOM Traversal utilities
-pub const forEachChildNode = traverse.forEachChildNode;
-pub const forEachChildElement = traverse.forEachChildElement;
-pub const collectChildNodes = traverse.collectChildNodes;
+// DOM Traversal utilities
+pub const collectChildItems = traverse.collectChildItems;
 pub const collectChildElements = traverse.collectChildElements;
-pub const NodeCallback = traverse.NodeCallback;
-pub const ElementCallback = traverse.ElementCallback;
+pub const elementMatchCollector = traverse.elementMatchCollector;
+pub const nodeMatchCollector = traverse.nodeMatchCollector;
 
 //=====================================
 // DOM Matcher utilities
@@ -255,8 +253,8 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 // Text content
 //=====================================
 pub const getCommentTextContent = lxb.getCommentTextContent;
-pub const getTextContent = lxb.getTextContent; // DEPRECATED: Use getTextContentOptional or getTextContentOrEmpty
-pub const getTextContentOptional = lxb.getTextContentOptional; // RECOMMENDED: Correct API
+// pub const getTextContent = lxb.getTextContent; // DEPRECATED: Use getTextContentOptional or getTextContentOrEmpty
+// pub const getTextContentOptional = lxb.getTextContentOptional; // RECOMMENDED: Correct API
 pub const getTextContentOrEmpty = lxb.getTextContentOrEmpty; // ALTERNATIVE: JavaScript-like behavior
 pub const getTextContentBorrow = lxb.getTextContentBorrow; // FASTEST: Zero-copy version
 pub const setOrReplaceText = lxb.setOrReplaceText;
