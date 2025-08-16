@@ -234,7 +234,7 @@ pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.Dom
 /// [collection] Helper function to recursively collect elements with a specific tag name
 fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection, tag_name: []const u8) bool {
     // Check if current element matches the tag name
-    const element_tag_name = z.tagName(element);
+    const element_tag_name = z.tagNameBorrow(element);
     if (std.mem.eql(u8, element_tag_name, tag_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
         if (status != 0) return false;
@@ -1141,7 +1141,7 @@ test "getElementsByTagName functionality" {
         // Verify all found elements are indeed paragraphs
         for (0..collectionLength(paragraphs)) |i| {
             const element = getCollectionElementAt(paragraphs, i).?;
-            const tag_name = z.tagName(element);
+            const tag_name = z.tagNameBorrow(element);
             try testing.expect(std.mem.eql(u8, tag_name, "P"));
         }
     }

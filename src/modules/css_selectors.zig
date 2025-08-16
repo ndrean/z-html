@@ -529,7 +529,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(first_target != null);
 
     if (first_target) |element| {
-        const tag_name = z.tagName(element);
+        const tag_name = z.tagNameBorrow(element);
         try testing.expectEqualStrings("P", tag_name); // Should be the first <p>
     }
 
@@ -543,7 +543,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(unique_element != null);
 
     if (unique_element) |element| {
-        const tag_name = z.tagName(element);
+        const tag_name = z.tagNameBorrow(element);
         try testing.expectEqualStrings("P", tag_name);
     }
 
@@ -587,7 +587,7 @@ test "CssSelectorEngine querySelector (low-level) functionality" {
         try testing.expect(element != null);
 
         if (element) |el| {
-            const tag_name = z.tagName(el);
+            const tag_name = z.tagNameBorrow(el);
             try testing.expectEqualStrings("P", tag_name);
         }
     }
@@ -644,8 +644,8 @@ test "querySelector performance vs querySelectorAll[0]" {
     try testing.expect(target1.? == target2);
 
     // Test that querySelector actually stops early (both should work, but querySelector is more efficient)
-    const tag_name1 = z.tagName(target1.?);
-    const tag_name2 = z.tagName(target2);
+    const tag_name1 = z.tagNameBorrow(target1.?);
+    const tag_name2 = z.tagNameBorrow(target2);
     try testing.expectEqualStrings(tag_name1, tag_name2);
     try testing.expectEqualStrings("P", tag_name1);
 }

@@ -126,11 +126,11 @@ test "chunks1" {
 
     try testing.expect(children.len > 0);
     try testing.expectEqualStrings(
-        z.tagName(children[0]),
+        z.tagNameBorrow(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        z.tagName(children[1]),
+        z.tagNameBorrow(children[1]),
         "P",
     );
 
@@ -186,16 +186,16 @@ test "chunk parsing comprehensive" {
 
     // Check element names
     try testing.expectEqualStrings(
-        z.tagName(children[0]),
+        z.tagNameBorrow(children[0]),
         "H1",
     );
     try testing.expectEqualStrings(
-        z.tagName(children[1]),
+        z.tagNameBorrow(children[1]),
         "P",
     );
 
     try testing.expectEqualStrings(
-        z.tagName(children[2]),
+        z.tagNameBorrow(children[2]),
         "SPAN",
     );
 

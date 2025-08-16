@@ -155,7 +155,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
     if (z.nodeToElement(parent)) |parent_element| {
-        const tag_name = z.tagName(parent_element);
+        const tag_name = z.tagNameBorrow(parent_element);
 
         // TODO: change this to enum comparison <----------------------------
         // leave these elements unchanged

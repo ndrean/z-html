@@ -452,9 +452,9 @@ test "mixing enum and string creation" {
     try testing.expectEqualStrings("DIV", z.nodeName(z.elementToNode(div)));
     try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName(z.elementToNode(custom)));
     try testing.expectEqualStrings("X-WIDGET", z.nodeName(z.elementToNode(web_component)));
-    try testing.expectEqualStrings("DIV", z.tagName(div));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagName(custom));
-    try testing.expectEqualStrings("X-WIDGET", z.tagName(web_component));
+    try testing.expectEqualStrings("DIV", z.tagNameBorrow(div));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagNameBorrow(custom));
+    try testing.expectEqualStrings("X-WIDGET", z.tagNameBorrow(web_component));
 
     // Test both allocation and zero-copy versions
     const allocator = testing.allocator;

@@ -92,7 +92,7 @@ pub const nodeToComment = lxb.nodeToComment;
 
 // Node and Element name functions (both safe and unsafe versions)
 pub const nodeName = lxb.nodeName;
-pub const tagName = lxb.tagName;
+pub const tagNameBorrow = lxb.tagNameBorrow;
 pub const nodeNameOwned = lxb.nodeNameOwned;
 pub const tagNameOwned = lxb.tagNameOwned;
 

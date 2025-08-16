@@ -103,7 +103,7 @@ fn appendEscapingSmart(html: *std.ArrayList(u8), content: []const u8, whitespace
 fn appendTemplateElementHtml(allocator: std.mem.Allocator, node: *z.DomNode, skip_whitespace_nodes: bool, html: *std.ArrayList(u8)) !void {
     if (z.nodeToElement(node)) |element| {
         // Start tag
-        const tag_name = z.tagName(element);
+        const tag_name = z.tagNameBorrow(element);
         try html.append('<');
         try html.appendSlice(tag_name);
 
@@ -151,7 +151,7 @@ fn appendTemplateElementHtml(allocator: std.mem.Allocator, node: *z.DomNode, ski
 /// Handle regular elements
 fn appendRegularElementHtml(allocator: std.mem.Allocator, node: *z.DomNode, skip_whitespace_nodes: bool, html: *std.ArrayList(u8)) !void {
     if (z.nodeToElement(node)) |element| {
-        const tag_name = z.tagName(element);
+        const tag_name = z.tagNameBorrow(element);
 
         // Start tag
         try html.append('<');

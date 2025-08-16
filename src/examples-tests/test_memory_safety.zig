@@ -13,7 +13,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
     const div = z.firstElementChild(body).?;
 
     // ❌ UNSAFE: Borrowing lexbor's memory
-    const unsafe_tag = z.tagName(div);
+    const unsafe_tag = z.tagNameBorrow(div);
     std.debug.print("Unsafe tag (borrowing): {s}\n", .{unsafe_tag});
 
     // ✅ SAFE: Copying to Zig-owned memory
@@ -54,7 +54,7 @@ test "Practical usage patterns" {
     var count: u32 = 0;
     var child = z.firstElementChild(div);
     while (child) |element| {
-        const tag = z.tagName(element); // Safe for immediate use
+        const tag = z.tagNameBorrow(element); // Safe for immediate use
         std.debug.print("  Found: {s}\n", .{tag});
         if (std.mem.eql(u8, tag, "P")) {
             count += 1;

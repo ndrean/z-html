@@ -39,7 +39,7 @@ pub fn main() !void {
 }
 
 fn printElementInfo(element: *z.DomElement) bool {
-    const tag = z.tagName(element);
+    const tag = z.tagNameBorrow(element);
     const text = z.getElementText(std.heap.page_allocator, element) catch "no text";
     defer if (!std.mem.eql(u8, text, "no text")) std.heap.page_allocator.free(text);
 
@@ -55,7 +55,7 @@ fn pElementCollector(element: *z.DomElement) ?*z.DomElement {
 }
 
 fn testMatchers(element: *z.DomElement) bool {
-    const tag = z.tagName(element);
+    const tag = z.tagNameBorrow(element);
 
     std.debug.print("Testing element: {s}\n", .{tag});
     std.debug.print("  Is P tag? {}\n", .{z.matchesTagName(element, "P")});
