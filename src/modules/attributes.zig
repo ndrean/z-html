@@ -232,6 +232,16 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
     return result;
 }
 
+/// [core] Get element ID as borrowed string for faster access
+pub fn getElementIdBorrow(element: *z.DomElement) []const u8 {
+    var id_len: usize = 0;
+    const id_ptr = lxb_dom_element_id_noi(
+        element,
+        &id_len,
+    );
+    return id_ptr[0..id_len];
+}
+
 /// Compare two lexbor strings with case sensitivity.
 pub fn compareStrings(first: []const u8, second: []const u8) bool {
     return std.mem.eql(u8, first, second);

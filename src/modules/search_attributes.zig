@@ -47,28 +47,33 @@ const MultiElementSearchContext = struct {
     results: std.ArrayList(*z.DomElement),
 };
 
-/// Fast walker callback for getElementById optimization
-/// Returns LEXBOR_ACTION_STOP when ID is found, LEXBOR_ACTION_OK to continue
+/// convert from "aligned" `anyopaque` to the target pointer type `T`
+/// because of the callback signature:
+fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
+    return @as(*T, @ptrCast(@alignCast(ctx.?)));
+}
+
+/// [Attr search] Walker callback for `getElementById`
+///
+/// Returns LEXBOR_ACTION_STOP=1 when ID is found, LEXBOR_ACTION_OK=0 to continue
 fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     if (ctx == null) return LEXBOR_ACTION_OK;
 
-    const search_ctx = @as(*IdSearchContext, @ptrCast(@alignCast(ctx.?)));
+    const search_ctx = castContext(IdSearchContext, ctx);
 
-    // Only check element nodes
     if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
 
     const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
 
-    // Check if this element has an ID attribute
     if (!z.hasAttribute(element, "id")) return LEXBOR_ACTION_OK;
 
-    // Get the ID value (borrowed memory)
-    const id_value = z.getAttributeBorrow(element, "id") orelse return LEXBOR_ACTION_OK;
+    const id_value = z.getElementIdBorrow(element);
+    if (id_value.len == 0) return LEXBOR_ACTION_OK;
+    const match = std.mem.eql(u8, id_value, search_ctx.target_id);
 
-    // Compare with target ID
-    if (std.mem.eql(u8, id_value, search_ctx.target_id)) {
+    if (match) {
         search_ctx.found_element = element;
-        return LEXBOR_ACTION_STOP; // Found it! Stop traversal
+        return LEXBOR_ACTION_STOP;
     }
 
     return LEXBOR_ACTION_OK; // Continue searching
@@ -79,9 +84,8 @@ fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
 fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     if (ctx == null) return LEXBOR_ACTION_OK;
 
-    const search_ctx = @as(*ClassSearchContext, @ptrCast(@alignCast(ctx.?)));
+    const search_ctx = castContext(ClassSearchContext, ctx);
 
-    // Only check element nodes
     if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
 
     const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
@@ -89,17 +93,10 @@ fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     // Check if this element has a class attribute
     if (!z.hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
 
-    // Get the class value (borrowed memory)
-    const class_value = z.getAttributeBorrow(element, "class") orelse return LEXBOR_ACTION_OK;
-
-    // Search for the target class in the class list (space-separated)
-    var iterator = std.mem.splitScalar(u8, class_value, ' ');
-    while (iterator.next()) |class| {
-        const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-        if (std.mem.eql(u8, trimmed_class, search_ctx.target_class)) {
-            search_ctx.found_element = element;
-            return LEXBOR_ACTION_STOP; // Found it! Stop traversal
-        }
+    const match = z.hasClass(element, search_ctx.target_class);
+    if (match) {
+        search_ctx.found_element = element;
+        return LEXBOR_ACTION_STOP;
     }
 
     return LEXBOR_ACTION_OK; // Continue searching
@@ -110,7 +107,7 @@ fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
 fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     if (ctx == null) return LEXBOR_ACTION_OK;
 
-    const search_ctx = @as(*MultiElementSearchContext, @ptrCast(@alignCast(ctx.?)));
+    const search_ctx = castContext(MultiElementSearchContext, ctx);
 
     // Only check element nodes
     if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
@@ -137,17 +134,23 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
             // Check if this element has a class attribute
             if (!z.hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
 
-            // Get the class value and search for the target class
-            const class_value = z.getAttributeBorrow(element, "class") orelse return LEXBOR_ACTION_OK;
+            matches = z.hasClass(element, search_ctx.target_class.?);
+            // if (match) {
+            //     search_ctx.found_element = element;
+            //     return LEXBOR_ACTION_STOP;
+            // }
 
-            var iterator = std.mem.splitScalar(u8, class_value, ' ');
-            while (iterator.next()) |class| {
-                const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-                if (std.mem.eql(u8, trimmed_class, search_ctx.target_class.?)) {
-                    matches = true;
-                    break;
-                }
-            }
+            // Get the class value and search for the target class
+            // const class_value = z.getAttributeBorrow(element, "class") orelse return LEXBOR_ACTION_OK;
+
+            // var iterator = std.mem.splitScalar(u8, class_value, ' ');
+            // while (iterator.next()) |class| {
+            //     const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+            //     if (std.mem.eql(u8, trimmed_class, search_ctx.target_class.?)) {
+            //         matches = true;
+            //         break;
+            //     }
+            // }
         },
     }
 
@@ -164,7 +167,7 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
 fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
     if (ctx == null) return LEXBOR_ACTION_OK;
 
-    const search_ctx = @as(*AttributeSearchContext, @ptrCast(@alignCast(ctx.?)));
+    const search_ctx = castContext(AttributeSearchContext, ctx);
 
     // Only check element nodes
     if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
@@ -183,7 +186,9 @@ fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 
     // Otherwise, check the attribute value
     const attr_value = z.getAttributeBorrow(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
 
-    if (std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?)) {
+    const match = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
+
+    if (match) {
         search_ctx.found_element = element;
         return LEXBOR_ACTION_STOP; // Found it! Stop traversal
     }
@@ -258,7 +263,12 @@ pub fn getElementByAttributeFast(doc: *z.HtmlDocument, attr_name: []const u8, at
 /// [attributes] Fast data attribute search - convenience wrapper
 ///
 /// Searches for elements with data-* attributes (common in modern web development).
-/// Example: getElementByDataAttributeFast(doc, "id", "123") finds elements with data-id="123"
+/// Example:
+/// ```
+/// // finds elements with data-id="123"
+/// getElementByDataAttributeFast(doc, "id", "123")
+/// ---
+/// ```
 pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, data_name: []const u8, value: ?[]const u8) !?*z.DomElement {
     // Build the full data attribute name
     var attr_name_buffer: [256]u8 = undefined;
@@ -267,9 +277,9 @@ pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, data_name: []const u8
     return getElementByAttributeFast(doc, attr_name, value);
 }
 
-//=============================================================================
+//==================================================================
 // WALKER-BASED MULTIPLE RESULTS (Alternative to Collections)
-//=============================================================================
+//==================================================================
 
 /// [attributes] Find ALL elements with specific class using walker (alternative to collection)
 ///

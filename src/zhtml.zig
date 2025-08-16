@@ -276,6 +276,8 @@ pub const setAttributes = attrs.setAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
+pub const getElementIdBorrow = attrs.getElementIdBorrow;
+
 pub const compareStrings = attrs.compareStrings;
 
 pub const getAttributeValue = attrs.getAttributeValue;
