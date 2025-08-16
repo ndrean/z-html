@@ -1093,7 +1093,7 @@ test "walker-based search vs existing implementations comparison" {
     }
 
     // Test content verification using allocator
-    const content = try z.getTextContentOrEmpty(allocator, z.elementToNode(data_element.?));
+    const content = try z.getTextContent(allocator, z.elementToNode(data_element.?));
     defer allocator.free(content);
     try testing.expectEqualStrings("Important text", content);
 }
@@ -1159,7 +1159,7 @@ test "getElementById vs getElementByIdFast comparison" {
     try testing.expect(element_fast.? == element_collection.?);
 
     // Verify content is correct
-    const text = try z.getTextContentOrEmpty(allocator, z.elementToNode(element_fast.?));
+    const text = try z.getTextContent(allocator, z.elementToNode(element_fast.?));
     defer allocator.free(text);
     try testing.expectEqualStrings("Hello World", text);
 }
@@ -1204,7 +1204,7 @@ test "getElementById performance comparison" {
     try testing.expect(fast_result.? == collection_result.?);
 
     // Verify we found the correct element
-    const content = try z.getTextContentOrEmpty(allocator, z.elementToNode(fast_result.?));
+    const content = try z.getTextContent(allocator, z.elementToNode(fast_result.?));
     defer allocator.free(content);
     try testing.expectEqualStrings("This is the target", content);
 
