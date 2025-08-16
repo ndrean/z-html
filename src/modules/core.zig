@@ -224,7 +224,7 @@ test "documentRoot - ownerDocument" {
     defer destroyDocument(doc);
 
     const doc_root = documentRoot(doc);
-    try testing.expectEqualStrings("HTML", z.nodeName(doc_root.?));
+    try testing.expectEqualStrings("HTML", z.nodeNameBorrow(doc_root.?));
 
     const owner = ownerDocument(doc_root.?);
     try testing.expect(owner == doc);
@@ -260,7 +260,7 @@ test "getBodyElement/node & error returned" {
         try testing.expectEqualStrings("BODY", z.tagNameBorrow(body_elt));
 
         const body_node = try z.bodyNode(doc);
-        try testing.expectEqualStrings("BODY", z.nodeName(body_node));
+        try testing.expectEqualStrings("BODY", z.nodeNameBorrow(body_node));
         try testing.expect(.element == z.nodeType(body_node));
     }
     {
@@ -374,13 +374,13 @@ test "creation & convertions" {
 /// test "nodeType/tagname" {
 ///     const doc = try parseFromString("<div></div>");
 ///     const div_node = bodyNode(doc);
-///     const div_name = nodeName(div_node);
+///     const div_name = z.nodeNameBorrow(div_node);
 ///     try testing.expectEqualStrings(div_name, "DIV");
 ///     const node_type = z.nodeType(div_node);
 ///     try testing.expect(node_type == .element);
 /// }
 /// ```
-pub fn nodeName(node: *z.DomNode) []const u8 {
+pub fn nodeNameBorrow(node: *z.DomNode) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);
     return std.mem.span(name_ptr);
 }
@@ -392,7 +392,7 @@ pub fn nodeName(node: *z.DomNode) []const u8 {
 ///
 /// Caller must free the returned string.
 pub fn nodeNameOwned(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-    const name_slice = nodeName(node);
+    const name_slice = z.nodeNameBorrow(node);
     return try allocator.dupe(u8, name_slice);
 }
 
@@ -436,7 +436,7 @@ test "get node/element names" {
 
     var index: usize = 0;
     while (current_node != null) {
-        const node_name = nodeName(current_node.?);
+        const node_name = z.nodeNameBorrow(current_node.?);
         const owned_name = try nodeNameOwned(allocator, current_node.?);
         defer allocator.free(owned_name);
         const node_type = z.nodeType(current_node.?);
@@ -696,7 +696,7 @@ test "firstElementChild" {
 
     const div = nextSibling(first_child.?);
     try testing.expectEqualStrings("#element", z.nodeTypeName(div.?));
-    try testing.expectEqualStrings("DIV", nodeName(div.?));
+    try testing.expectEqualStrings("DIV", z.nodeNameBorrow(div.?));
 
     const firstElement = firstElementChild(body_elt);
     try testing.expect(elementToNode(firstElement.?) == div);
@@ -1129,7 +1129,7 @@ test "create element and comment" {
 
     // Test type-safe conversion
     const comment_node = commentToNode(comment);
-    const comment_name = nodeName(comment_node);
+    const comment_name = z.nodeNameBorrow(comment_node);
     try testing.expectEqualStrings("#comment", comment_name);
 
     destroyComment(comment);
@@ -1169,7 +1169,7 @@ test "root node element" {
     const body_element = try bodyElement(doc);
 
     try testing.expectEqualStrings("BODY", tagNameBorrow(body_element));
-    try testing.expectEqualStrings("BODY", nodeName(body_doc_node));
+    try testing.expectEqualStrings("BODY", z.nodeNameBorrow(body_doc_node));
 }
 
 test "children and childNodes" {
@@ -1823,7 +1823,7 @@ test "JavaScript children from fragment" {
 
     const body_element = try bodyElement(doc);
     const body_node = elementToNode(body_element);
-    try testing.expectEqualStrings("BODY", nodeName(body_node));
+    try testing.expectEqualStrings("BODY", z.nodeNameBorrow(body_node));
 
     const children1 = try getChildNodes(allocator, body_node);
     defer allocator.free(children1);
@@ -1873,7 +1873,7 @@ test "void vs empty element detection" {
 
     while (child != null) {
         if (nodeToElement(child.?)) |_| {
-            const tag_name = nodeName(child.?);
+            const tag_name = z.nodeNameBorrow(child.?);
             const is_void = isSelfClosingNode(child.?);
             const is_empty = isNodeEmpty(child.?);
 

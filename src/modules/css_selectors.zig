@@ -504,7 +504,7 @@ test "CSS selector basic functionality" {
     // print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
     try testing.expect(id_elements.len == 1);
 
-    const element_name = z.nodeName(z.elementToNode(id_elements[0]));
+    const element_name = z.nodeNameBorrow(z.elementToNode(id_elements[0]));
     // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
 }
@@ -720,12 +720,12 @@ test "challenging CSS selectors - lexbor example" {
 
     // Verify the results
     // for (first_results, 0..) |node, i| {
-    //     const node_name = z.nodeName(node);
+    //     const node_name = z.nodeNameBorrow(node);
     //     print("First result {d}: {s}\n", .{ i, node_name });
     // }
 
     // for (second_results, 0..) |node, i| {
-    //     const node_name = z.nodeName(node);
+    //     const node_name = z.nodeNameBorrow(node);
     //     print("Second result {d}: {s}\n", .{ i, node_name });
     // }
 }

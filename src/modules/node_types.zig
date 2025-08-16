@@ -29,7 +29,7 @@ pub const LXB_TAG_SCRIPT: u32 = 0x29;
 ///
 /// Values are: `.text`, `.element`, `.comment`, `.document`, `.unknown`.
 pub inline fn nodeType(node: *z.DomNode) NodeType {
-    const node_name = z.nodeName(node);
+    const node_name = z.nodeNameBorrow(node);
 
     // Fast string comparison - most common cases first
     if (std.mem.eql(u8, node_name, "#text")) {
@@ -52,7 +52,7 @@ pub inline fn nodeType(node: *z.DomNode) NodeType {
 ///
 /// Returns the actual node name for special nodes, "#element" for regular HTML tags.
 pub inline fn nodeTypeName(node: *z.DomNode) []const u8 {
-    const node_name = z.nodeName(node);
+    const node_name = z.nodeNameBorrow(node);
 
     // Direct string comparison for maximum performance - return actual names for special nodes
     if (std.mem.eql(u8, node_name, "#text")) {
@@ -117,7 +117,7 @@ test "node type detection using getNodeName" {
 
     var child = z.firstChild(body_node);
     while (child != null) {
-        const node_name = z.nodeName(child.?);
+        const node_name = z.nodeNameBorrow(child.?);
         const node_type = z.nodeType(child.?);
         const node_type_name = z.nodeTypeName(child.?);
 

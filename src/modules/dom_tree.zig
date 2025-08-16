@@ -658,7 +658,7 @@ pub fn roundTripConversion(allocator: std.mem.Allocator, html: []const u8) ![]u8
 pub fn walkTree(node: *z.DomNode, depth: u32) void {
     var child = z.firstChild(node);
     while (child != null) {
-        const name = z.nodeName(child.?);
+        const name = z.nodeNameBorrow(child.?);
         const indent = switch (@min(depth, 10)) {
             0 => "",
             1 => "  ",

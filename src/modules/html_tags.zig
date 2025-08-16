@@ -420,7 +420,7 @@ test "lexbor NODENAME and self.toString" {
 
     for (tags) |tag| {
         const element = try z.createElement(doc, tag.toString(), &.{});
-        const node_name = z.nodeName(z.elementToNode(element));
+        const node_name = z.nodeNameBorrow(z.elementToNode(element));
         const expected_name = tag.toString();
 
         // Note: DOM names are typically uppercase
@@ -449,9 +449,9 @@ test "mixing enum and string creation" {
         &.{},
     );
 
-    try testing.expectEqualStrings("DIV", z.nodeName(z.elementToNode(div)));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName(z.elementToNode(custom)));
-    try testing.expectEqualStrings("X-WIDGET", z.nodeName(z.elementToNode(web_component)));
+    try testing.expectEqualStrings("DIV", z.nodeNameBorrow(z.elementToNode(div)));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeNameBorrow(z.elementToNode(custom)));
+    try testing.expectEqualStrings("X-WIDGET", z.nodeNameBorrow(z.elementToNode(web_component)));
     try testing.expectEqualStrings("DIV", z.tagNameBorrow(div));
     try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagNameBorrow(custom));
     try testing.expectEqualStrings("X-WIDGET", z.tagNameBorrow(web_component));
