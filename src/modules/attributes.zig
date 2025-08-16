@@ -39,7 +39,7 @@ const LEXBOR_ACTION_STOP: u32 = 1;
 
 /// [attributes] Get attribute value
 ///
-/// Returns null if attribute doesn't exist, empty string if attribute exists but has no value.
+/// Returns `null` if attribute doesn't exist, empty string `""` if attribute exists but has no value.
 ///
 /// Caller needs to free the slice if not null
 /// ## Example
@@ -50,8 +50,8 @@ const LEXBOR_ACTION_STOP: u32 = 1;
 ///     allocator.free(c);
 /// };
 /// try testing.expectEqualStrings("card", c.?);
+/// ----
 /// ```
-///
 pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: []const u8) !?[]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(
@@ -61,8 +61,7 @@ pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: 
         &value_len,
     ) orelse return null;
 
-    // If empty value, return empty string rather than null
-    // This matches HTML behavior where attributes can have empty values
+    // If empty value, return empty string rather than null (HTML behaviour)
     const result = try allocator.alloc(u8, value_len);
     @memcpy(result, value_ptr[0..value_len]);
     return result;
@@ -90,18 +89,15 @@ pub fn matchesAttribute(element: *z.DomElement, attr_name: []const u8, attr_valu
     return true; // Just check for attribute existence
 }
 
-/// [attributes] Check if element has specific class ?????????????
+/// [attributes] Check if element has specific class (FAST: zero-copy)
 pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
-    // Use a temporary allocator just for this check
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const temp_allocator = arena.allocator();
+    // Quick check: does element have class attribute at all?
+    if (!hasAttribute(element, "class")) return false;
 
-    // Get the class string using unified classList function
-    const result = classList(temp_allocator, element, .string) catch return false;
-    const class_attr = result.string orelse return false;
+    // Get class string directly from lexbor (zero-copy)
+    const class_attr = elementGetNamedAttributeValue(element, "class") orelse return false;
 
-    // Search for the class name in the class list
+    // Search for the class name in the class list (space-separated)
     var iterator = std.mem.splitScalar(u8, class_attr, ' ');
     while (iterator.next()) |class| {
         // Trim whitespace and compare

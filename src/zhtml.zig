@@ -253,8 +253,6 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 // Text content
 //=====================================
 pub const getCommentTextContent = lxb.getCommentTextContent;
-// pub const getTextContent = lxb.getTextContent; // DEPRECATED: Use getTextContentOptional or getTextContentOrEmpty
-// pub const getTextContentOptional = lxb.getTextContentOptional; // RECOMMENDED: Correct API
 pub const getTextContent = lxb.getTextContent;
 pub const getTextContentBorrow = lxb.getTextContentBorrow; // Zero-copy version
 pub const setOrReplaceText = lxb.setOrReplaceText;
