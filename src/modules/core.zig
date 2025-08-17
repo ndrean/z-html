@@ -919,14 +919,17 @@ pub fn insertBefore(reference_node: *z.DomNode, new_node: *z.DomNode) void {
 }
 
 /// [core] Position flags for insertAdjacent operations (matches JavaScript API)
+/// Values are:
+/// - `beforebegin`: Insert before the element itself (as a previous sibling)
+/// - `afterbegin`: Insert as the first child of the element
+/// - `beforeend`: Insert as the last child of the element
+/// - `afterend`: Insert after the element itself (as a next sibling)
+///
+/// Inline conversion string to enum
 pub const InsertPosition = enum {
-    /// Insert before the element itself (as a previous sibling)
     beforebegin,
-    /// Insert as the first child of the element
     afterbegin,
-    /// Insert as the last child of the element
     beforeend,
-    /// Insert after the element itself (as a next sibling)
     afterend,
 
     pub inline fn fromString(position: []const u8) ?InsertPosition {
@@ -948,13 +951,15 @@ pub const InsertPosition = enum {
 /// const new_div = try z.createElement(doc, "div", &.{});
 /// try insertAdjacentElement(target.?, .beforebegin, new_div);
 /// try insertAdjacentElement(target.?, "beforeend", new_div);
+/// ---
 /// ```
 pub fn insertAdjacentElement(target: *z.DomElement, position: anytype, element: *z.DomElement) !void {
     const T = @TypeOf(position);
     const pos_enum: InsertPosition = if (T == InsertPosition)
-        position
+        position // if InsertPosition.beforebegin
     else switch (@typeInfo(T)) {
-        .enum_literal => position, // Handle enum literals like .beforebegin
+        .enum_literal => position, // if .beforebegin
+        // you want to return a value for `pos_enum`. You can't use `return` otherwise the function will return. `break` requires a labelled block to break from.
         else => blk: {
             const str: []const u8 = position[0..];
             break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
