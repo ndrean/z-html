@@ -112,11 +112,11 @@ extern "c" fn lxb_html_document_create_element_noi(doc: *z.HtmlDocument, tag_nam
 
 extern "c" fn lxb_dom_document_create_text_node(doc: *z.HtmlDocument, text: [*]const u8, text_len: usize) ?*z.DomNode;
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HtmlDocument) ?*z.DomNode;
-extern "c" fn lxb_dom_node_insert_before(to: *z.DomNode, node: *z.DomNode) void;
-extern "c" fn lxb_dom_node_insert_after(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_insert_before_wo_events(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_insert_after_wo_events(to: *z.DomNode, node: *z.DomNode) void;
 extern "c" fn lxb_dom_document_create_comment(doc: *z.HtmlDocument, data: [*]const u8, len: usize) ?*z.Comment;
 extern "c" fn lxb_dom_comment_interface_destroy(doc: *z.Comment) *z.Comment;
-extern "c" fn lxb_dom_node_insert_child(parent: *z.DomNode, child: *z.DomNode) void;
+extern "c" fn lxb_dom_node_insert_child_wo_events(parent: *z.DomNode, child: *z.DomNode) void;
 extern "c" fn lxb_html_document_body_element_noi(doc: *z.HtmlDocument) ?*z.DomElement;
 extern "c" fn lxb_dom_document_root(doc: *z.HtmlDocument) ?*z.DomNode;
 extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HtmlDocument;
@@ -129,7 +129,7 @@ extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.DomElem
 extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
 extern "c" fn lxb_dom_element_tag_name(element: *z.DomElement, len: ?*usize) [*:0]const u8;
 extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
-extern "c" fn lxb_dom_node_remove(node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_remove_wo_events(node: *z.DomNode) void;
 extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
 
 /// [core] Element creation and returns a !Element
@@ -530,7 +530,7 @@ pub fn destroyComment(comment: *z.Comment) void {
 
 /// [core] Remove a node from its parent
 pub fn removeNode(node: *z.DomNode) void {
-    lxb_dom_node_remove(node);
+    lxb_dom_node_remove_wo_events(node);
 }
 
 /// [core] Destroy a node from the DOM
@@ -852,7 +852,7 @@ pub fn getChildren(allocator: std.mem.Allocator, parent_element: *z.DomElement) 
 /// appendChild(parentNode, childNode);
 /// ```
 pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
-    lxb_dom_node_insert_child(parent, child);
+    lxb_dom_node_insert_child_wo_events(parent, child);
 }
 
 /// [core] Append multiple child nodes to parent
@@ -908,6 +908,421 @@ pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
 }
 ///
 /// This is safe because it compares the tag name immediately without storing it.
+/// [core] Insert an element after a reference node
+pub fn insertAfter(reference_node: *z.DomNode, new_node: *z.DomNode) void {
+    lxb_dom_node_insert_after_wo_events(reference_node, new_node);
+}
+
+/// [core] Insert an element before a reference node
+pub fn insertBefore(reference_node: *z.DomNode, new_node: *z.DomNode) void {
+    lxb_dom_node_insert_before_wo_events(reference_node, new_node);
+}
+
+/// [core] Position flags for insertAdjacent operations (matches JavaScript API)
+pub const InsertPosition = enum {
+    /// Insert before the element itself (as a previous sibling)
+    beforebegin,
+    /// Insert as the first child of the element
+    afterbegin,
+    /// Insert as the last child of the element
+    beforeend,
+    /// Insert after the element itself (as a next sibling)
+    afterend,
+
+    pub inline fn fromString(position: []const u8) ?InsertPosition {
+        if (std.mem.eql(u8, position, "beforebegin")) return .beforebegin;
+        if (std.mem.eql(u8, position, "afterbegin")) return .afterbegin;
+        if (std.mem.eql(u8, position, "beforeend")) return .beforeend;
+        if (std.mem.eql(u8, position, "afterend")) return .afterend;
+        return null;
+    }
+};
+
+/// [core] Insert an element at the specified position relative to the target element
+///
+/// The position is either an `InsertPosition` enum value (compile check) or a string representation (runtime error if unknown).
+///
+/// ## Example
+/// ```zig
+/// const target = try z.getElementById(doc, "my-element");
+/// const new_div = try z.createElement(doc, "div", &.{});
+/// try insertAdjacentElement(z.elementToNode(target.?), .beforebegin, z.elementToNode(new_div));
+/// try insertAdjacentElement(z.elementToNode(target.?), "beforeend", z.elementToNode(new_div));
+/// ---
+/// ```
+pub fn insertAdjacentElement(target: *z.DomNode, position: anytype, element: *z.DomNode) !void {
+    const T = @TypeOf(position);
+    const pos_enum: InsertPosition = if (T == InsertPosition)
+        position
+    else switch (@typeInfo(T)) {
+        .enum_literal => position, // Handle enum literals like .beforebegin
+        else => blk: {
+            const str: []const u8 = position[0..];
+            break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
+        },
+    };
+
+    switch (pos_enum) {
+        .beforebegin => {
+            // Insert before the target element (as previous sibling)
+            const parent = parentNode(target) orelse return Err.NoParentNode;
+            insertBefore(target, element);
+            _ = parent; // Suppress unused variable warning
+        },
+        .afterbegin => {
+            // Insert as first child of target element
+            const first_child = firstChild(target);
+            if (first_child) |first| {
+                insertBefore(first, element);
+            } else {
+                appendChild(target, element);
+            }
+        },
+        .beforeend => {
+            // Insert as last child of target element
+            appendChild(target, element);
+        },
+        .afterend => {
+            // Insert after the target element (as next sibling)
+            const parent = parentNode(target) orelse return Err.NoParentNode;
+            insertAfter(target, element);
+            _ = parent; // Suppress unused variable warning
+        },
+    }
+}
+
+/// [core] Helper: Insert all children from fragment before a reference node
+fn insertFragmentBefore(reference_node: *z.DomNode, fragment: *z.DomNode) void {
+    var fragment_child = firstChild(fragment);
+    while (fragment_child) |current_child| {
+        const next = nextSibling(current_child);
+        insertBefore(reference_node, current_child);
+        fragment_child = next;
+    }
+}
+
+/// [core] Helper: Insert all children from fragment after a reference node
+fn insertFragmentAfter(reference_node: *z.DomNode, fragment: *z.DomNode) void {
+    var fragment_child = firstChild(fragment);
+    var insert_after_node = reference_node;
+    while (fragment_child) |current_child| {
+        const next = nextSibling(current_child);
+        insertAfter(insert_after_node, current_child);
+        insert_after_node = current_child; // Next insertion point
+        fragment_child = next;
+    }
+}
+
+/// [core] Insert HTML string at the specified position relative to the target element
+///
+/// The position is either an `InsertPosition` enum value (compile check) or a string representation (runtime error if unknown).
+///
+/// ## Example
+/// ```zig
+/// const target = try z.getElementById(doc, "my-element");
+/// try insertAdjacentHTML(allocator, z.elementToNode(target.?), .beforeend, "<p>New content</p>");
+/// try insertAdjacentHTML(allocator, z.elementToNode(target.?), "beforeend", "<p>New content</p>");
+/// ---
+/// ```
+pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomNode, position: anytype, html: []const u8) !void {
+    const T = @TypeOf(position);
+    const pos_enum: InsertPosition = if (T == InsertPosition)
+        position
+    else switch (@typeInfo(T)) {
+        .enum_literal => position, // Handle enum literals like .beforebegin
+        else => blk: {
+            const str: []const u8 = position[0..];
+            break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
+        },
+    };
+
+    // Parse the HTML fragment once
+    const fragment_result = try z.parseFragmentSimple(allocator, html);
+    defer z.destroyNode(fragment_result.fragment_root);
+
+    // Use optimized fragment insertion for each position
+    switch (pos_enum) {
+        .beforebegin => {
+            _ = parentNode(target) orelse return Err.NoParentNode;
+            insertFragmentBefore(target, fragment_result.fragment_root);
+        },
+        .afterbegin => {
+            if (firstChild(target)) |first| {
+                insertFragmentBefore(first, fragment_result.fragment_root);
+            } else {
+                // Target is empty, just append all
+                appendFragment(target, fragment_result.fragment_root);
+            }
+        },
+        .beforeend => {
+            // Use existing optimized appendFragment
+            appendFragment(target, fragment_result.fragment_root);
+        },
+        .afterend => {
+            _ = parentNode(target) orelse return Err.NoParentNode;
+            insertFragmentAfter(target, fragment_result.fragment_root);
+        },
+    }
+}
+
+test "insertBefore / insertAfter" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><ul><li id=\"1\">First</li></ul></body></html>");
+    defer destroyDocument(doc);
+
+    const body = try bodyNode(doc);
+    const first_li = try z.getElementById(doc, "1");
+    const new_li = try z.createElement(
+        doc,
+        "li",
+        &.{.{ .name = "id", .value = "0" }},
+    );
+    const last_li = try z.createElement(
+        doc,
+        "li",
+        &.{.{ .name = "id", .value = "2" }},
+    );
+    insertBefore(
+        elementToNode(first_li.?),
+        elementToNode(new_li),
+    );
+    insertAfter(
+        elementToNode(first_li.?),
+        elementToNode(last_li),
+    );
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+    try testing.expectEqualStrings(
+        "<body><ul><li id=\"0\"></li><li id=\"1\">First</li><li id=\"2\"></li></ul></body>",
+        html,
+    );
+}
+
+test "Flexible insertAdjacentHTML" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\">Original</div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Test 1: Using enum values directly (most natural for Zig)
+    try insertAdjacentHTML(allocator, target_node, .beforebegin, "<p>Before Begin</p>");
+
+    // Test 2: Using string values directly (JavaScript-style)
+    try insertAdjacentHTML(allocator, target_node, "afterbegin", "<span>After Begin</span>");
+
+    // Test 3: Using InsertPosition enum explicitly
+    try insertAdjacentHTML(allocator, target_node, InsertPosition.beforeend, "<span>Before End</span>");
+
+    // Test 4: Using string for afterend
+    try insertAdjacentHTML(allocator, target_node, "afterend", "<p>After End</p>");
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const clean_html = try z.normalizeWhitespace(allocator, html, .{});
+    defer allocator.free(clean_html);
+
+    const expected = "<body><p>Before Begin</p><div id=\"target\"><span>After Begin</span>Original<span>Before End</span></div><p>After End</p></body>";
+    try testing.expectEqualStrings(expected, clean_html);
+
+    // Test 5: Error handling for invalid position string
+    const invalid_result = insertAdjacentHTML(allocator, target_node, "invalid", "<p>Test</p>");
+    try testing.expectError(Err.InvalidPosition, invalid_result);
+
+    // Test 6: More natural usage examples
+    try insertAdjacentHTML(allocator, target_node, .beforeend, "<em>Direct enum</em>");
+    try insertAdjacentHTML(allocator, target_node, "beforeend", "<strong>Direct string</strong>");
+}
+
+test "InsertPosition.fromString" {
+    try testing.expect(InsertPosition.fromString("beforebegin") == .beforebegin);
+    try testing.expect(InsertPosition.fromString("afterbegin") == .afterbegin);
+    try testing.expect(InsertPosition.fromString("beforeend") == .beforeend);
+    try testing.expect(InsertPosition.fromString("afterend") == .afterend);
+    try testing.expect(InsertPosition.fromString("invalid") == null);
+}
+
+test "insertAdjacentElement - all positions" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Test beforebegin - insert before the target element
+    const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
+    try insertAdjacentElement(target_node, .beforebegin, elementToNode(before_element));
+
+    // Test afterbegin - insert as first child
+    const afterbegin_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "first" }});
+    try insertAdjacentElement(target_node, .afterbegin, elementToNode(afterbegin_element));
+
+    // Test beforeend - insert as last child
+    const beforeend_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "last" }});
+    try insertAdjacentElement(target_node, .beforeend, elementToNode(beforeend_element));
+
+    // Test afterend - insert after the target element
+    const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
+    try insertAdjacentElement(target_node, .afterend, elementToNode(after_element));
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const expected = "<body><p id=\"before\"></p><div id=\"target\"><span id=\"first\"></span>Target Content<span id=\"last\"></span></div><p id=\"after\"></p></body>";
+    try testing.expectEqualStrings(expected, html);
+}
+
+test "insertAdjacentHTML - all positions" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Test beforebegin
+    try insertAdjacentHTML(allocator, target_node, .beforebegin, "<p id=\"before\">Before</p>");
+
+    // Test afterbegin
+    try insertAdjacentHTML(allocator, target_node, .afterbegin, "<span id=\"first\">First</span>");
+
+    // Test beforeend
+    try insertAdjacentHTML(allocator, target_node, .beforeend, "<span id=\"last\">Last</span>");
+
+    // Test afterend
+    try insertAdjacentHTML(allocator, target_node, .afterend, "<p id=\"after\">After</p>");
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const expected = "<body><p id=\"before\">Before</p><div id=\"target\"><span id=\"first\">First</span>Target Content<span id=\"last\">Last</span></div><p id=\"after\">After</p></body>";
+    try testing.expectEqualStrings(expected, html);
+}
+
+test "insertAdjacentHTML - multiple elements" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Insert multiple elements at once
+    try insertAdjacentHTML(allocator, target_node, .afterend, "<p>First</p><p>Second</p><span>Third</span>");
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const expected = "<body><div id=\"target\">Content</div><p>First</p><p>Second</p><span>Third</span></body>";
+    try testing.expectEqualStrings(expected, html);
+}
+
+test "insertAdjacentElement - empty target" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\"></div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Test afterbegin on empty element
+    const child_element = try z.createElement(doc, "p", &.{.{ .name = "class", .value = "child" }});
+    try insertAdjacentElement(target_node, .afterbegin, elementToNode(child_element));
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const expected = "<body><div id=\"target\"><p class=\"child\"></p></div></body>";
+    try testing.expectEqualStrings(expected, html);
+}
+
+test "insertAdjacent comprehensive demo" {
+    const allocator = testing.allocator;
+
+    // Create a simple document structure
+    const doc = try parseFromString(
+        \\<html><body>
+        \\    <div id="container">
+        \\        <p id="target">Target Element</p>
+        \\    </div>
+        \\</body></html>
+    );
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+    const target_node = elementToNode(target.?);
+
+    // Demo 1: insertAdjacentElement with all positions
+    const before_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "before" }});
+    try z.setTextContent(elementToNode(before_elem), "Before Begin");
+    try insertAdjacentElement(target_node, .beforebegin, elementToNode(before_elem));
+
+    const after_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "after" }});
+    try z.setTextContent(elementToNode(after_elem), "After End");
+    try insertAdjacentElement(target_node, .afterend, elementToNode(after_elem));
+
+    // Show result after insertAdjacentElement
+    const body = try bodyNode(doc);
+    const html1 = try z.serializeToString(allocator, body);
+    defer allocator.free(html1);
+
+    // Normalize whitespace for clean comparison
+    const clean_html1 = try z.normalizeWhitespace(allocator, html1, .{});
+    defer allocator.free(clean_html1);
+
+    const expected1 = "<body><div id=\"container\"><h2 class=\"before\">Before Begin</h2><p id=\"target\">Target Element</p><h2 class=\"after\">After End</h2></div></body>";
+    try testing.expectEqualStrings(expected1, clean_html1);
+
+    // Demo 2: insertAdjacentHTML with different positions
+    try insertAdjacentHTML(allocator, target_node, .afterbegin, "<span style=\"color: blue;\">First Child</span>");
+    try insertAdjacentHTML(allocator, target_node, .beforeend, "<span style=\"color: red;\">Last Child</span>");
+
+    // Show final result
+    const html2 = try z.serializeToString(allocator, body);
+    defer allocator.free(html2);
+
+    // Normalize whitespace for clean comparison
+    const clean_html2 = try z.normalizeWhitespace(allocator, html2, .{});
+    defer allocator.free(clean_html2);
+
+    const expected2 = "<body><div id=\"container\"><h2 class=\"before\">Before Begin</h2><p id=\"target\"><span style=\"color: blue;\">First Child</span>Target Element<span style=\"color: red;\">Last Child</span></p><h2 class=\"after\">After End</h2></div></body>";
+    try testing.expectEqualStrings(expected2, clean_html2);
+
+    // Demo 3: InsertPosition.fromString functionality
+    const positions = [_][]const u8{ "beforebegin", "afterbegin", "beforeend", "afterend", "invalid" };
+    var valid_count: usize = 0;
+    for (positions) |pos_str| {
+        if (InsertPosition.fromString(pos_str)) |pos| {
+            try testing.expect(@tagName(pos).len > 0); // Verify it has a valid tag name
+            valid_count += 1;
+        }
+    }
+    try testing.expectEqual(@as(usize, 4), valid_count); // Should have 4 valid positions
+
+    // Demo 4: Multiple elements insertion
+    const container = try z.getElementById(doc, "container");
+    const container_node = elementToNode(container.?);
+    try insertAdjacentHTML(allocator, container_node, .beforeend, "<p>First</p><p>Second</p><span>Third</span>");
+
+    const html3 = try z.serializeToString(allocator, body);
+    defer allocator.free(html3);
+
+    // Normalize and verify multiple elements were inserted
+    const clean_html3 = try z.normalizeWhitespace(allocator, html3, .{});
+    defer allocator.free(clean_html3);
+
+    try testing.expect(std.mem.indexOf(u8, clean_html3, "<p>First</p>") != null);
+    try testing.expect(std.mem.indexOf(u8, clean_html3, "<p>Second</p>") != null);
+    try testing.expect(std.mem.indexOf(u8, clean_html3, "<span>Third</span>") != null);
+}
 
 //=============================================================================
 // TEXT CONTENT FUNCTIONS -

@@ -35,4 +35,6 @@ pub const LexborError = error{
     NotTextNode,
     CssSelectorMatchFailed,
     InvalidNodeType,
+    NoParentNode,
+    InvalidPosition,
 };

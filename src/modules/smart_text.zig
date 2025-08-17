@@ -133,6 +133,116 @@ test "smart HTML escaping with whitespace preservation" {
     try testing.expect(std.mem.startsWith(u8, with_whitespace, "  \t  "));
 }
 
+test "VALUE DEMO: smart_text vs cleaner - different purposes" {
+    const allocator = testing.allocator;
+
+    // ========================================================================
+    // DEMO: The KEY DIFFERENCES between smart_text.zig and cleaner.zig
+    // ========================================================================
+
+    // print("\n🧪 SMART TEXT vs CLEANER - VALUE DEMONSTRATION\n");
+    // print("="*60 ++ "\n");
+
+    // ========================================================================
+    // 1. SMART TEXT: Context-aware escaping for NEW content insertion
+    // ========================================================================
+
+    // Case 1: Regular content needs escaping (user input)
+    const dangerous_input = "Hello <script>alert('xss')</script> & \"quotes\"";
+
+    const safe_escaped = try escapeHtmlSmart(allocator, dangerous_input);
+    defer allocator.free(safe_escaped);
+
+    // Smart escaping makes user input safe
+    try testing.expect(std.mem.indexOf(u8, safe_escaped, "&lt;script&gt;") != null);
+    try testing.expect(std.mem.indexOf(u8, safe_escaped, "&amp;") != null);
+    try testing.expect(std.mem.indexOf(u8, safe_escaped, "&quot;") != null);
+
+    // print("✅ Smart escaping made dangerous input safe: {s}\n", .{safe_escaped[0..50]});
+
+    // Case 2: Whitespace preservation (the "smart" part)
+    const formatted_input = "    function hello() {\n        return '<span>';\n    }";
+
+    const smart_preserved = try escapeHtmlSmart(allocator, formatted_input);
+    defer allocator.free(smart_preserved);
+
+    // Leading whitespace preserved, content escaped
+    try testing.expect(std.mem.startsWith(u8, smart_preserved, "    function"));
+    try testing.expect(std.mem.indexOf(u8, smart_preserved, "&lt;span&gt;") != null);
+
+    // print("✅ Smart escaping preserved formatting while escaping: preserved indentation\n");
+
+    // ========================================================================
+    // 2. CLEANER: DOM structure normalization for EXISTING content
+    // ========================================================================
+
+    const messy_html =
+        \\<div   class=" test "  >
+        \\    <p>   Hello    World   </p>
+        \\    <!-- comment -->
+        \\    <span></span>
+        \\    <script>   const x = 'keep this raw';   </script>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(messy_html);
+    defer z.destroyDocument(doc);
+    const body = try z.bodyElement(doc);
+    const body_node = z.elementToNode(body);
+
+    // Apply cleaning
+    try z.cleanDomTree(allocator, body_node, .{ .remove_comments = true, .remove_empty_elements = true });
+
+    const cleaned_result = try z.serializeToString(allocator, body_node);
+    defer allocator.free(cleaned_result);
+
+    // Cleaner normalized the DOM structure
+    try testing.expect(std.mem.indexOf(u8, cleaned_result, "<!--") == null); // Comments removed
+    try testing.expect(std.mem.indexOf(u8, cleaned_result, "<span></span>") == null); // Empty elements removed
+    try testing.expect(std.mem.indexOf(u8, cleaned_result, "Hello World") != null); // Text normalized
+    try testing.expect(std.mem.indexOf(u8, cleaned_result, "class=\"test\"") != null); // Attributes cleaned
+    try testing.expect(std.mem.indexOf(u8, cleaned_result, "const x = 'keep this raw'") != null); // Script content preserved
+
+    // print("✅ Cleaner normalized DOM structure: comments removed, empty elements removed, whitespace cleaned\n");
+
+    // ========================================================================
+    // 3. CONTEXT AWARENESS: The key smart_text advantage
+    // ========================================================================
+
+    const html_with_script = "<div><script>const config = {url: 'https://api.com'};</script><p></p></div>";
+    const doc2 = try z.parseFromString(html_with_script);
+    defer z.destroyDocument(doc2);
+
+    const div = z.firstChild(z.elementToNode(try z.bodyElement(doc2))).?;
+    const script = z.firstChild(div).?;
+    const script_text = z.firstChild(script);
+
+    if (script_text) |text| {
+        // Smart text knows this is inside a script - DON'T escape
+        const is_no_escape = isNoEscapeTextNode(text);
+        try testing.expect(is_no_escape == true);
+
+        const smart_result = try processTextContentSmart(allocator, text, false);
+        if (smart_result) |result| {
+            defer allocator.free(result);
+            // Should contain raw JavaScript (not escaped)
+            try testing.expect(std.mem.indexOf(u8, result, "const config = {url: 'https://api.com'};") != null);
+        }
+
+        // print("✅ Smart text preserved raw script content (context-aware)\n");
+    }
+
+    // ========================================================================
+    // 4. SUMMARY: Different tools for different jobs
+    // ========================================================================
+
+    // print("\n💡 SUMMARY:\n");
+    // print("• SMART TEXT: Safe insertion of NEW content with context awareness\n");
+    // print("• CLEANER: Normalization of EXISTING DOM structure\n");
+    // print("• Smart text preserves formatting + handles context (script/style vs regular text)\n");
+    // print("• Cleaner removes cruft + normalizes whitespace in DOM\n");
+}
+
 test "context-aware text processing integration" {
     const allocator = testing.allocator;
 

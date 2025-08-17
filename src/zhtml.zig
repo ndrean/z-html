@@ -135,8 +135,11 @@ pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
 pub const parentElement = lxb.parentElement;
 
-// pub const insertNodeBefore = lxb.insertNodeBefore;
-// pub const insertNodeAfter = lxb.insertNodeAfter;
+pub const insertBefore = lxb.insertBefore;
+pub const insertAfter = lxb.insertAfter;
+pub const InsertPosition = lxb.InsertPosition;
+pub const insertAdjacentElement = lxb.insertAdjacentElement;
+pub const insertAdjacentHTML = lxb.insertAdjacentHTML;
 pub const appendChild = lxb.appendChild;
 pub const appendChildren = lxb.appendChildren;
 pub const appendFragment = lxb.appendFragment;

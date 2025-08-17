@@ -155,15 +155,17 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
     if (z.nodeToElement(parent)) |parent_element| {
-        const tag_name = z.tagNameBorrow(parent_element);
+        const qualified_name = z.qualifiedNameBorrow(parent_element);
 
-        // TODO: change this to enum comparison <----------------------------
-        // leave these elements unchanged
-        return std.mem.eql(u8, tag_name, "PRE") or
-            std.mem.eql(u8, tag_name, "CODE") or
-            std.mem.eql(u8, tag_name, "SCRIPT") or
-            std.mem.eql(u8, tag_name, "STYLE") or
-            std.mem.eql(u8, tag_name, "TEXTAREA");
+        // Use NoEscapeTagSet for script/style + additional whitespace-sensitive tags
+        const is_no_escape = z.isNoEscapeElementFast(qualified_name);
+
+        // Also preserve whitespace in <pre>, <code>, <textarea>
+        const is_whitespace_sensitive = std.mem.eql(u8, qualified_name, "pre") or
+            std.mem.eql(u8, qualified_name, "code") or
+            std.mem.eql(u8, qualified_name, "textarea");
+
+        return is_no_escape or is_whitespace_sensitive;
     }
     return false;
 }

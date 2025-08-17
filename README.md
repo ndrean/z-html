@@ -30,7 +30,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - fast "walker" search with _tokens_:
     - `getElementById()`
     - and derivatives class / data-attribute
-  - Collections and search on _exact string matching_:
+  - Collections manipulation including a `CollectionIterator` and search on _exact string matching_:
     - `getElementsById()`
     - "attribute-value" pairs
     - they use an iterator to extract from the results.
@@ -38,10 +38,11 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - create / destroy
   - node / element navigation
   - append / insert / remove
-- DOM cleaning with options (remove comments, whitespace, empty nodes)
+- DOM normalization with options (remove comments, whitespace, empty nodes)
+- Smart text
 
 > [!NOTE]
-> Some functions borrow memory from `lexbor` or zero-copy: their result is consummed immediately. For example, `getTextContentBorrow`, `qualifiedNameBorrow`. These functions normally also have an allocated version when the data must outlive the current function: you can pass pass freely the data. For exampple, `getTextContent`, `qualifiedName`.
+> Some functions borrow memory from `lexbor` or zero-copy: their result is consummed immediately. We opted for the following conventiion: add `_nc` (for _no_copy_) to the allocated version. For example, `getTextContent_nc`, `qualifiedName_nc`. These functions normally also have an allocated version when the data must outlive the current function: you can pass pass freely the data. For exampple, `getTextContent`, `qualifiedName`.
 
 ## Examples
 
@@ -129,6 +130,7 @@ test "Append fragment" {
         \\</div>
     ;
 
+  // collapse whitespace-only text nodes
   const expected = try z.normalizeWhitespace(allocator, expected_fragment);
   defer allocator.free(expected);
   
@@ -138,7 +140,7 @@ test "Append fragment" {
 
 ### DOM structure
 
-We can debug the document structure:
+We can print the document structure:
 
 ```cpp
   // continue
