@@ -1036,7 +1036,8 @@ pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomElement, p
     const pos_enum: InsertPosition = if (T == InsertPosition)
         position
     else switch (@typeInfo(T)) {
-        .enum_literal => position, // Handle enum literals like .beforebegin
+        .enum_literal => position, // Handle enum literals like .
+        // this need to return, so need break, which in turn need a block
         else => blk: {
             const str: []const u8 = position[0..];
             break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
@@ -1176,7 +1177,7 @@ test "insertAdjacentElement - all positions" {
     const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
     try insertAdjacentElement(target.?, .afterend, after_element);
 
-    const invalid = try insertAdjacentElement(target.?, "invalid", after_element);
+    const invalid = insertAdjacentElement(target.?, "invalid", after_element);
     try testing.expectError(Err.InvalidPosition, invalid);
 
     const body = try bodyNode(doc);
