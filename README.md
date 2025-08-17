@@ -17,7 +17,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - document parsing: `parseFromString()`
   - chunk processing
   - fragment / context-aware parsing
-  - `setInnerHTML()`
+  - `setInnerHTML()` and `insertAdjacentHTML()`
 - Serialization:
   - tree: `serializeToString()`
   - `innerHTML()`

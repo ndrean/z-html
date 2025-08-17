@@ -300,6 +300,7 @@ pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 pub const getElementsByTagName = collection.getElementsByTagName;
 pub const getElementsByName = collection.getElementsByName;
+pub const getElementsByClassWalker = walker.getElementsByClassWalker;
 
 //=========================================
 // Class handling - unified function and convenience wrappers
