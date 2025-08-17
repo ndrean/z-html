@@ -946,11 +946,10 @@ pub const InsertPosition = enum {
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
 /// const new_div = try z.createElement(doc, "div", &.{});
-/// try insertAdjacentElement(z.elementToNode(target.?), .beforebegin, z.elementToNode(new_div));
-/// try insertAdjacentElement(z.elementToNode(target.?), "beforeend", z.elementToNode(new_div));
-/// ---
+/// try insertAdjacentElement(target.?, .beforebegin, new_div);
+/// try insertAdjacentElement(target.?, "beforeend", new_div);
 /// ```
-pub fn insertAdjacentElement(target: *z.DomNode, position: anytype, element: *z.DomNode) !void {
+pub fn insertAdjacentElement(target: *z.DomElement, position: anytype, element: *z.DomElement) !void {
     const T = @TypeOf(position);
     const pos_enum: InsertPosition = if (T == InsertPosition)
         position
@@ -962,30 +961,33 @@ pub fn insertAdjacentElement(target: *z.DomNode, position: anytype, element: *z.
         },
     };
 
+    const target_node = elementToNode(target);
+    const element_node = elementToNode(element);
+
     switch (pos_enum) {
         .beforebegin => {
             // Insert before the target element (as previous sibling)
-            const parent = parentNode(target) orelse return Err.NoParentNode;
-            insertBefore(target, element);
+            const parent = parentNode(target_node) orelse return Err.NoParentNode;
+            insertBefore(target_node, element_node);
             _ = parent; // Suppress unused variable warning
         },
         .afterbegin => {
             // Insert as first child of target element
-            const first_child = firstChild(target);
+            const first_child = firstChild(target_node);
             if (first_child) |first| {
-                insertBefore(first, element);
+                insertBefore(first, element_node);
             } else {
-                appendChild(target, element);
+                appendChild(target_node, element_node);
             }
         },
         .beforeend => {
             // Insert as last child of target element
-            appendChild(target, element);
+            appendChild(target_node, element_node);
         },
         .afterend => {
             // Insert after the target element (as next sibling)
-            const parent = parentNode(target) orelse return Err.NoParentNode;
-            insertAfter(target, element);
+            const parent = parentNode(target_node) orelse return Err.NoParentNode;
+            insertAfter(target_node, element_node);
             _ = parent; // Suppress unused variable warning
         },
     }
@@ -1020,11 +1022,11 @@ fn insertFragmentAfter(reference_node: *z.DomNode, fragment: *z.DomNode) void {
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// try insertAdjacentHTML(allocator, z.elementToNode(target.?), .beforeend, "<p>New content</p>");
-/// try insertAdjacentHTML(allocator, z.elementToNode(target.?), "beforeend", "<p>New content</p>");
+/// try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>New content</p>");
+/// try insertAdjacentHTML(allocator, target.?, "beforeend", "<p>New content</p>");
 /// ---
 /// ```
-pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomNode, position: anytype, html: []const u8) !void {
+pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomElement, position: anytype, html: []const u8) !void {
     const T = @TypeOf(position);
     const pos_enum: InsertPosition = if (T == InsertPosition)
         position
@@ -1036,6 +1038,8 @@ pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomNode, posi
         },
     };
 
+    const target_node = elementToNode(target);
+
     // Parse the HTML fragment once
     const fragment_result = try z.parseFragmentSimple(allocator, html);
     defer z.destroyNode(fragment_result.fragment_root);
@@ -1043,24 +1047,24 @@ pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomNode, posi
     // Use optimized fragment insertion for each position
     switch (pos_enum) {
         .beforebegin => {
-            _ = parentNode(target) orelse return Err.NoParentNode;
-            insertFragmentBefore(target, fragment_result.fragment_root);
+            _ = parentNode(target_node) orelse return Err.NoParentNode;
+            insertFragmentBefore(target_node, fragment_result.fragment_root);
         },
         .afterbegin => {
-            if (firstChild(target)) |first| {
+            if (firstChild(target_node)) |first| {
                 insertFragmentBefore(first, fragment_result.fragment_root);
             } else {
                 // Target is empty, just append all
-                appendFragment(target, fragment_result.fragment_root);
+                appendFragment(target_node, fragment_result.fragment_root);
             }
         },
         .beforeend => {
             // Use existing optimized appendFragment
-            appendFragment(target, fragment_result.fragment_root);
+            appendFragment(target_node, fragment_result.fragment_root);
         },
         .afterend => {
-            _ = parentNode(target) orelse return Err.NoParentNode;
-            insertFragmentAfter(target, fragment_result.fragment_root);
+            _ = parentNode(target_node) orelse return Err.NoParentNode;
+            insertFragmentAfter(target_node, fragment_result.fragment_root);
         },
     }
 }
@@ -1104,19 +1108,18 @@ test "Flexible insertAdjacentHTML" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Test 1: Using enum values directly (most natural for Zig)
-    try insertAdjacentHTML(allocator, target_node, .beforebegin, "<p>Before Begin</p>");
+    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>Before Begin</p>");
 
     // Test 2: Using string values directly (JavaScript-style)
-    try insertAdjacentHTML(allocator, target_node, "afterbegin", "<span>After Begin</span>");
+    try insertAdjacentHTML(allocator, target.?, "afterbegin", "<span>After Begin</span>");
 
     // Test 3: Using InsertPosition enum explicitly
-    try insertAdjacentHTML(allocator, target_node, InsertPosition.beforeend, "<span>Before End</span>");
+    try insertAdjacentHTML(allocator, target.?, InsertPosition.beforeend, "<span>Before End</span>");
 
     // Test 4: Using string for afterend
-    try insertAdjacentHTML(allocator, target_node, "afterend", "<p>After End</p>");
+    try insertAdjacentHTML(allocator, target.?, "afterend", "<p>After End</p>");
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
@@ -1129,12 +1132,12 @@ test "Flexible insertAdjacentHTML" {
     try testing.expectEqualStrings(expected, clean_html);
 
     // Test 5: Error handling for invalid position string
-    const invalid_result = insertAdjacentHTML(allocator, target_node, "invalid", "<p>Test</p>");
+    const invalid_result = insertAdjacentHTML(allocator, target.?, "invalid", "<p>Test</p>");
     try testing.expectError(Err.InvalidPosition, invalid_result);
 
     // Test 6: More natural usage examples
-    try insertAdjacentHTML(allocator, target_node, .beforeend, "<em>Direct enum</em>");
-    try insertAdjacentHTML(allocator, target_node, "beforeend", "<strong>Direct string</strong>");
+    try insertAdjacentHTML(allocator, target.?, .beforeend, "<em>Direct enum</em>");
+    try insertAdjacentHTML(allocator, target.?, "beforeend", "<strong>Direct string</strong>");
 }
 
 test "InsertPosition.fromString" {
@@ -1151,23 +1154,22 @@ test "insertAdjacentElement - all positions" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Test beforebegin - insert before the target element
     const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
-    try insertAdjacentElement(target_node, .beforebegin, elementToNode(before_element));
+    try insertAdjacentElement(target.?, .beforebegin, before_element);
 
     // Test afterbegin - insert as first child
     const afterbegin_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "first" }});
-    try insertAdjacentElement(target_node, .afterbegin, elementToNode(afterbegin_element));
+    try insertAdjacentElement(target.?, .afterbegin, afterbegin_element);
 
     // Test beforeend - insert as last child
     const beforeend_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "last" }});
-    try insertAdjacentElement(target_node, .beforeend, elementToNode(beforeend_element));
+    try insertAdjacentElement(target.?, .beforeend, beforeend_element);
 
     // Test afterend - insert after the target element
     const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
-    try insertAdjacentElement(target_node, .afterend, elementToNode(after_element));
+    try insertAdjacentElement(target.?, .afterend, after_element);
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
@@ -1183,19 +1185,18 @@ test "insertAdjacentHTML - all positions" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Test beforebegin
-    try insertAdjacentHTML(allocator, target_node, .beforebegin, "<p id=\"before\">Before</p>");
+    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p id=\"before\">Before</p>");
 
     // Test afterbegin
-    try insertAdjacentHTML(allocator, target_node, .afterbegin, "<span id=\"first\">First</span>");
+    try insertAdjacentHTML(allocator, target.?, .afterbegin, "<span id=\"first\">First</span>");
 
     // Test beforeend
-    try insertAdjacentHTML(allocator, target_node, .beforeend, "<span id=\"last\">Last</span>");
+    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span id=\"last\">Last</span>");
 
     // Test afterend
-    try insertAdjacentHTML(allocator, target_node, .afterend, "<p id=\"after\">After</p>");
+    try insertAdjacentHTML(allocator, target.?, .afterend, "<p id=\"after\">After</p>");
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
@@ -1211,10 +1212,9 @@ test "insertAdjacentHTML - multiple elements" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Insert multiple elements at once
-    try insertAdjacentHTML(allocator, target_node, .afterend, "<p>First</p><p>Second</p><span>Third</span>");
+    try insertAdjacentHTML(allocator, target.?, .afterend, "<p>First</p><p>Second</p><span>Third</span>");
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
@@ -1230,11 +1230,10 @@ test "insertAdjacentElement - empty target" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Test afterbegin on empty element
     const child_element = try z.createElement(doc, "p", &.{.{ .name = "class", .value = "child" }});
-    try insertAdjacentElement(target_node, .afterbegin, elementToNode(child_element));
+    try insertAdjacentElement(target.?, .afterbegin, child_element);
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
@@ -1258,16 +1257,15 @@ test "insertAdjacent comprehensive demo" {
     defer destroyDocument(doc);
 
     const target = try z.getElementById(doc, "target");
-    const target_node = elementToNode(target.?);
 
     // Demo 1: insertAdjacentElement with all positions
     const before_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "before" }});
     try z.setTextContent(elementToNode(before_elem), "Before Begin");
-    try insertAdjacentElement(target_node, .beforebegin, elementToNode(before_elem));
+    try insertAdjacentElement(target.?, .beforebegin, before_elem);
 
     const after_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "after" }});
     try z.setTextContent(elementToNode(after_elem), "After End");
-    try insertAdjacentElement(target_node, .afterend, elementToNode(after_elem));
+    try insertAdjacentElement(target.?, .afterend, after_elem);
 
     // Show result after insertAdjacentElement
     const body = try bodyNode(doc);
@@ -1282,8 +1280,8 @@ test "insertAdjacent comprehensive demo" {
     try testing.expectEqualStrings(expected1, clean_html1);
 
     // Demo 2: insertAdjacentHTML with different positions
-    try insertAdjacentHTML(allocator, target_node, .afterbegin, "<span style=\"color: blue;\">First Child</span>");
-    try insertAdjacentHTML(allocator, target_node, .beforeend, "<span style=\"color: red;\">Last Child</span>");
+    try insertAdjacentHTML(allocator, target.?, .afterbegin, "<span style=\"color: blue;\">First Child</span>");
+    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span style=\"color: red;\">Last Child</span>");
 
     // Show final result
     const html2 = try z.serializeToString(allocator, body);
@@ -1309,8 +1307,7 @@ test "insertAdjacent comprehensive demo" {
 
     // Demo 4: Multiple elements insertion
     const container = try z.getElementById(doc, "container");
-    const container_node = elementToNode(container.?);
-    try insertAdjacentHTML(allocator, container_node, .beforeend, "<p>First</p><p>Second</p><span>Third</span>");
+    try insertAdjacentHTML(allocator, container.?, .beforeend, "<p>First</p><p>Second</p><span>Third</span>");
 
     const html3 = try z.serializeToString(allocator, body);
     defer allocator.free(html3);
