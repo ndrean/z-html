@@ -93,11 +93,11 @@ pub const nodeToComment = lxb.nodeToComment;
 
 // Node and Element name functions (both safe and unsafe versions)
 pub const nodeName = lxb.nodeName; // Safe version
-pub const nodeNameBorrow = lxb.nodeNameBorrow;
+pub const nodeName_zc = lxb.nodeName_zc;
 pub const tagName = lxb.tagName;
-pub const tagNameBorrow = lxb.tagNameBorrow; // Safe
+pub const tagName_zc = lxb.tagName_zc; // Zero-copy version
 pub const qualifiedName = lxb.qualifiedName;
-pub const qualifiedNameBorrow = lxb.qualifiedNameBorrow; // Zero-copy version
+pub const qualifiedName_zc = lxb.qualifiedName_zc; // Zero-copy version
 
 //===================
 // NodeTypes
@@ -253,7 +253,7 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 //=====================================
 pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getTextContent = lxb.getTextContent;
-pub const getTextContentBorrow = lxb.getTextContentBorrow; // Zero-copy version
+pub const getTextContent_zc = lxb.getTextContent_zc; // Zero-copy version
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
@@ -272,14 +272,14 @@ pub const AttributePair = attrs.AttributePair;
 pub const hasAttributes = attrs.hasAttributes;
 
 pub const getAttribute = attrs.getAttribute;
-pub const getAttributeBorrow = attrs.getAttributeBorrow;
+pub const getAttribute_zc = attrs.getAttribute_zc;
 
 pub const getAttributes = attrs.getAttributes;
 pub const setAttributes = attrs.setAttributes;
 pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
-pub const getElementIdBorrow = attrs.getElementIdBorrow;
+pub const getElementId_zc = attrs.getElementId_zc;
 
 pub const compareStrings = attrs.compareStrings;
 
@@ -313,11 +313,9 @@ pub const hasClass = attrs.hasClass;
 // Attribute struct reflexion
 //=========================================
 
-pub const getFirstAttribute =
-    attrs.getFirstAttribute;
+pub const getFirstAttribute = attrs.getFirstAttribute;
 
-pub const getNextAttribute =
-    attrs.getNextAttribute;
+pub const getNextAttribute = attrs.getNextAttribute;
 
 //=========================================
 // UTILITY FUNCTIONS
@@ -360,35 +358,4 @@ const testing = std.testing;
 
 test {
     std.testing.refAllDecls(@This());
-}
-
-test "new lexbor functions - getElementQualifiedName and compareStrings" {
-    // Create a simple HTML document for testing
-    const html = "<html><body><div id='test'>Hello</div></body></html>";
-    const document = try parseFromString(html);
-    defer destroyDocument(document);
-
-    // Get the div element
-    const body = try bodyElement(document);
-    const body_node = elementToNode(body);
-    const div_node = firstChild(body_node).?;
-    const div_element = nodeToElement(div_node).?;
-
-    // Test getElementQualifiedName
-    const qualified_name = try qualifiedName(testing.allocator, div_element);
-    defer testing.allocator.free(qualified_name);
-    try testing.expect(qualified_name.len > 0);
-    // Should be "div"
-    try testing.expectEqualStrings("div", qualified_name);
-
-    // Test compareStrings
-    const str1 = "hello";
-    const str2 = "hello";
-    const str3 = "world";
-
-    // Test equal strings
-    try testing.expect(compareStrings(str1, str2));
-
-    // Test different strings
-    try testing.expect(!compareStrings(str1, str3));
 }

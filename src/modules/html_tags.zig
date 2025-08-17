@@ -42,7 +42,7 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
 
 /// [HtmlTag] Tag name matcher function
 pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
-    const tag = z.parseTag(z.qualifiedNameBorrow(element));
+    const tag = z.parseTag(z.qualifiedName_zc(element));
     const target_tag = parseTag(tag_name); // Safe for immediate use
     return tag == target_tag;
 }
@@ -252,7 +252,7 @@ pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
 /// }
 /// ```
 pub fn isVoidElementFastZeroCopy(element: *z.DomElement) bool {
-    const qualified_name = z.qualifiedNameBorrow(element);
+    const qualified_name = z.qualifiedName_zc(element);
     return isVoidElementFast(qualified_name);
 }
 
@@ -271,7 +271,7 @@ pub fn isVoidElementFastZeroCopy(element: *z.DomElement) bool {
 /// }
 /// ```
 pub fn isNoEscapeElementFastZeroCopy(element: *z.DomElement) bool {
-    const qualified_name = z.qualifiedNameBorrow(element);
+    const qualified_name = z.qualifiedName_zc(element);
     return isNoEscapeElementFast(qualified_name);
 }
 
@@ -427,7 +427,7 @@ test "lexbor NODENAME and self.toString" {
 
     for (tags) |tag| {
         const element = try z.createElement(doc, tag.toString(), &.{});
-        const node_name = z.nodeNameBorrow(z.elementToNode(element));
+        const node_name = z.nodeName_zc(z.elementToNode(element));
         const expected_name = tag.toString();
 
         // Note: DOM names are typically uppercase
@@ -456,12 +456,12 @@ test "mixing enum and string creation" {
         &.{},
     );
 
-    try testing.expectEqualStrings("DIV", z.nodeNameBorrow(z.elementToNode(div)));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeNameBorrow(z.elementToNode(custom)));
-    try testing.expectEqualStrings("X-WIDGET", z.nodeNameBorrow(z.elementToNode(web_component)));
-    try testing.expectEqualStrings("DIV", z.tagNameBorrow(div));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagNameBorrow(custom));
-    try testing.expectEqualStrings("X-WIDGET", z.tagNameBorrow(web_component));
+    try testing.expectEqualStrings("DIV", z.nodeName_zc(z.elementToNode(div)));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName_zc(z.elementToNode(custom)));
+    try testing.expectEqualStrings("X-WIDGET", z.nodeName_zc(z.elementToNode(web_component)));
+    try testing.expectEqualStrings("DIV", z.tagName_zc(div));
+    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagName_zc(custom));
+    try testing.expectEqualStrings("X-WIDGET", z.tagName_zc(web_component));
 
     // Test both allocation and zero-copy versions
     const allocator = testing.allocator;
@@ -476,8 +476,8 @@ test "mixing enum and string creation" {
     try testing.expectEqualStrings("div", qdiv);
 
     // Zero-copy version (fast, but only valid during element lifetime)
-    const qcustom_borrowed = z.qualifiedNameBorrow(custom);
-    const qdiv_borrowed = z.qualifiedNameBorrow(div);
+    const qcustom_borrowed = z.qualifiedName_zc(custom);
+    const qdiv_borrowed = z.qualifiedName_zc(div);
     try testing.expectEqualStrings("my-custom-element", qcustom_borrowed);
     try testing.expectEqualStrings("div", qdiv_borrowed);
 }

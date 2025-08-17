@@ -504,7 +504,7 @@ test "CSS selector basic functionality" {
     // print("Found {} elements with ID 'my-id'\n", .{id_elements.len});
     try testing.expect(id_elements.len == 1);
 
-    const element_name = z.nodeNameBorrow(z.elementToNode(id_elements[0]));
+    const element_name = z.nodeName_zc(z.elementToNode(id_elements[0]));
     // print("Element with ID 'my-id' is: {s}\n", .{element_name});
     try testing.expectEqualStrings("P", element_name);
 }
@@ -529,7 +529,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(first_target != null);
 
     if (first_target) |element| {
-        const tag_name = z.tagNameBorrow(element);
+        const tag_name = z.tagName_zc(element);
         try testing.expectEqualStrings("P", tag_name); // Should be the first <p>
     }
 
@@ -543,7 +543,7 @@ test "querySelector vs querySelectorAll functionality" {
     try testing.expect(unique_element != null);
 
     if (unique_element) |element| {
-        const tag_name = z.tagNameBorrow(element);
+        const tag_name = z.tagName_zc(element);
         try testing.expectEqualStrings("P", tag_name);
     }
 
@@ -587,7 +587,7 @@ test "CssSelectorEngine querySelector (low-level) functionality" {
         try testing.expect(element != null);
 
         if (element) |el| {
-            const tag_name = z.tagNameBorrow(el);
+            const tag_name = z.tagName_zc(el);
             try testing.expectEqualStrings("P", tag_name);
         }
     }
@@ -644,8 +644,8 @@ test "querySelector performance vs querySelectorAll[0]" {
     try testing.expect(target1.? == target2);
 
     // Test that querySelector actually stops early (both should work, but querySelector is more efficient)
-    const tag_name1 = z.tagNameBorrow(target1.?);
-    const tag_name2 = z.tagNameBorrow(target2);
+    const tag_name1 = z.tagName_zc(target1.?);
+    const tag_name2 = z.tagName_zc(target2);
     try testing.expectEqualStrings(tag_name1, tag_name2);
     try testing.expectEqualStrings("P", tag_name1);
 }
@@ -720,12 +720,12 @@ test "challenging CSS selectors - lexbor example" {
 
     // Verify the results
     // for (first_results, 0..) |node, i| {
-    //     const node_name = z.nodeNameBorrow(node);
+    //     const node_name = z.nodeName_zc(node);
     //     print("First result {d}: {s}\n", .{ i, node_name });
     // }
 
     // for (second_results, 0..) |node, i| {
-    //     const node_name = z.nodeNameBorrow(node);
+    //     const node_name = z.nodeName_zc(node);
     //     print("Second result {d}: {s}\n", .{ i, node_name });
     // }
 }

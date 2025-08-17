@@ -67,7 +67,7 @@ fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
 
     if (!z.hasAttribute(element, "id")) return LEXBOR_ACTION_OK;
 
-    const id_value = z.getElementIdBorrow(element);
+    const id_value = z.getElementId_zc(element);
     if (id_value.len == 0) return LEXBOR_ACTION_OK;
     const match = std.mem.eql(u8, id_value, search_ctx.target_id);
 
@@ -126,7 +126,7 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
                 matches = true;
             } else {
                 // Otherwise, check the attribute value
-                const attr_value = z.getAttributeBorrow(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+                const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
                 matches = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
             }
         },
@@ -141,7 +141,7 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
             // }
 
             // Get the class value and search for the target class
-            // const class_value = z.getAttributeBorrow(element, "class") orelse return LEXBOR_ACTION_OK;
+            // const class_value = z.getAttribute_zc(element, "class") orelse return LEXBOR_ACTION_OK;
 
             // var iterator = std.mem.splitScalar(u8, class_value, ' ');
             // while (iterator.next()) |class| {
@@ -184,7 +184,7 @@ fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 
     }
 
     // Otherwise, check the attribute value
-    const attr_value = z.getAttributeBorrow(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+    const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
 
     const match = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
 
@@ -455,55 +455,55 @@ test "optimized walker-based search functions" {
     // Test 1: getElementByIdFast - should find elements by ID
     const header = try getElementByIdFast(doc, "header");
     try testing.expect(header != null);
-    try testing.expectEqualStrings("DIV", z.tagNameBorrow(header.?));
+    try testing.expectEqualStrings("DIV", z.tagName_zc(header.?));
 
     const content = try getElementByIdFast(doc, "content");
     try testing.expect(content != null);
-    try testing.expectEqualStrings("MAIN", z.tagNameBorrow(content.?));
+    try testing.expectEqualStrings("MAIN", z.tagName_zc(content.?));
 
     const footer = try getElementByIdFast(doc, "footer");
     try testing.expect(footer != null);
-    try testing.expectEqualStrings("FOOTER", z.tagNameBorrow(footer.?));
+    try testing.expectEqualStrings("FOOTER", z.tagName_zc(footer.?));
 
     // Test 2: getElementByClassFast - should find first element with class
     const nav_link = try getElementByClassFast(doc, "nav-link");
     try testing.expect(nav_link != null);
-    try testing.expectEqualStrings("A", z.tagNameBorrow(nav_link.?));
+    try testing.expectEqualStrings("A", z.tagName_zc(nav_link.?));
 
     const post = try getElementByClassFast(doc, "post");
     try testing.expect(post != null);
-    try testing.expectEqualStrings("ARTICLE", z.tagNameBorrow(post.?));
+    try testing.expectEqualStrings("ARTICLE", z.tagName_zc(post.?));
 
     const widget = try getElementByClassFast(doc, "widget");
     try testing.expect(widget != null);
-    try testing.expectEqualStrings("DIV", z.tagNameBorrow(widget.?));
+    try testing.expectEqualStrings("DIV", z.tagName_zc(widget.?));
 
     // Test 3: getElementByAttributeFast - attribute existence only
     const href_element = try getElementByAttributeFast(doc, "href", null);
     try testing.expect(href_element != null);
-    try testing.expectEqualStrings("A", z.tagNameBorrow(href_element.?));
+    try testing.expectEqualStrings("A", z.tagName_zc(href_element.?));
 
     // Test 4: getElementByAttributeFast - attribute with specific value
     const home_link = try getElementByAttributeFast(doc, "href", "/home");
     try testing.expect(home_link != null);
-    try testing.expectEqualStrings("A", z.tagNameBorrow(home_link.?));
+    try testing.expectEqualStrings("A", z.tagName_zc(home_link.?));
 
     const about_link = try getElementByAttributeFast(doc, "href", "/about");
     try testing.expect(about_link != null);
-    try testing.expectEqualStrings("A", z.tagNameBorrow(about_link.?));
+    try testing.expectEqualStrings("A", z.tagName_zc(about_link.?));
 
     // Test 5: getElementByDataAttributeFast - data attributes
     const header_section = try getElementByDataAttributeFast(doc, "section", "header");
     try testing.expect(header_section != null);
-    try testing.expectEqualStrings("DIV", z.tagNameBorrow(header_section.?));
+    try testing.expectEqualStrings("DIV", z.tagName_zc(header_section.?));
 
     const home_page = try getElementByDataAttributeFast(doc, "page", "home");
     try testing.expect(home_page != null);
-    try testing.expectEqualStrings("A", z.tagNameBorrow(home_page.?));
+    try testing.expectEqualStrings("A", z.tagName_zc(home_page.?));
 
     const tech_article = try getElementByDataAttributeFast(doc, "category", "tech");
     try testing.expect(tech_article != null);
-    try testing.expectEqualStrings("ARTICLE", z.tagNameBorrow(tech_article.?));
+    try testing.expectEqualStrings("ARTICLE", z.tagName_zc(tech_article.?));
 
     // Test 6: Non-existent searches should return null
     const missing_id = try getElementByIdFast(doc, "nonexistent");
@@ -544,7 +544,7 @@ test "walker-based search vs existing implementations comparison" {
     // Test class search - walker vs manual iteration
     const class_fast = try getElementByClassFast(doc, "text");
     try testing.expect(class_fast != null);
-    try testing.expectEqualStrings("P", z.tagNameBorrow(class_fast.?));
+    try testing.expectEqualStrings("P", z.tagName_zc(class_fast.?));
 
     // Verify the found element actually has the class
     try testing.expect(z.hasClass(class_fast.?, "text"));
@@ -552,7 +552,7 @@ test "walker-based search vs existing implementations comparison" {
     // Test data attribute search
     const data_element = try getElementByDataAttributeFast(doc, "priority", "high");
     try testing.expect(data_element != null);
-    try testing.expectEqualStrings("SPAN", z.tagNameBorrow(data_element.?));
+    try testing.expectEqualStrings("SPAN", z.tagName_zc(data_element.?));
 
     // Verify the data attribute value using allocator
     if (try z.getAttribute(allocator, data_element.?, "data-priority")) |priority| {

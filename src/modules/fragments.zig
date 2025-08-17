@@ -196,8 +196,8 @@ test "basic fragment parsing" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 1);
-    try testing.expectEqualStrings("DIV", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("div", z.qualifiedNameBorrow(elements[0]));
+    try testing.expectEqualStrings("DIV", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("div", z.qualifiedName_zc(elements[0]));
     const class = try z.getAttribute(allocator, elements[0], "class");
     defer if (class) |c| {
         allocator.free(c);
@@ -240,7 +240,7 @@ test "table fragment parsing with context" {
 
     // print("Table elements found: {}\n", .{elements.len});
     // for (elements, 0..) |element, i| {
-    //     print("Element {}: {s}\n", .{ i, z.tagNameBorrow(element) });
+    //     print("Element {}: {s}\n", .{ i, z.tagName_zc(element) });
     // }
 
     const serialized = try result.serialize(allocator);
@@ -251,19 +251,19 @@ test "table fragment parsing with context" {
     try testing.expect(elements.len >= 1);
 
     // Check if we got TBODY wrapper or direct TR elements
-    const first_tag = z.parseTag(z.qualifiedNameBorrow(elements[0]));
+    const first_tag = z.parseTag(z.qualifiedName_zc(elements[0]));
     if (first_tag == .tbody) {
         // lexbor auto-wrapped in TBODY, check its children
         const tbody_children = try z.getChildren(allocator, elements[0]);
         defer allocator.free(tbody_children);
         try testing.expect(tbody_children.len == 2); // Two TR elements
-        try testing.expectEqualStrings("tr", z.qualifiedNameBorrow(tbody_children[0]));
-        try testing.expectEqualStrings("TR", z.tagNameBorrow(tbody_children[1]));
+        try testing.expectEqualStrings("tr", z.qualifiedName_zc(tbody_children[0]));
+        try testing.expectEqualStrings("TR", z.tagName_zc(tbody_children[1]));
     } else {
         // Direct TR elements
         try testing.expect(elements.len == 2); // Two <tr> elements
-        try testing.expectEqualStrings("TR", z.tagNameBorrow(elements[0]));
-        try testing.expectEqualStrings("TR", z.tagNameBorrow(elements[1]));
+        try testing.expectEqualStrings("TR", z.tagName_zc(elements[0]));
+        try testing.expectEqualStrings("TR", z.tagName_zc(elements[1]));
     }
 }
 
@@ -293,8 +293,8 @@ test "select options fragment" {
 
     // Should have 3 options + 1 optgroup = 4 elements
     try testing.expect(elements.len == 4);
-    try testing.expectEqualStrings("OPTION", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("optgroup", z.qualifiedNameBorrow(elements[3]));
+    try testing.expectEqualStrings("OPTION", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("optgroup", z.qualifiedName_zc(elements[3]));
 }
 
 test "list item fragments with context" {
@@ -314,9 +314,9 @@ test "list item fragments with context" {
     defer allocator.free(ul_elements);
 
     try testing.expect(ul_elements.len == 3);
-    try testing.expectEqualStrings("LI", z.tagNameBorrow(ul_elements[0]));
-    try testing.expectEqualStrings("LI", z.tagNameBorrow(ul_elements[1]));
-    try testing.expectEqualStrings("LI", z.tagNameBorrow(ul_elements[2]));
+    try testing.expectEqualStrings("LI", z.tagName_zc(ul_elements[0]));
+    try testing.expectEqualStrings("LI", z.tagName_zc(ul_elements[1]));
+    try testing.expectEqualStrings("LI", z.tagName_zc(ul_elements[2]));
 
     // Test with ordered list context
     const ol_result = try parseFragment(allocator, list_items_fragment, .ol);
@@ -326,7 +326,7 @@ test "list item fragments with context" {
     defer allocator.free(ol_elements);
 
     try testing.expect(ol_elements.len == 3);
-    try testing.expectEqualStrings("LI", z.tagNameBorrow(ol_elements[0]));
+    try testing.expectEqualStrings("LI", z.tagName_zc(ol_elements[0]));
 
     const ol_serialized = try ol_result.serialize(allocator);
     defer allocator.free(ol_serialized);
@@ -354,10 +354,10 @@ test "definition list fragments" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 4); // 2 dt + 2 dd elements
-    try testing.expectEqualStrings("DT", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("DD", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("DT", z.tagNameBorrow(elements[2]));
-    try testing.expectEqualStrings("DD", z.tagNameBorrow(elements[3]));
+    try testing.expectEqualStrings("DT", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("DD", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("DT", z.tagName_zc(elements[2]));
+    try testing.expectEqualStrings("DD", z.tagName_zc(elements[3]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -382,9 +382,9 @@ test "fieldset legend fragments" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3); // legend + label + input
-    try testing.expectEqualStrings("LEGEND", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("LABEL", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("INPUT", z.tagNameBorrow(elements[2]));
+    try testing.expectEqualStrings("LEGEND", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("LABEL", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("INPUT", z.tagName_zc(elements[2]));
 }
 
 test "details summary fragments" {
@@ -406,9 +406,9 @@ test "details summary fragments" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3); // summary + p + ul
-    try testing.expectEqualStrings("SUMMARY", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("P", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("UL", z.tagNameBorrow(elements[2]));
+    try testing.expectEqualStrings("SUMMARY", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("P", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("UL", z.tagName_zc(elements[2]));
 }
 
 test "optgroup nested options" {
@@ -427,9 +427,9 @@ test "optgroup nested options" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3);
-    try testing.expectEqualStrings("OPTION", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("OPTION", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("OPTION", z.tagNameBorrow(elements[2]));
+    try testing.expectEqualStrings("OPTION", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("OPTION", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("OPTION", z.tagName_zc(elements[2]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -454,9 +454,9 @@ test "image map area fragments" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3);
-    try testing.expectEqualStrings("AREA", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("AREA", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("AREA", z.tagNameBorrow(elements[2]));
+    try testing.expectEqualStrings("AREA", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("AREA", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("AREA", z.tagName_zc(elements[2]));
 }
 
 test "figure with image and caption" {
@@ -474,8 +474,8 @@ test "figure with image and caption" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 2); // img + figcaption
-    try testing.expectEqualStrings("IMG", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("FIGCAPTION", z.tagNameBorrow(elements[1]));
+    try testing.expectEqualStrings("IMG", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("FIGCAPTION", z.tagName_zc(elements[1]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -502,11 +502,11 @@ test "form input fragments" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 5); // 2 labels + 2 inputs + 1 button
-    try testing.expectEqualStrings("LABEL", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("INPUT", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("LABEL", z.tagNameBorrow(elements[2]));
-    try testing.expectEqualStrings("INPUT", z.tagNameBorrow(elements[3]));
-    try testing.expectEqualStrings("BUTTON", z.tagNameBorrow(elements[4]));
+    try testing.expectEqualStrings("LABEL", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("INPUT", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("LABEL", z.tagName_zc(elements[2]));
+    try testing.expectEqualStrings("INPUT", z.tagName_zc(elements[3]));
+    try testing.expectEqualStrings("BUTTON", z.tagName_zc(elements[4]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -532,10 +532,10 @@ test "video with sources" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 4); // 2 sources + 1 track + 1 p
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("TRACK", z.tagNameBorrow(elements[2]));
-    try testing.expectEqualStrings("P", z.tagNameBorrow(elements[3]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("TRACK", z.tagName_zc(elements[2]));
+    try testing.expectEqualStrings("P", z.tagName_zc(elements[3]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -561,10 +561,10 @@ test "audio with sources" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 4); // 2 sources + 1 track + 1 p
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("TRACK", z.tagNameBorrow(elements[2]));
-    try testing.expectEqualStrings("P", z.tagNameBorrow(elements[3]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("TRACK", z.tagName_zc(elements[2]));
+    try testing.expectEqualStrings("P", z.tagName_zc(elements[3]));
 }
 
 test "picture with responsive sources" {
@@ -583,9 +583,9 @@ test "picture with responsive sources" {
     defer allocator.free(elements);
 
     try testing.expect(elements.len == 3); // 2 sources + 1 img
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[0]));
-    try testing.expectEqualStrings("SOURCE", z.tagNameBorrow(elements[1]));
-    try testing.expectEqualStrings("IMG", z.tagNameBorrow(elements[2]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[0]));
+    try testing.expectEqualStrings("SOURCE", z.tagName_zc(elements[1]));
+    try testing.expectEqualStrings("IMG", z.tagName_zc(elements[2]));
 
     const serialized = try result.serialize(allocator);
     defer allocator.free(serialized);
@@ -662,9 +662,9 @@ test "multiple fragment parsing and composition" {
     defer allocator.free(app_children);
 
     try testing.expect(app_children.len == 3); // header, main, footer
-    try testing.expectEqualStrings("HEADER", z.tagNameBorrow(app_children[0]));
-    try testing.expectEqualStrings("MAIN", z.tagNameBorrow(app_children[1]));
-    try testing.expectEqualStrings("FOOTER", z.tagNameBorrow(app_children[2]));
+    try testing.expectEqualStrings("HEADER", z.tagName_zc(app_children[0]));
+    try testing.expectEqualStrings("MAIN", z.tagName_zc(app_children[1]));
+    try testing.expectEqualStrings("FOOTER", z.tagName_zc(app_children[2]));
 
     const final_html = try z.innerHTML(allocator, app_div.?);
     defer allocator.free(final_html);

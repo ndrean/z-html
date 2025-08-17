@@ -65,7 +65,7 @@ pub fn collectChildItems(
 
 /// [traverse] Callback to collect elements with a given HTML tag
 pub fn elementMatchCollector(element: *z.DomElement, tag: z.HtmlTag) ?*z.DomElement {
-    if (z.parseTag(z.qualifiedNameBorrow(element))) |element_tag| {
+    if (z.parseTag(z.qualifiedName_zc(element))) |element_tag| {
         if (element_tag == tag) return element;
     }
     return null;

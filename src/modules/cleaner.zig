@@ -155,7 +155,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
     if (z.nodeToElement(parent)) |parent_element| {
-        const qualified_name = z.qualifiedNameBorrow(parent_element);
+        const qualified_name = z.qualifiedName_zc(parent_element);
 
         // Use NoEscapeTagSet for script/style + additional whitespace-sensitive tags
         const is_no_escape = z.isNoEscapeElementFast(qualified_name);

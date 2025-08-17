@@ -67,7 +67,7 @@ pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: 
 ///  ⚠️ pointing to lexbor memory. Short-lived uses only.
 ///
 /// Use `getAttribute()` if you need to store the value.
-pub fn getAttributeBorrow(element: *z.DomElement, name: []const u8) ?[]const u8 {
+pub fn getAttribute_zc(element: *z.DomElement, name: []const u8) ?[]const u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(
         element,
@@ -233,7 +233,7 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 }
 
 /// [core] Get element ID as borrowed string for faster access
-pub fn getElementIdBorrow(element: *z.DomElement) []const u8 {
+pub fn getElementId_zc(element: *z.DomElement) []const u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
         element,
@@ -254,7 +254,7 @@ pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
     if (!hasAttribute(element, "class")) return false;
 
     // Get class string directly from lexbor (zero-copy)
-    const class_attr = getAttributeBorrow(element, "class") orelse return false;
+    const class_attr = getAttribute_zc(element, "class") orelse return false;
 
     // Search for the class name in the class list (space-separated)
     var iterator = std.mem.splitScalar(u8, class_attr, ' ');
@@ -449,7 +449,7 @@ test "attribute iteration" {
                 defer allocator.free(value);
                 try testing.expectEqualStrings(
                     value,
-                    getAttributeBorrow(
+                    getAttribute_zc(
                         div_element,
                         attr_name,
                     ).?,
