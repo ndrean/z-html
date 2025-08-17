@@ -7,7 +7,7 @@
 
 In other words, you can use `JavaScript` semantics on the server with `Zig`.
 
-`lexbor` follows <https://dom.spec.whatwg.org/>, and we follow  - mostly -  the `JavaScript` semantics.
+`lexbor` follows <https://dom.spec.whatwg.org/>, and we follow - mostly - the `JavaScript` semantics.
 
 **Features:**
 
@@ -30,19 +30,22 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - fast "walker" search with _tokens_:
     - `getElementById()`
     - and derivatives class / data-attribute
-  - Collections manipulation including a `CollectionIterator` and search on _exact string matching_:
+  - Collections manipulation with a default size, including a `CollectionIterator` and  search on _exact string matching_:
     - `getElementsById()`
     - "attribute-value" pairs
-    - they use an iterator to extract from the results.
+    - `collectionToSlice` if needed
 - DOM manipulation on nodes / elements / text / comment
   - create / destroy
-  - node / element navigation
-  - append / insert / remove
+  - node / element navigation (siblings)
+  - append (Adjacent) / insert (before/after) / remove
+  - `setInnerHTML`
 - DOM normalization with options (remove comments, whitespace, empty nodes)
 - Smart text
 
-> [!NOTE]
-> Some functions borrow memory from `lexbor` or zero-copy: their result is consummed immediately. We opted for the following conventiion: add `_nc` (for _no_copy_) to the allocated version. For example, `getTextContent_nc`, `qualifiedName_nc`. These functions normally also have an allocated version when the data must outlive the current function: you can pass pass freely the data. For exampple, `getTextContent`, `qualifiedName`.
+> [!IMPORTANT]
+> Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
+> We opted for the following convention: add `_zc` (for _zero_copy_) to the allocated version. For example, `getTextContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
+> With allocated versions, the data can outlive the current function: you can pass the data freely.
 
 ## Examples
 
@@ -80,7 +83,7 @@ test "Append fragment" {
   z.appendChild(div, commentToNode(comment));
 
   const ul_elt = try z.createElement(doc, "ul", &.{});
-  const ul = elementToNode(ul);
+  const ul = elementToNode(ul_elt);
 
   for (1..4) |i| {
     const content = try std.fmt.allocPrint(allocator,
@@ -93,10 +96,10 @@ test "Append fragment" {
     const temp_div = elementToNode(temp_elt);
 
     // we inject the <li> string as innerHTML into the temp <div>
-    _ = try z.setInnerHTML(allocator, temp_elt, content,.{});
+    _ = try z.setInnerHTML(allocator, temp_elt, content, .{});
 
     // and append the new <li> node to the <ul> node
-    if (firstChild(temp_div)) |li| 
+    if (firstChild(temp_div)) |li|
           appendChild(ul, li);
       
     destroyNode(temp_div);
@@ -117,7 +120,7 @@ test "Append fragment" {
 
   // second test: we check that the full string is what we expect
   const serialized_fragment = try z.serializeToString(allocator, div);
-  defer allocator.free(fragment_txt);
+  defer allocator.free(serialized_fragment);
 
   const expected_fragment =
         \\<div class="container-list">
@@ -131,7 +134,7 @@ test "Append fragment" {
     ;
 
   // collapse whitespace-only text nodes
-  const expected = try z.normalizeWhitespace(allocator, expected_fragment);
+  const expected = try z.normalizeWhitespace(allocator, expected_fragment, .{});
   defer allocator.free(expected);
   
   try testing.expectEqualStrings(expected, serialized_fragment);
@@ -144,7 +147,7 @@ We can print the document structure:
 
 ```cpp
   // continue
-  try z.debugDocumentStructure(doc)
+  try z.debugDocumentStructure(doc);
 ```
 
 The output is:
@@ -202,7 +205,7 @@ gives the compressed "tuple" representation:
 ```cpp
   const json_tree = try documentToJsonTree(allocator, doc);
   const json_string = try jsonNodeToString(allocator, json_tree[0]);
-  print("{s}", .{json_string });
+  print("{s}", .{json_string});
 ```
 
 gives the W3C JSON representation:
@@ -278,13 +281,13 @@ When `destroyDocument()` is called, it automatically destroys ALL nodes that bel
 
 When a node is NOT attached to any document, you must manually destroy it.
 
-> Very few functions that return strings point to internal `lexbor` memory. The `nodeName()` function can be usesd if it is immediately disposed. If you need to store it, use `nodeName()` instead.
+> Very few functions that return strings point to internal `lexbor` memory. The `nodeName_zc()` function can be used if it is immediately disposed. If you need to store it, use `nodeName()` instead.
 
 ## Chunk Parsing vs Fragment Parsing
 
-HTML chunks are parsed as it streams into a full HTML document.
+HTML chunks are parsed as they stream into a full HTML document.
 
-Fragmemnt parsing handles templates and components (for template engines, component frameworks, server-sde rendering).
+Fragment parsing handles templates and components (for template engines, component frameworks, server-side rendering).
 
 | Feature | Fragment Parsing | Chunk Parsing |
 |--|--|--|
@@ -292,9 +295,9 @@ Fragmemnt parsing handles templates and components (for template engines, compon
 | Input | Template fragments, components | Network streams, large files chunks |
 | Context | Respects HTML parsing rules by context | Sequential document building |
 | Output | Parsed fragment nodes | Complete document |
-| Use Cases | Templates eg email, web components, component based frameworks... | HTTP responses, file processing|
+| Use Cases | Templates e.g. email, web components, component-based frameworks... | HTTP responses, file processing |
 
-## Parsing strings methods available
+## Parsing string methods available
 
 | Method | Context Awareness | Cross-Document | Memory Management | Use Case |
 |--|--|--|--|---|
@@ -302,7 +305,7 @@ Fragmemnt parsing handles templates and components (for template engines, compon
 | `setInnerHTML` | Parent element context | Same document | Element cleanup | Content replacement |
 | `parseFragment` | Explicit context | Cross-document via `parseFragmentInto` | Fragment result owns | Templates/components |
 
-The _fragment parsing_ gives you _context-aware parsing_ - meaning `<tr>` elements are parsed differently when you specify a `.table` context vs `.body` context.
+The _fragment parsing_ gives you _context-aware parsing_ - meaning `<tr>` elements are parsed differently when you specify a `.table` context vs. `.body` context.
 
 - parse with context awareness:
   
@@ -317,7 +320,7 @@ defer result.deinit();
 try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .body);
 ```
 
-- Cross-document node cloning to inser parsed fragments into target documents
+- Cross-document node cloning to insert parsed fragments into target documents
 - results handling `getElements()` and `serialize()`
 
 ## Project details
@@ -326,7 +329,7 @@ try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .bo
 
 TODO
 
-### file structure
+### File structure
 
 - build.zig
 - Makefile.lexbor   (`lexbor` build automation)
@@ -350,7 +353,7 @@ TODO
     - head ?
 
   - main.zig (demo ? TODO:
-    - stral fetch from internet
+    - URL fetch from internet
     - build from chunks
     - search for id attributes
     - develop stats on document with search)
@@ -365,25 +368,25 @@ make -f Makefile.lexbor
 ### Run tests
 
 The _build.zig_ file runs all the tests from _zhtml.zig_.
-It imports all the submodules and run the tests.
+It imports all the submodules and runs the tests.
 
 ```sh
- zig build test --summary all
- ```
+zig build test --summary all
+```
 
 ## Build
 
- ```sh
- zig build run -Doptimize=ReleaseFast #or Debug
- ```
+```sh
+zig build run -Doptimize=ReleaseFast # or Debug
+```
 
 ### Source: `lexbor` examples
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
-### Notes: searching in the  `lexbor` library
+### Notes: searching in the `lexbor` library
 
-In the build static object _liblexbor_static.a_:
+In the built static object _liblexbor_static.a_:
 
 ```sh
 nm lexbor_src_2.4.0/build/liblexbor_static.a | grep -i "serialize"
