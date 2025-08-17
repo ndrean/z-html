@@ -1,5 +1,5 @@
-//! HTML Tags
-// compile time safety check
+//! Enum optimized HTML Tags
+
 const std = @import("std");
 const z = @import("../zhtml.zig");
 
@@ -8,12 +8,36 @@ const print = std.debug.print;
 
 /// [HtmlTag] Optional: Parse string to HtmlTag (inline)
 pub fn parseTag(name: []const u8) ?HtmlTag {
-    inline for (std.meta.fields(HtmlTag)) |field| {
-        if (std.mem.eql(u8, field.name, name)) {
-            return @enumFromInt(field.value);
+    return stringToEnum(HtmlTag, name);
+    // inline for (std.meta.fields(HtmlTag)) |field| {
+    //     if (std.mem.eql(u8, field.name, name)) {
+    //         return @enumFromInt(field.value);
+    //     }
+    // }
+    // return null;
+}
+
+/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements
+pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
+    if (@typeInfo(T).@"enum".fields.len <= 112) {
+        const kvs = comptime build_kvs: {
+            const EnumKV = struct { []const u8, T };
+            var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
+            for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {
+                kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };
+            }
+            break :build_kvs kvs_array[0..];
+        };
+        const map = std.StaticStringMap(T).initComptime(kvs);
+        return map.get(str);
+    } else {
+        inline for (@typeInfo(T).@"enum".fields) |enumField| {
+            if (std.mem.eql(u8, str, enumField.name)) {
+                return @field(T, enumField.name);
+            }
         }
+        return null;
     }
-    return null;
 }
 
 /// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
@@ -67,6 +91,9 @@ pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !
 /// `self.isVoid` checks if the tag is a self-closing element (e.g., `<br>`, `<img>`).
 ///
 ///  `self.isNoEscape` checks if the tag should not have its content escaped.
+///
+///
+///
 pub const HtmlTag = enum {
     a,
     abbr,
@@ -232,8 +259,19 @@ pub fn isVoidElementFast(qualified_name: []const u8) bool {
 /// Uses qualified name string and enum-based lookup for maximum performance.
 /// For direct element checking without string allocation, use isNoEscapeElementFastZeroCopy().
 ///
-/// **Use when:** You already have the qualified name string
-/// **Performance:** Fast (enum lookup), requires qualified name parameter
+/// Only standard tags get `isNoEscape = true` (`.script`, `.style`, `.iframe`).
+///
+/// If returns false, it means the element is not a no-escape element so it should be escaped.
+/// ## Example
+/// ```
+/// <my-widget>User typed: <script>alert('xss')</script></my-widget>
+/// // becomes
+/// <my-widget>&lt;script&gt;alert('xss')&lt;/script&gt;</my-widget>
+/// //
+/// <script>console.log("hello");</script>  ← Must NOT escape
+/// <style>body { color: red; }</style>     ← Must NOT escape
+/// <iframe src="..."></iframe>             ← Must NOT escape
+///---
 pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
     const tag = fromQualifiedName(qualified_name) orelse return false;
     return NoEscapeTagSet.contains(tag);
@@ -418,7 +456,7 @@ test "isVoidElementFast with various tags" {
     try testing.expect(isVoidElementFast("BR") == true); // Case insensitive
     try testing.expect(isVoidElementFast("IMG") == true);
 }
-test "lexbor NODENAME and self.toString" {
+test "lexbor NODENAME and self.toString and parseTag and qualifiedName" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
@@ -432,6 +470,9 @@ test "lexbor NODENAME and self.toString" {
 
         // Note: DOM names are typically uppercase
         try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
+
+        const expected_tag = parseTag(z.qualifiedName_zc(element));
+        try testing.expect(tag == expected_tag);
     }
 }
 

@@ -321,6 +321,100 @@ try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .bo
 - Cross-document node cloning to insert parsed fragments into target documents
 - results handling `getElements()` and `serialize()`
 
+## Search examples
+
+We apply CSS selectors based search, token based search, full text search on the following HTML:
+
+```cpp
+const html =
+        \\<div class="container main">Container element</div>
+        \\<p class="text bold">Bold paragraph</p>
+        \\<p class="text"><span class="text bold">Nested bold span</span></p>
+        \\<span class="bold text-xs">Span with multiple classes</span>
+        \\<div class="text-xs bold">Reversed class order</div>
+        \\<section class="main">Another main section</section>
+        \\<article class="container">Just container class</article>
+        \\<p class="text">Simple text class</p>
+        \\<div class="BOLD">Uppercase BOLD</div>
+        \\<span class="text-bold">Hyphenated similar class</span>
+        \\<div class="text bold extra">Three classes</div>
+        \\<div class="BOLD text">Mix the classes BOLD</div>
+        \\  <div class="bold text-xl">Bold and text-xl</div>
+        \\  <div class="bold">bold alone</div>
+        \\  <div class="text-xs">text-xs alone</div>
+        \\  <div class="bold text">reversed
+    ;
+```
+
+== Testing class: 'bold' ===
+CSS Selector (.bold):     10 elements
+Walker-based search:     8 elements
+Collection-based:        1 elements
+Manual hasClass walk:    7 elements
+Note: Collection may differ for 'bold' due to exact string matching
+Note: CSS selectors are case-insensitive, so 'BOLD' matches '.bold'
+
+=== Testing class: 'text-xs' ===
+CSS Selector (.text-xs):     3 elements
+Walker-based search:     3 elements
+Collection-based:        1 elements
+Manual hasClass walk:    3 elements
+Note: Collection won't find 'text-xs' in multi-class attributes due to exact matching
+
+=== Testing class: 'main' ===
+CSS Selector (.main):     2 elements
+Walker-based search:     2 elements
+Collection-based:        1 elements
+Manual hasClass walk:    2 elements
+
+=== Testing class: 'container' ===
+CSS Selector (.container):     2 elements
+Walker-based search:     2 elements
+Collection-based:        1 elements
+Manual hasClass walk:    2 elements
+
+=== Testing class: 'text bold' ===
+CSS Selector (.text bold):     0 elements
+Walker-based search:     0 elements
+Collection-based:        2 elements
+Manual hasClass walk:    0 elements
+Note: CSS found 0 - space in selector may not work as descendant selector here
+Note: Collection found 2 - exact string matching finds class='text bold' attributes
+Note: Walker/hasClass found 0 - they look for 'text bold' as a single class token
+
+=== Testing class: 'nonexistent' ===
+CSS Selector (.nonexistent):     0 elements
+Walker-based search:     0 elements
+Collection-based:        0 elements
+Manual hasClass walk:    0 elements
+
+=== CSS Selector Syntax Exploration ===
+'.text .bold': 1 elements
+'.text > .bold': 1 elements
+'.text.bold': 5 elements
+'p .bold': 1 elements
+'p > .bold': 1 elements
+
+=== Class Search Behavior Summary ===
+• CSS Selectors: Token-based, order-independent, case-insensitive, handles multi-class correctly
+• Walker Search: Token-based, order-independent, case-sensitive, handles multi-class correctly
+• Collection Search: Exact string matching, order-dependent, case-sensitive, limited multi-class support
+• hasClass Method: Token-based, order-independent, case-sensitive, handles multi-class correctly
+
+For class='bold text-xs' vs class='text-xs bold':
+• CSS/Walker/hasClass: Will find BOTH variations (order-independent)
+• Collection: Will only find exact string matches
+
+For class='BOLD' vs '.bold' CSS selector:
+• CSS: Will match (case-insensitive)
+• Walker/hasClass/Collection: Won't match (case-sensitive)
+
+For 'text bold' search:
+• CSS: Returns 0 - space in selector may be interpreted differently than expected
+• Walker/hasClass: Find 0 - look for 'text bold' as single class token
+• Collection: Finds elements with exact class='text bold' attribute value
+• This demonstrates different handling of spaces: CSS selectors vs class tokens vs string matching
+
 ## Project details
 
 ### How to use it
@@ -401,4 +495,3 @@ or
 ```sh
 grep -r -A 10 -B 5 "serialize" lexbor_src_2.4.0/source/lexbor/
 ```
-
