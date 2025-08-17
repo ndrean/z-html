@@ -1,7 +1,7 @@
 //! Experimental helper module to traverse DOM
 
 const std = @import("std");
-const z = @import("zhtml.zig");
+const z = @import("../zhtml.zig");
 
 const print = std.debug.print;
 const testing = std.testing;

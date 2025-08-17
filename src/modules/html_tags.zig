@@ -17,7 +17,7 @@ pub fn parseTag(name: []const u8) ?HtmlTag {
     // return null;
 }
 
-/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements
+/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements (`Zig` code: std.meta.stringToCode` with a higher limit).
 pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
     if (@typeInfo(T).@"enum".fields.len <= 112) {
         const kvs = comptime build_kvs: {
