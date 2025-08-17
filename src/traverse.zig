@@ -169,11 +169,11 @@ test "DOM traversal utilities" {
 
 // returns true if element is a `P`
 fn areAllPs(element: *z.DomElement) bool {
-    return z.parseTag(z.qualifiedNameBorrow(element)).? == .p;
+    return z.parseTag(z.qualifiedName_zc(element)).? == .p;
 }
 
 fn areAllOfType(element: *z.DomElement, tag: z.HtmlTag) bool {
-    return z.parseTag(z.qualifiedNameBorrow(element)).? == tag;
+    return z.parseTag(z.qualifiedName_zc(element)).? == tag;
 }
 
 fn forEachChildNode(

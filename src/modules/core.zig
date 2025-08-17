@@ -406,7 +406,7 @@ pub fn nodeName(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return try allocator.dupe(u8, name_slice);
 }
 
-test "nodeName/Borrow" {
+test "nodeName/_zc" {
     const allocator = testing.allocator;
     const doc = try createDocument();
 
