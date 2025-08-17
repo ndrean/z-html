@@ -998,7 +998,7 @@ pub fn insertAdjacentElement(target: *z.DomElement, position: anytype, element: 
     }
 }
 
-/// [core] Helper: Insert all children from fragment before a reference node
+/// [core] Helper: Insert all children from fragment before a reference node by iterating over the fragment
 fn insertFragmentBefore(reference_node: *z.DomNode, fragment: *z.DomNode) void {
     var fragment_child = firstChild(fragment);
     while (fragment_child) |current_child| {
@@ -1008,7 +1008,7 @@ fn insertFragmentBefore(reference_node: *z.DomNode, fragment: *z.DomNode) void {
     }
 }
 
-/// [core] Helper: Insert all children from fragment after a reference node
+/// [core] Helper: Insert all children from fragment after a reference by iterating over the fragment
 fn insertFragmentAfter(reference_node: *z.DomNode, fragment: *z.DomNode) void {
     var fragment_child = firstChild(fragment);
     var insert_after_node = reference_node;
@@ -1175,6 +1175,9 @@ test "insertAdjacentElement - all positions" {
     // Test afterend - insert after the target element
     const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
     try insertAdjacentElement(target.?, .afterend, after_element);
+
+    const invalid = try insertAdjacentElement(target.?, "invalid", after_element);
+    try testing.expectError(Err.InvalidPosition, invalid);
 
     const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
