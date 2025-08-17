@@ -135,6 +135,7 @@ test "Append fragment" {
 
   // collapse whitespace-only text nodes
   const expected = try z.normalizeWhitespace(allocator, expected_fragment, .{});
+  defer allocator.free(expected)
   
   try testing.expectEqualStrings(expected, serialized_fragment);
 }

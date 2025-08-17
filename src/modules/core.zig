@@ -918,6 +918,39 @@ pub fn insertBefore(reference_node: *z.DomNode, new_node: *z.DomNode) void {
     lxb_dom_node_insert_before_wo_events(reference_node, new_node);
 }
 
+test "insertBefore / insertAfter" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><ul><li id=\"1\">First</li></ul></body></html>");
+    defer destroyDocument(doc);
+
+    const body = try bodyNode(doc);
+    const first_li = try z.getElementById(doc, "1");
+    const new_li = try z.createElement(
+        doc,
+        "li",
+        &.{.{ .name = "id", .value = "0" }},
+    );
+    const last_li = try z.createElement(
+        doc,
+        "li",
+        &.{.{ .name = "id", .value = "2" }},
+    );
+    insertBefore(
+        elementToNode(first_li.?),
+        elementToNode(new_li),
+    );
+    insertAfter(
+        elementToNode(first_li.?),
+        elementToNode(last_li),
+    );
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+    try testing.expectEqualStrings(
+        "<body><ul><li id=\"0\"></li><li id=\"1\">First</li><li id=\"2\"></li></ul></body>",
+        html,
+    );
+}
+
 /// [core] Position flags for insertAdjacent operations (matches JavaScript API)
 /// Values are:
 /// - `beforebegin`: Insert before the element itself (as a previous sibling)
@@ -940,6 +973,14 @@ pub const InsertPosition = enum {
         return null;
     }
 };
+
+test "InsertPosition.fromString" {
+    try testing.expect(InsertPosition.fromString("beforebegin") == .beforebegin);
+    try testing.expect(InsertPosition.fromString("afterbegin") == .afterbegin);
+    try testing.expect(InsertPosition.fromString("beforeend") == .beforeend);
+    try testing.expect(InsertPosition.fromString("afterend") == .afterend);
+    try testing.expect(InsertPosition.fromString("invalid") == null);
+}
 
 /// [core] Insert an element at the specified position relative to the target element
 ///
@@ -996,6 +1037,40 @@ pub fn insertAdjacentElement(target: *z.DomElement, position: anytype, element: 
             _ = parent; // Suppress unused variable warning
         },
     }
+}
+
+test "insertAdjacentElement - all positions & invalid" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
+    defer destroyDocument(doc);
+
+    const target = try z.getElementById(doc, "target");
+
+    // Test beforebegin - insert before the target element
+    const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
+    try insertAdjacentElement(target.?, .beforebegin, before_element);
+
+    // Test afterbegin - insert as first child
+    const afterbegin_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "first" }});
+    try insertAdjacentElement(target.?, .afterbegin, afterbegin_element);
+
+    // Test beforeend - insert as last child
+    const beforeend_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "last" }});
+    try insertAdjacentElement(target.?, .beforeend, beforeend_element);
+
+    // Test afterend - insert after the target element
+    const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
+    try insertAdjacentElement(target.?, .afterend, after_element);
+
+    const invalid = insertAdjacentElement(target.?, "invalid", after_element);
+    try testing.expectError(Err.InvalidPosition, invalid);
+
+    const body = try bodyNode(doc);
+    const html = try z.serializeToString(allocator, body);
+    defer allocator.free(html);
+
+    const expected = "<body><p id=\"before\"></p><div id=\"target\"><span id=\"first\"></span>Target Content<span id=\"last\"></span></div><p id=\"after\"></p></body>";
+    try testing.expectEqualStrings(expected, html);
 }
 
 /// [core] Helper: Insert all children from fragment before a reference node by iterating over the fragment
@@ -1075,40 +1150,7 @@ pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.DomElement, p
     }
 }
 
-test "insertBefore / insertAfter" {
-    const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><ul><li id=\"1\">First</li></ul></body></html>");
-    defer destroyDocument(doc);
-
-    const body = try bodyNode(doc);
-    const first_li = try z.getElementById(doc, "1");
-    const new_li = try z.createElement(
-        doc,
-        "li",
-        &.{.{ .name = "id", .value = "0" }},
-    );
-    const last_li = try z.createElement(
-        doc,
-        "li",
-        &.{.{ .name = "id", .value = "2" }},
-    );
-    insertBefore(
-        elementToNode(first_li.?),
-        elementToNode(new_li),
-    );
-    insertAfter(
-        elementToNode(first_li.?),
-        elementToNode(last_li),
-    );
-    const html = try z.serializeToString(allocator, body);
-    defer allocator.free(html);
-    try testing.expectEqualStrings(
-        "<body><ul><li id=\"0\"></li><li id=\"1\">First</li><li id=\"2\"></li></ul></body>",
-        html,
-    );
-}
-
-test "Flexible insertAdjacentHTML" {
+test "enum / string insertAdjacentHTML" {
     const allocator = testing.allocator;
     const doc = try parseFromString("<html><body><div id=\"target\">Original</div></body></html>");
     defer destroyDocument(doc);
@@ -1144,48 +1186,6 @@ test "Flexible insertAdjacentHTML" {
     // Test 6: More natural usage examples
     try insertAdjacentHTML(allocator, target.?, .beforeend, "<em>Direct enum</em>");
     try insertAdjacentHTML(allocator, target.?, "beforeend", "<strong>Direct string</strong>");
-}
-
-test "InsertPosition.fromString" {
-    try testing.expect(InsertPosition.fromString("beforebegin") == .beforebegin);
-    try testing.expect(InsertPosition.fromString("afterbegin") == .afterbegin);
-    try testing.expect(InsertPosition.fromString("beforeend") == .beforeend);
-    try testing.expect(InsertPosition.fromString("afterend") == .afterend);
-    try testing.expect(InsertPosition.fromString("invalid") == null);
-}
-
-test "insertAdjacentElement - all positions" {
-    const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
-    defer destroyDocument(doc);
-
-    const target = try z.getElementById(doc, "target");
-
-    // Test beforebegin - insert before the target element
-    const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
-    try insertAdjacentElement(target.?, .beforebegin, before_element);
-
-    // Test afterbegin - insert as first child
-    const afterbegin_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "first" }});
-    try insertAdjacentElement(target.?, .afterbegin, afterbegin_element);
-
-    // Test beforeend - insert as last child
-    const beforeend_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "last" }});
-    try insertAdjacentElement(target.?, .beforeend, beforeend_element);
-
-    // Test afterend - insert after the target element
-    const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
-    try insertAdjacentElement(target.?, .afterend, after_element);
-
-    const invalid = insertAdjacentElement(target.?, "invalid", after_element);
-    try testing.expectError(Err.InvalidPosition, invalid);
-
-    const body = try bodyNode(doc);
-    const html = try z.serializeToString(allocator, body);
-    defer allocator.free(html);
-
-    const expected = "<body><p id=\"before\"></p><div id=\"target\"><span id=\"first\"></span>Target Content<span id=\"last\"></span></div><p id=\"after\"></p></body>";
-    try testing.expectEqualStrings(expected, html);
 }
 
 test "insertAdjacentHTML - all positions" {
@@ -1252,7 +1252,7 @@ test "insertAdjacentElement - empty target" {
     try testing.expectEqualStrings(expected, html);
 }
 
-test "insertAdjacent comprehensive demo" {
+test "insertAdjacent demo" {
     const allocator = testing.allocator;
 
     // Create a simple document structure
@@ -1330,65 +1330,16 @@ test "insertAdjacent comprehensive demo" {
     try testing.expect(std.mem.indexOf(u8, clean_html3, "<span>Third</span>") != null);
 }
 
-//=============================================================================
+//==================================================================
 // TEXT CONTENT FUNCTIONS -
-//=============================================================================
+//==================================================================
 
 extern "c" fn lxb_dom_node_text_content(node: *z.DomNode, len: ?*usize) ?[*:0]u8;
 extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const u8, len: usize) u8;
 extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
 
-// /// [core] Get concatenated text content of a node. !! It is wrong to return an error if NULL. Change
-// ///
-// /// It returns a concatenation of the text contents of all descendant text nodes or an error if none are found. !! This is wrong, should return NULL if NULL!!
-// ///
-// /// Works on nodes (text, comment or element).
-// ///
-// /// Caller needs to free the returned string
-// ///
-// /// DEPRECATED: This API is incorrect - empty text content is not an error.
-// /// Use getTextContentOptional() for the correct behavior, or getTextContent() for JS-like behavior.
-// pub fn getTextContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-//     var len: usize = 0;
-//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return Err.EmptyTextContent;
-
-//     defer lexbor_destroy_text_wrapper(node, text_ptr);
-
-//     if (len == 0) return Err.EmptyTextContent;
-
-//     const result = try allocator.alloc(u8, len);
-//     @memcpy(result, text_ptr[0..len]);
-//     return result;
-// }
-
-// /// [core] Get concatenated text content of a node as optional (CORRECT API)
-// ///
-// /// Returns the concatenated text content of all descendant text nodes,
-// /// or null if the node has no text content (which is NOT an error).
-// ///
-// /// Works on nodes (text, comment or element).
-// ///
-// /// Caller needs to free the returned string if not null.
-// pub fn getTextContentOptional(allocator: std.mem.Allocator, node: *z.DomNode) !?[]u8 {
-//     var len: usize = 0;
-//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
-
-//     defer lexbor_destroy_text_wrapper(node, text_ptr);
-
-//     if (len == 0) return null;
-
-//     const result = try allocator.alloc(u8, len);
-//     @memcpy(result, text_ptr[0..len]);
-//     return result;
-// }
-
-/// [core] Get text content with empty string fallback (JavaScript-like behavior)
-///
-/// Returns the text content or an empty string if none exists.
-/// This matches JavaScript's element.textContent behavior.
-///
-/// [core] Get text content with empty string fallback (JavaScript-like behavior)
+/// [core] Get text content with empty string fallback
 ///
 /// Returns the text content or an empty string if none exists.
 /// This matches JavaScript's element.textContent behavior.
@@ -1407,59 +1358,10 @@ pub fn getTextContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return result;
 }
 
-/// [core] Get text content as zero-copy slice (FASTEST)
+/// [core] Get text content as _zero-copy slice_
 ///
 /// Returns a slice directly into lexbor's internal memory - no allocation!
-///
-/// **Use when:** Processing immediately, node lifetime is guaranteed
-/// **Performance:** Fastest (direct pointer access), but lifetime-bound
-///
-/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
-/// - The node remains in the DOM tree
-/// - The document is not destroyed
-/// - No DOM modifications that might cause internal reallocation
-///
-/// ```zig
-/// if (getTextContent_zc(node)) |text| {
-///     // Use immediately - don't store for later!
-///     processText(text);
-/// }
-/// ```
-// pub fn getTextContent_zc(node: *z.DomNode) ?[]const u8 {
-//     var len: usize = 0;
-//     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return null;
-
-//     if (len == 0) return null;
-
-//     return text_ptr[0..len];
-// }
-
-/// [core] Get text content as zero-copy slice with empty fallback (FASTEST, SAFE)
-///
-/// Returns a slice directly into lexbor's internal memory, or empty string literal.
-/// **No allocation ever needed!**
-///
-/// **Use when:** Processing immediately, node lifetime is guaranteed
-/// **Performance:** Fastest (direct pointer access), no memory management
-///
-/// ⚠️  **LIFETIME WARNING:** The returned slice is only valid while:
-/// - The node remains in the DOM tree
-/// - The document is not destroyed
-/// - No DOM modifications that might cause internal reallocation
-///
-/// ```zig
-/// const text = getTextContent_zcOrEmpty(node);
-/// // Use immediately - never free!
-/// processText(text);
-/// ```
-// pub fn getTextContent_zcOrEmpty(node: *z.DomNode) []const u8 {
-//     if (getTextContent_zc(node)) |text| {
-//         return text;
-//     } else {
-//         return ""; // String literal - no allocation
-//     }
-// }
-
+/// ---
 pub fn getTextContent_zc(node: *z.DomNode) []const u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return "";
@@ -1479,10 +1381,11 @@ pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
     if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
 }
 
-/// [core] set or replace text data on a text node
+/// [core] set or replace text data on a text node with escape option.
 ///
 /// If the inner text node is void, it will be created.
-/// If options.escape is true, the text will be HTML-escaped before insertion.
+///
+/// If `options.escape = true`, the text will be HTML-escaped before insertion.
 pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []const u8, options: z.TextOptions) !void {
     // Apply HTML escaping if requested (for new user input)
     const final_text = if (options.escape)
@@ -1586,21 +1489,9 @@ pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return result.toOwnedSlice();
 }
 
-// ==============================================================
-/// [core] Helper: Walk only element children, skipping text nodes
-pub fn walkElementChildren(parent_node: *z.DomNode, callback: fn (element: ?*z.DomElement) void) void {
-    var child = firstChild(parent_node);
-    while (child != null) {
-        if (nodeToElement(child.?)) |element| {
-            callback(element);
-        }
-        child = nextSibling(child.?);
-    }
-}
-
-//=============================================================================
+//=================================================================
 // Whitespace and Empty Nodes
-//=============================================================================
+//===================================================================
 
 /// [core] Check if text content is only whitespace characters
 pub fn isWhitespaceOnlyText(text: []const u8) bool {
@@ -1627,9 +1518,9 @@ pub fn isWhitespaceOnlyElement(element: *z.DomElement) bool {
     return isWhitespaceOnlyNode(node);
 }
 
-// =====================================================================
+// =================================================================
 // Tests
-// =====================================================================
+// =================================================================
 
 test "memory safety: nodeName vs nodeNameOwned" {
     const allocator = std.testing.allocator;
