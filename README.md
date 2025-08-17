@@ -66,10 +66,10 @@ test "Append fragment" {
   const allocator = std.testing.allocator;
 
   // create the skeleton <html><body></body></html>
-  const doc = try parseFromString("");
+  const doc = try z.parseFromString("");
   defer z.destroyDocument(doc);
 
-  const body = try bodyNode(doc);
+  const body = try z.bodyNode(doc);
 
   const fragment = try z.createDocumentFragment(doc);
 
@@ -80,10 +80,10 @@ test "Append fragment" {
 
   const div = elementToNode(div_elt);
   const comment = try z.createComment(doc, "a comment");
-  z.appendChild(div, commentToNode(comment));
+  z.appendChild(div, z.commentToNode(comment));
 
   const ul_elt = try z.createElement(doc, "ul", &.{});
-  const ul = elementToNode(ul_elt);
+  const ul = z.elementToNode(ul_elt);
 
   for (1..4) |i| {
     const content = try std.fmt.allocPrint(allocator,
@@ -92,17 +92,17 @@ test "Append fragment" {
       );
     defer allocator.free(content);
 
-    const temp_elt = try createElement(doc, "div", &.{});
-    const temp_div = elementToNode(temp_elt);
+    const temp_elt = try z.createElement(doc, "div", &.{});
+    const temp_div = z.elementToNode(temp_elt);
 
     // we inject the <li> string as innerHTML into the temp <div>
     _ = try z.setInnerHTML(allocator, temp_elt, content, .{});
 
     // and append the new <li> node to the <ul> node
-    if (firstChild(temp_div)) |li|
-          appendChild(ul, li);
+    if (z.firstChild(temp_div)) |li|
+          Z.appendChild(ul, li);
       
-    destroyNode(temp_div);
+    z.destroyNode(temp_div);
   }
 
   z.appendChild(div, ul);
@@ -135,7 +135,6 @@ test "Append fragment" {
 
   // collapse whitespace-only text nodes
   const expected = try z.normalizeWhitespace(allocator, expected_fragment, .{});
-  defer allocator.free(expected);
   
   try testing.expectEqualStrings(expected, serialized_fragment);
 }
@@ -203,8 +202,8 @@ gives the compressed "tuple" representation:
 - the JSON format: `{nodeType, tagName, attributes, children}` where element = 1, text = 3, comment = 8, document = 9, fragment = 11.
 
 ```cpp
-  const json_tree = try documentToJsonTree(allocator, doc);
-  const json_string = try jsonNodeToString(allocator, json_tree[0]);
+  const json_tree = try z.documentToJsonTree(allocator, doc);
+  const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
   print("{s}", .{json_string});
 ```
 
@@ -260,7 +259,7 @@ gives the W3C JSON representation:
   if (second_li) |result| {
     const attribute = try z.getAttribute(
         allocator,
-        nodeToElement(result).?,
+        z.nodeToElement(result).?,
         "data-id",
     );
     if (attribute) |attr| {
@@ -280,8 +279,6 @@ When a node is attached to a document (either directly or through a fragment tha
 When `destroyDocument()` is called, it automatically destroys ALL nodes that belong to it.
 
 When a node is NOT attached to any document, you must manually destroy it.
-
-> Very few functions that return strings point to internal `lexbor` memory. The `nodeName_zc()` function can be used if it is immediately disposed. If you need to store it, use `nodeName()` instead.
 
 ## Chunk Parsing vs Fragment Parsing
 
