@@ -262,17 +262,22 @@ pub fn getElementByAttributeFast(doc: *z.HtmlDocument, attr_name: []const u8, at
 
 /// [attributes] Fast data attribute search - convenience wrapper
 ///
-/// Searches for elements with data-* attributes (common in modern web development).
-/// Example:
+/// Searches for elements with `prefix-*` attributes (`data` or `custom`).
+/// ## Example:
 /// ```
 /// // finds elements with data-id="123"
-/// getElementByDataAttributeFast(doc, "id", "123")
+/// getElementByDataAttributeFast(doc, "data", "id", "123");
+/// getElementByDataAttributeFast(doc, "phx", "click", "inc_temperature");
 /// ---
 /// ```
-pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, data_name: []const u8, value: ?[]const u8) !?*z.DomElement {
+pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, prefix: []const u8, data_name: []const u8, value: ?[]const u8) !?*z.DomElement {
     // Build the full data attribute name
     var attr_name_buffer: [256]u8 = undefined;
-    const attr_name = try std.fmt.bufPrint(attr_name_buffer[0..], "data-{s}", .{data_name});
+    const attr_name = try std.fmt.bufPrint(
+        attr_name_buffer[0..],
+        "{s}-{s}",
+        .{ prefix, data_name },
+    );
 
     return getElementByAttributeFast(doc, attr_name, value);
 }
@@ -433,7 +438,7 @@ test "optimized walker-based search functions" {
         \\      <a href="/about" class="nav-link" data-page="about">About</a>
         \\    </nav>
         \\  </div>
-        \\  <main id="content" class="main-content" data-section="content">
+        \\  <main id="content" class="main-content" phx-section="content">
         \\    <article class="post featured" data-id="123" data-category="tech">
         \\      <h1 class="title">Article Title</h1>
         \\      <p class="intro">Introduction paragraph</p>
@@ -493,17 +498,22 @@ test "optimized walker-based search functions" {
     try testing.expectEqualStrings("A", z.tagName_zc(about_link.?));
 
     // Test 5: getElementByDataAttributeFast - data attributes
-    const header_section = try getElementByDataAttributeFast(doc, "section", "header");
+    const header_section = try getElementByDataAttributeFast(doc, "data", "section", "header");
     try testing.expect(header_section != null);
     try testing.expectEqualStrings("DIV", z.tagName_zc(header_section.?));
 
-    const home_page = try getElementByDataAttributeFast(doc, "page", "home");
+    const home_page = try getElementByDataAttributeFast(doc, "data", "page", "home");
     try testing.expect(home_page != null);
     try testing.expectEqualStrings("A", z.tagName_zc(home_page.?));
 
-    const tech_article = try getElementByDataAttributeFast(doc, "category", "tech");
+    const tech_article = try getElementByDataAttributeFast(doc, "data", "category", "tech");
     try testing.expect(tech_article != null);
     try testing.expectEqualStrings("ARTICLE", z.tagName_zc(tech_article.?));
+
+    // Test custom prefix functionality (phx- instead of data-)
+    const content_section = try getElementByDataAttributeFast(doc, "phx", "section", "content");
+    try testing.expect(content_section != null);
+    try testing.expectEqualStrings("MAIN", z.tagName_zc(content_section.?));
 
     // Test 6: Non-existent searches should return null
     const missing_id = try getElementByIdFast(doc, "nonexistent");
@@ -515,7 +525,7 @@ test "optimized walker-based search functions" {
     const missing_attr = try getElementByAttributeFast(doc, "nonexistent-attr", "value");
     try testing.expect(missing_attr == null);
 
-    const missing_data = try getElementByDataAttributeFast(doc, "nonexistent", "value");
+    const missing_data = try getElementByDataAttributeFast(doc, "nonexistent", "data", "value");
     try testing.expect(missing_data == null);
 }
 
@@ -550,7 +560,7 @@ test "walker-based search vs existing implementations comparison" {
     try testing.expect(z.hasClass(class_fast.?, "text"));
 
     // Test data attribute search
-    const data_element = try getElementByDataAttributeFast(doc, "priority", "high");
+    const data_element = try getElementByDataAttributeFast(doc, "data", "priority", "high");
     try testing.expect(data_element != null);
     try testing.expectEqualStrings("SPAN", z.tagName_zc(data_element.?));
 

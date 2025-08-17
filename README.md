@@ -29,7 +29,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
 - HTML attributes
   - fast "walker" search with _tokens_:
     - `getElementById()`
-    - and derivatives class / data-attribute
+    - and derivatives class / data-attribute or custom `prefix-suffix` attributes
   - Collections manipulation with a default size, including a `CollectionIterator` and  search on _exact string matching_:
     - `getElementsById()`
     - "attribute-value" pairs

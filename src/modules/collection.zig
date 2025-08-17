@@ -1415,7 +1415,7 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
         const collection_results = try getElementsByClassName(doc, class_name);
         defer if (collection_results) |coll| destroyCollection(coll);
         const collection_count = if (collection_results) |coll| collectionLength(coll) else 0;
-
+        _ = collection_count;
         // 4. Manual hasClass check on all elements (for reference)
         var manual_count: usize = 0;
         const body = try z.bodyElement(doc);
@@ -1429,10 +1429,10 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
         }
 
         // Display results
-        print("CSS Selector (.{s}):     {d} elements\n", .{ class_name, css_count });
-        print("Walker-based search:     {d} elements\n", .{walker_count});
-        print("Collection-based:        {d} elements\n", .{collection_count});
-        print("Manual hasClass walk:    {d} elements\n", .{manual_count});
+        // print("CSS Selector (.{s}):     {d} elements\n", .{ class_name, css_count });
+        // print("Walker-based search:     {d} elements\n", .{walker_count});
+        // print("Collection-based:        {d} elements\n", .{collection_count});
+        // print("Manual hasClass walk:    {d} elements\n", .{manual_count});
 
         // Verify CSS and Walker should match (both handle tokens correctly)
         // try testing.expectEqual(css_count, walker_count);
@@ -1442,8 +1442,8 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
             // For "bold" class:
             // - CSS/Walker should find elements with "bold" as a token (case-insensitive for CSS)
             // - Collection might only find elements where class="bold" exactly
-            print("Note: Collection may differ for 'bold' due to exact string matching\n", .{});
-            print("Note: CSS selectors are case-insensitive, so 'BOLD' matches '.bold'\n", .{});
+            // print("Note: Collection may differ for 'bold' due to exact string matching\n", .{});
+            // print("Note: CSS selectors are case-insensitive, so 'BOLD' matches '.bold'\n", .{});
         }
 
         if (std.mem.eql(u8, class_name, "text-xs")) {
@@ -1452,7 +1452,7 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
             // - Collection will only find elements with class="text-xs" exactly
             try testing.expect(css_count >= 2); // Should find both order variations
             try testing.expect(walker_count >= 2);
-            print("Note: Collection won't find 'text-xs' in multi-class attributes due to exact matching\n", .{});
+            // print("Note: Collection won't find 'text-xs' in multi-class attributes due to exact matching\n", .{});
         }
 
         if (std.mem.eql(u8, class_name, "text bold")) {
@@ -1462,17 +1462,17 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
             // - Walker/hasClass: Will NOT find this (no element has "text bold" as a single class name)
             // - Collection: WILL find this (exact string matching finds class="text bold")
             // - This demonstrates the different interpretation of spaces in selectors vs class names
-            print("Note: CSS found {} - space in selector may not work as descendant selector here\n", .{css_count});
+            // print("Note: CSS found {} - space in selector may not work as descendant selector here\n", .{css_count});
             try testing.expectEqual(@as(usize, 0), walker_count); // No single "text bold" class token
             // try testing.expectEqual(@as(usize, 2), collection_count); // Finds elements with exact class="text bold"
             try testing.expectEqual(@as(usize, 0), manual_count); // No single "text bold" class token
-            print("Note: Collection found {} - exact string matching finds class='text bold' attributes\n", .{collection_count});
-            print("Note: Walker/hasClass found 0 - they look for 'text bold' as a single class token\n", .{});
+            // print("Note: Collection found {} - exact string matching finds class='text bold' attributes\n", .{collection_count});
+            // print("Note: Walker/hasClass found 0 - they look for 'text bold' as a single class token\n", .{});
         }
     }
 
     // Test different CSS selector syntaxes for descendant/child relationships
-    print("\n=== CSS Selector Syntax Exploration ===\n", .{});
+    // print("\n=== CSS Selector Syntax Exploration ===\n", .{});
 
     const css_selectors = [_][]const u8{
         ".text .bold", // Descendant selector (space)
@@ -1485,23 +1485,23 @@ test "comprehensive class search comparison: CSS vs Walker vs Collection vs Attr
     for (css_selectors) |selector| {
         const results = try z.querySelectorAll(allocator, doc, selector);
         defer allocator.free(results);
-        print("'{s}': {d} elements\n", .{ selector, results.len });
+        // print("'{s}': {d} elements\n", .{ selector, results.len });
     }
 
-    print("\n=== Class Search Behavior Summary ===\n", .{});
-    print("• CSS Selectors: Token-based, order-independent, case-insensitive, handles multi-class correctly\n", .{});
-    print("• Walker Search: Token-based, order-independent, case-sensitive, handles multi-class correctly\n", .{});
-    print("• Collection Search: Exact string matching, order-dependent, case-sensitive, limited multi-class support\n", .{});
-    print("• hasClass Method: Token-based, order-independent, case-sensitive, handles multi-class correctly\n", .{});
-    print("\nFor class='bold text-xs' vs class='text-xs bold':\n", .{});
-    print("• CSS/Walker/hasClass: Will find BOTH variations (order-independent)\n", .{});
-    print("• Collection: Will only find exact string matches\n", .{});
-    print("\nFor class='BOLD' vs '.bold' CSS selector:\n", .{});
-    print("• CSS: Will match (case-insensitive)\n", .{});
-    print("• Walker/hasClass/Collection: Won't match (case-sensitive)\n", .{});
-    print("\nFor 'text bold' search:\n", .{});
-    print("• CSS: Returns 0 - space in selector may be interpreted differently than expected\n", .{});
-    print("• Walker/hasClass: Find 0 - look for 'text bold' as single class token\n", .{});
-    print("• Collection: Finds elements with exact class='text bold' attribute value\n", .{});
-    print("• This demonstrates different handling of spaces: CSS selectors vs class tokens vs string matching\n", .{});
+    // print("\n=== Class Search Behavior Summary ===\n", .{});
+    // print("• CSS Selectors: Token-based, order-independent, case-insensitive, handles multi-class correctly\n", .{});
+    // print("• Walker Search: Token-based, order-independent, case-sensitive, handles multi-class correctly\n", .{});
+    // print("• Collection Search: Exact string matching, order-dependent, case-sensitive, limited multi-class support\n", .{});
+    // print("• hasClass Method: Token-based, order-independent, case-sensitive, handles multi-class correctly\n", .{});
+    // print("\nFor class='bold text-xs' vs class='text-xs bold':\n", .{});
+    // print("• CSS/Walker/hasClass: Will find BOTH variations (order-independent)\n", .{});
+    // print("• Collection: Will only find exact string matches\n", .{});
+    // print("\nFor class='BOLD' vs '.bold' CSS selector:\n", .{});
+    // print("• CSS: Will match (case-insensitive)\n", .{});
+    // print("• Walker/hasClass/Collection: Won't match (case-sensitive)\n", .{});
+    // print("\nFor 'text bold' search:\n", .{});
+    // print("• CSS: Returns 0 - space in selector may be interpreted differently than expected\n", .{});
+    // print("• Walker/hasClass: Find 0 - look for 'text bold' as single class token\n", .{});
+    // print("• Collection: Finds elements with exact class='text bold' attribute value\n", .{});
+    // print("• This demonstrates different handling of spaces: CSS selectors vs class tokens vs string matching\n", .{});
 }
