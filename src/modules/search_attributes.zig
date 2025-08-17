@@ -14,7 +14,20 @@ const testing = std.testing;
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
 
-// Walker callback return codes
+// Enhanced walker action types for clearer semantics
+const WalkerAction = enum(u32) {
+    /// Continue traversing the DOM tree
+    CONTINUE = 0,
+    /// Stop traversal immediately (single element searches)
+    STOP = 1,
+
+    // Convert to u32 for C callback compatibility
+    pub fn toU32(self: WalkerAction) u32 {
+        return @intFromEnum(self);
+    }
+};
+
+// Legacy constants for backward compatibility
 const LEXBOR_ACTION_OK: u32 = 0;
 const LEXBOR_ACTION_STOP: u32 = 1;
 
@@ -53,104 +66,193 @@ fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
     return @as(*T, @ptrCast(@alignCast(ctx.?)));
 }
 
+//==================================================================
+// GENERIC WALKER INFRASTRUCTURE
+//==================================================================
+
+/// Generic walker operation types
+const WalkerOperation = enum {
+    /// Find single element (stops on first match)
+    find_single,
+    /// Collect multiple elements (continues through entire tree)
+    collect_multiple,
+    /// Process all elements (e.g., remove attributes, modify content)
+    process_all,
+};
+
+/// Generic context for walker-based DOM operations
+fn GenericWalkerContext(comptime ContextType: type, comptime operation: WalkerOperation) type {
+    return struct {
+        const Self = @This();
+
+        // User-defined context data
+        context: ContextType,
+
+        // Operation-specific data
+        found_element: if (operation == .find_single) ?*z.DomElement else void,
+        results: if (operation == .collect_multiple) std.ArrayList(*z.DomElement) else void,
+
+        // Statistics
+        nodes_visited: u32 = 0,
+        elements_processed: u32 = 0,
+
+        pub fn init(allocator: std.mem.Allocator, context: ContextType) Self {
+            return Self{
+                .context = context,
+                .found_element = if (operation == .find_single) null else {},
+                .results = if (operation == .collect_multiple) std.ArrayList(*z.DomElement).init(allocator) else {},
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            if (operation == .collect_multiple) {
+                self.results.deinit();
+            }
+        }
+
+        pub fn getResults(self: *Self) ![]const *z.DomElement {
+            return switch (operation) {
+                .find_single => if (self.found_element) |elem| &[_]*z.DomElement{elem} else &[_]*z.DomElement{},
+                .collect_multiple => self.results.toOwnedSlice(),
+                .process_all => &[_]*z.DomElement{}, // No results for processing operations
+            };
+        }
+    };
+}
+
+/// Generic walker function that can be customized for different operations
+fn genericWalker(
+    comptime ContextType: type,
+    comptime operation: WalkerOperation,
+    comptime predicate: fn (*z.DomElement, *ContextType) bool,
+    comptime processor: ?fn (*z.DomElement, *ContextType) void,
+) fn (*z.DomNode, ?*anyopaque) callconv(.C) u32 {
+    const WalkerCtx = GenericWalkerContext(ContextType, operation);
+
+    return struct {
+        fn callback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+            if (ctx == null) return WalkerAction.CONTINUE.toU32();
+
+            const walker_ctx = castContext(WalkerCtx, ctx);
+            walker_ctx.nodes_visited += 1;
+
+            // Only process element nodes
+            if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
+
+            const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
+            walker_ctx.elements_processed += 1;
+
+            // Check if this element matches our criteria
+            const matches = predicate(element, &walker_ctx.context);
+
+            if (matches) {
+                // Apply processor function if provided
+                if (processor) |proc| {
+                    proc(element, &walker_ctx.context);
+                }
+
+                switch (operation) {
+                    .find_single => {
+                        walker_ctx.found_element = element;
+                        return WalkerAction.STOP.toU32();
+                    },
+                    .collect_multiple => {
+                        walker_ctx.results.append(element) catch {};
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                    .process_all => {
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                }
+            }
+
+            return WalkerAction.CONTINUE.toU32();
+        }
+    }.callback;
+}
+
 /// [Attr search] Walker callback for `getElementById`
 ///
-/// Returns LEXBOR_ACTION_STOP=1 when ID is found, LEXBOR_ACTION_OK=0 to continue
+/// Returns STOP when ID is found, CONTINUE to keep searching
 fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return LEXBOR_ACTION_OK;
+    if (ctx == null) return WalkerAction.CONTINUE.toU32();
 
     const search_ctx = castContext(IdSearchContext, ctx);
 
-    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+    if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
 
-    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+    const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
 
-    if (!z.hasAttribute(element, "id")) return LEXBOR_ACTION_OK;
+    if (!z.hasAttribute(element, "id")) return WalkerAction.CONTINUE.toU32();
 
     const id_value = z.getElementId_zc(element);
-    if (id_value.len == 0) return LEXBOR_ACTION_OK;
+    if (id_value.len == 0) return WalkerAction.CONTINUE.toU32();
     const match = std.mem.eql(u8, id_value, search_ctx.target_id);
 
     if (match) {
         search_ctx.found_element = element;
-        return LEXBOR_ACTION_STOP;
+        return WalkerAction.STOP.toU32();
     }
 
-    return LEXBOR_ACTION_OK; // Continue searching
+    return WalkerAction.CONTINUE.toU32(); // Continue searching
 }
 
 /// Fast walker callback for class search optimization
-/// Returns LEXBOR_ACTION_STOP when class is found, LEXBOR_ACTION_OK to continue
+/// Returns STOP when class is found, CONTINUE to keep searching
 fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return LEXBOR_ACTION_OK;
+    if (ctx == null) return WalkerAction.CONTINUE.toU32();
 
     const search_ctx = castContext(ClassSearchContext, ctx);
 
-    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+    if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
 
-    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+    const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
 
     // Check if this element has a class attribute
-    if (!z.hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
+    if (!z.hasAttribute(element, "class")) return WalkerAction.CONTINUE.toU32();
 
     const match = z.hasClass(element, search_ctx.target_class);
     if (match) {
         search_ctx.found_element = element;
-        return LEXBOR_ACTION_STOP;
+        return WalkerAction.STOP.toU32();
     }
 
-    return LEXBOR_ACTION_OK; // Continue searching
+    return WalkerAction.CONTINUE.toU32(); // Continue searching
 }
 
 /// Fast walker callback for collecting multiple elements by attribute
-/// Always returns LEXBOR_ACTION_OK to continue searching entire tree
+/// Always returns CONTINUE to search entire tree
 fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return LEXBOR_ACTION_OK;
+    if (ctx == null) return WalkerAction.CONTINUE.toU32();
 
     const search_ctx = castContext(MultiElementSearchContext, ctx);
 
     // Only check element nodes
-    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+    if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
 
-    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+    const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
 
     var matches = false;
 
     switch (search_ctx.search_type) {
         .attribute => {
             // Check if this element has the target attribute
-            if (!z.hasAttribute(element, search_ctx.target_attr_name)) return LEXBOR_ACTION_OK;
+            if (!z.hasAttribute(element, search_ctx.target_attr_name)) return WalkerAction.CONTINUE.toU32();
 
             // If we only care about attribute existence (value is null), it matches
             if (search_ctx.target_attr_value == null) {
                 matches = true;
             } else {
                 // Otherwise, check the attribute value
-                const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+                const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return WalkerAction.CONTINUE.toU32();
                 matches = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
             }
         },
         .class => {
             // Check if this element has a class attribute
-            if (!z.hasAttribute(element, "class")) return LEXBOR_ACTION_OK;
+            if (!z.hasAttribute(element, "class")) return WalkerAction.CONTINUE.toU32();
 
             matches = z.hasClass(element, search_ctx.target_class.?);
-            // if (match) {
-            //     search_ctx.found_element = element;
-            //     return LEXBOR_ACTION_STOP;
-            // }
-
-            // Get the class value and search for the target class
-            // const class_value = z.getAttribute_zc(element, "class") orelse return LEXBOR_ACTION_OK;
-
-            // var iterator = std.mem.splitScalar(u8, class_value, ' ');
-            // while (iterator.next()) |class| {
-            //     const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-            //     if (std.mem.eql(u8, trimmed_class, search_ctx.target_class.?)) {
-            //         matches = true;
-            //         break;
-            //     }
-            // }
         },
     }
 
@@ -159,41 +261,41 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
         search_ctx.results.append(element) catch {};
     }
 
-    return LEXBOR_ACTION_OK; // Always continue searching
+    return WalkerAction.CONTINUE.toU32(); // Always continue searching
 }
 
 /// Fast walker callback for attribute search optimization
-/// Returns LEXBOR_ACTION_STOP when attribute is found, LEXBOR_ACTION_OK to continue
+/// Returns STOP when attribute is found, CONTINUE to keep searching
 fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return LEXBOR_ACTION_OK;
+    if (ctx == null) return WalkerAction.CONTINUE.toU32();
 
     const search_ctx = castContext(AttributeSearchContext, ctx);
 
     // Only check element nodes
-    if (!z.isTypeElement(node)) return LEXBOR_ACTION_OK;
+    if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
 
-    const element = z.nodeToElement(node) orelse return LEXBOR_ACTION_OK;
+    const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
 
     // Check if this element has the target attribute
-    if (!z.hasAttribute(element, search_ctx.target_attr_name)) return LEXBOR_ACTION_OK;
+    if (!z.hasAttribute(element, search_ctx.target_attr_name)) return WalkerAction.CONTINUE.toU32();
 
     // If we only care about attribute existence (value is null), we found it
     if (search_ctx.target_attr_value == null) {
         search_ctx.found_element = element;
-        return LEXBOR_ACTION_STOP;
+        return WalkerAction.STOP.toU32();
     }
 
     // Otherwise, check the attribute value
-    const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return LEXBOR_ACTION_OK;
+    const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return WalkerAction.CONTINUE.toU32();
 
     const match = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
 
     if (match) {
         search_ctx.found_element = element;
-        return LEXBOR_ACTION_STOP; // Found it! Stop traversal
+        return WalkerAction.STOP.toU32(); // Found it! Stop traversal
     }
 
-    return LEXBOR_ACTION_OK; // Continue searching
+    return WalkerAction.CONTINUE.toU32(); // Continue searching
 }
 
 /// [attributes] Fast getElementById using optimized DOM traversal
@@ -280,6 +382,167 @@ pub fn getElementByDataAttributeFast(doc: *z.HtmlDocument, prefix: []const u8, d
     );
 
     return getElementByAttributeFast(doc, attr_name, value);
+}
+
+//==================================================================
+// ENHANCED GENERIC WALKER EXAMPLES
+//==================================================================
+
+/// Example: Find element by ID using generic walker
+pub fn getElementByIdGeneric(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
+    const IdContext = struct {
+        target_id: []const u8,
+    };
+
+    const predicate = struct {
+        fn check(element: *z.DomElement, context: *IdContext) bool {
+            if (!z.hasAttribute(element, "id")) return false;
+            const id_value = z.getElementId_zc(element);
+            return std.mem.eql(u8, id_value, context.target_id);
+        }
+    }.check;
+
+    const root_node = z.documentRoot(doc) orelse return null;
+    var walker_ctx = GenericWalkerContext(IdContext, .find_single).init(std.heap.page_allocator, .{ .target_id = id });
+    defer walker_ctx.deinit();
+
+    const callback = genericWalker(IdContext, .find_single, predicate, null);
+    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+
+    return walker_ctx.found_element;
+}
+
+/// Example: Remove all attributes matching a pattern (like your C++ example)
+pub fn removeAttributesMatching(doc: *z.HtmlDocument, attr_pattern: []const u8) !u32 {
+    const RemoveContext = struct {
+        pattern: []const u8,
+        removed_count: u32 = 0,
+        allocator: std.mem.Allocator,
+    };
+
+    const predicate = struct {
+        fn check(element: *z.DomElement, context: *RemoveContext) bool {
+            _ = element; // All elements are processed
+            _ = context; // All elements are processed
+            return true; // Process all elements
+        }
+    }.check;
+
+    const processor = struct {
+        fn process(element: *z.DomElement, context: *RemoveContext) void {
+            // Get all attributes and check for matches
+            const attrs = z.getAttributes(context.allocator, element) catch return;
+            defer {
+                for (attrs) |attr| {
+                    context.allocator.free(attr.name);
+                    context.allocator.free(attr.value);
+                }
+                context.allocator.free(attrs);
+            }
+
+            // Remove attributes that match the pattern
+            for (attrs) |attr| {
+                if (std.mem.indexOf(u8, attr.name, context.pattern) != null) {
+                    z.removeAttribute(element, attr.name) catch {};
+                    context.removed_count += 1;
+                }
+            }
+        }
+    }.process;
+
+    const root_node = z.documentRoot(doc) orelse return 0;
+    var walker_ctx = GenericWalkerContext(RemoveContext, .process_all).init(std.heap.page_allocator, .{
+        .pattern = attr_pattern,
+        .allocator = std.heap.page_allocator,
+    });
+    defer walker_ctx.deinit();
+
+    const callback = genericWalker(RemoveContext, .process_all, predicate, processor);
+    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+
+    return walker_ctx.context.removed_count;
+}
+
+/// Example: Collect all elements with specific tag name
+pub fn getElementsByTagNameGeneric(allocator: std.mem.Allocator, doc: *z.HtmlDocument, tag_name: []const u8) ![]const *z.DomElement {
+    const TagContext = struct {
+        target_tag: []const u8,
+    };
+
+    const predicate = struct {
+        fn check(element: *z.DomElement, context: *TagContext) bool {
+            const element_tag = z.tagName_zc(element);
+            return std.mem.eql(u8, element_tag, context.target_tag);
+        }
+    }.check;
+
+    const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
+    var walker_ctx = GenericWalkerContext(TagContext, .collect_multiple).init(allocator, .{ .target_tag = tag_name });
+    defer walker_ctx.deinit();
+
+    const callback = genericWalker(TagContext, .collect_multiple, predicate, null);
+    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+
+    return walker_ctx.getResults();
+}
+
+/// Example: Add class to all elements matching a condition
+pub fn addClassToElements(doc: *z.HtmlDocument, condition_attr: []const u8, new_class: []const u8) !u32 {
+    const AddClassContext = struct {
+        condition_attr: []const u8,
+        new_class: []const u8,
+        modified_count: u32 = 0,
+        allocator: std.mem.Allocator,
+    };
+
+    const predicate = struct {
+        fn check(element: *z.DomElement, context: *AddClassContext) bool {
+            return z.hasAttribute(element, context.condition_attr);
+        }
+    }.check;
+
+    const processor = struct {
+        fn process(element: *z.DomElement, context: *AddClassContext) void {
+            // Check if element already has this class to avoid duplicates
+            if (z.hasClass(element, context.new_class)) {
+                return; // Already has the class, skip
+            }
+
+            // Get current class value
+            const current_class = z.getAttribute_zc(element, "class") orelse "";
+
+            // Create new class value by appending the new class
+            var new_class_value = std.ArrayList(u8).init(context.allocator);
+            defer new_class_value.deinit();
+
+            if (current_class.len > 0) {
+                new_class_value.appendSlice(current_class) catch return;
+                new_class_value.append(' ') catch return;
+            }
+            new_class_value.appendSlice(context.new_class) catch return;
+
+            // Set the updated class attribute
+            const new_value = new_class_value.toOwnedSlice() catch return;
+            defer context.allocator.free(new_value);
+
+            z.setAttributes(element, &[_]z.AttributePair{.{ .name = "class", .value = new_value }}) catch {};
+
+            context.modified_count += 1;
+        }
+    }.process;
+
+    const root_node = z.documentRoot(doc) orelse return 0;
+    var walker_ctx = GenericWalkerContext(AddClassContext, .process_all).init(std.heap.page_allocator, .{
+        .condition_attr = condition_attr,
+        .new_class = new_class,
+        .allocator = std.heap.page_allocator,
+    });
+    defer walker_ctx.deinit();
+
+    const callback = genericWalker(AddClassContext, .process_all, predicate, processor);
+    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+
+    return walker_ctx.context.modified_count;
 }
 
 //==================================================================
@@ -718,4 +981,126 @@ test "elementHasNamedAttribute - isolated test" {
     // print("✅ Has 'missing' attribute: {}\n", .{has_missing});
 
     // print("✅ elementHasNamedAttribute isolated test passed!\n", .{});
+}
+
+test "enhanced generic walker - single element search" {
+    const html =
+        \\<div>
+        \\  <p id="target">Target paragraph</p>
+        \\  <span id="other">Other element</span>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Test generic ID search
+    const result = try getElementByIdGeneric(doc, "target");
+    try testing.expect(result != null);
+    try testing.expectEqualStrings("P", z.tagName_zc(result.?));
+
+    // Test non-existent ID
+    const missing = try getElementByIdGeneric(doc, "missing");
+    try testing.expect(missing == null);
+}
+
+test "enhanced generic walker - attribute removal" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div data-test="1" class="example" data-id="123">
+        \\  <span data-value="abc" title="tooltip" data-category="tech">Content</span>
+        \\  <p class="text" style="color: red;">Paragraph</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Remove all data-* attributes
+    const removed_count = try removeAttributesMatching(doc, "data-");
+    try testing.expect(removed_count == 4); // data-test, data-id, data-value, data-category
+
+    // Verify attributes were removed
+    const body = try z.bodyElement(doc);
+    const first_child = z.firstChild(z.elementToNode(body));
+    try testing.expect(first_child != null);
+    const div = z.nodeToElement(first_child.?).?;
+
+    // Should still have class but not data-* attributes
+    try testing.expect(z.hasAttribute(div, "class"));
+    try testing.expect(!z.hasAttribute(div, "data-test"));
+    try testing.expect(!z.hasAttribute(div, "data-id"));
+
+    // Check serialized output doesn't contain data attributes
+    const body_node = try z.bodyNode(doc);
+    const html_output = try z.serializeToString(allocator, body_node);
+    defer allocator.free(html_output);
+    try testing.expect(std.mem.indexOf(u8, html_output, "data-") == null);
+}
+
+test "enhanced generic walker - collect multiple elements" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div>
+        \\  <p>First paragraph</p>
+        \\  <span>Span element</span>
+        \\  <p>Second paragraph</p>
+        \\  <div>Nested div</div>
+        \\  <p>Third paragraph</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Collect all P elements
+    const paragraphs = try getElementsByTagNameGeneric(allocator, doc, "P");
+    defer allocator.free(paragraphs);
+
+    try testing.expect(paragraphs.len == 3);
+
+    // Verify they are all P elements
+    for (paragraphs) |p| {
+        try testing.expectEqualStrings("P", z.tagName_zc(p));
+    }
+}
+
+test "enhanced generic walker - modify elements" {
+    const html =
+        \\<div>
+        \\  <p data-highlight="true">Paragraph 1</p>
+        \\  <span>Normal span</span>
+        \\  <div data-highlight="false">Div with data</div>
+        \\  <p data-highlight="true">Paragraph 2</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Add 'highlighted' class to all elements with data-highlight attribute
+    const modified_count = try addClassToElements(doc, "data-highlight", "highlighted");
+    try testing.expect(modified_count == 3);
+
+    // Verify that at least one element with data-highlight has the class
+    // Use our search function to find an element with data-highlight
+    const highlighted_element = try getElementByAttributeFast(doc, "data-highlight", null);
+    try testing.expect(highlighted_element != null);
+    try testing.expect(z.hasClass(highlighted_element.?, "highlighted"));
+}
+
+test "walker action enum clarity" {
+    // Demonstrate the improved semantics
+    const action_continue = WalkerAction.CONTINUE;
+    const action_stop = WalkerAction.STOP;
+
+    try testing.expect(action_continue.toU32() == 0);
+    try testing.expect(action_stop.toU32() == 1);
+
+    // Shows intent much clearer than magic numbers
+    const should_continue = true;
+    const next_action: WalkerAction = if (should_continue) .CONTINUE else .STOP;
+    try testing.expect(next_action == .CONTINUE);
 }

