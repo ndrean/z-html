@@ -242,6 +242,22 @@ pub fn getElementId_zc(element: *z.DomElement) []const u8 {
     return id_ptr[0..id_len];
 }
 
+pub fn hasElementId(element: *z.DomElement, id: []const u8) bool {
+    const id_value = z.getElementId_zc(element);
+    if (id_value.len != id.len or id_value.len == 0) return false;
+    return std.mem.eql(u8, id_value, id);
+}
+
+test "hasElementID" {
+    const doc1 = try z.parseFromString("<p id=\"test\"></p><p id=\"\"></p>");
+    const elem1 = try z.getElementById(doc1, "test");
+    const elem2 = try z.getElementById(doc1, "");
+
+    try testing.expect(hasElementId(elem1.?, "test"));
+    try testing.expect(!hasElementId(elem1.?, "nope"));
+    try testing.expect(!hasElementId(elem2.?, ""));
+}
+
 /// Compare two lexbor strings with case sensitivity.
 pub fn compareStrings(first: []const u8, second: []const u8) bool {
     return std.mem.eql(u8, first, second);

@@ -280,7 +280,7 @@ pub const hasAttribute = attrs.hasAttribute;
 pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
 pub const getElementId_zc = attrs.getElementId_zc;
-
+pub const hasElementId = attrs.hasElementId;
 pub const compareStrings = attrs.compareStrings;
 
 pub const getAttributeValue = attrs.getAttributeValue;
