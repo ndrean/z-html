@@ -1,4 +1,4 @@
-LEXBOR_VERSION = 2.4.0
+LEXBOR_VERSION = 2.5.0
 LEXBOR_DIR = lexbor_src_${LEXBOR_VERSION}
 LEXBOR_LIB = $(LEXBOR_DIR)/build/liblexbor.a
 

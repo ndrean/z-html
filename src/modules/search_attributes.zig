@@ -127,7 +127,10 @@ fn genericWalker(
     comptime predicate: fn (*z.DomElement, *ContextType) bool,
     comptime processor: ?fn (*z.DomElement, *ContextType) void,
 ) fn (*z.DomNode, ?*anyopaque) callconv(.C) u32 {
-    const WalkerCtx = GenericWalkerContext(ContextType, operation);
+    const WalkerCtx = GenericWalkerContext(
+        ContextType,
+        operation,
+    );
 
     return struct {
         fn callback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
@@ -403,7 +406,13 @@ pub fn getElementByIdGeneric(doc: *z.HtmlDocument, id: []const u8) !?*z.DomEleme
     }.check;
 
     const root_node = z.documentRoot(doc) orelse return null;
-    var walker_ctx = GenericWalkerContext(IdContext, .find_single).init(std.heap.page_allocator, .{ .target_id = id });
+    var walker_ctx = GenericWalkerContext(
+        IdContext,
+        .find_single,
+    ).init(
+        std.heap.page_allocator,
+        .{ .target_id = id },
+    );
     defer walker_ctx.deinit();
 
     const callback = genericWalker(IdContext, .find_single, predicate, null);
@@ -543,6 +552,274 @@ pub fn addClassToElements(doc: *z.HtmlDocument, condition_attr: []const u8, new_
     lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
 
     return walker_ctx.context.modified_count;
+}
+
+// -----------------------------------------------------------------
+
+// what to search
+const SearchSpec = struct {
+    target_attr: []const u8, // "id", "class", "data-*", etc.
+    target_value: ?[]const u8 = null, // null = existence check only
+    mode: WalkerOperation, // single, multiple, or all
+};
+
+// how to search
+const WalkerContext = struct {
+    allocator: std.mem.Allocator,
+    spec: SearchSpec, // What we're looking for
+    results: std.ArrayList(*z.DomElement),
+};
+
+const OptionType = union {
+    single: *z.DomElement, // single element result
+    multiple: []*z.DomElement, // multiple elements result
+};
+
+// TODO: to use universalPredicate
+fn comptime_walker(
+    allocator: std.mem.Allocator,
+    root: *z.DomNode,
+    spec: SearchSpec,
+    comptime predicate: *const fn (*z.DomElement, SearchSpec) bool,
+    comptime processor: ?*const fn (*z.DomElement, SearchSpec) void,
+) ![]const *z.DomElement {
+    var results = std.ArrayList(*z.DomElement).init(allocator);
+    defer results.deinit();
+
+    const ContextType = struct {
+        spec: SearchSpec,
+        results: *std.ArrayList(*z.DomElement),
+        predicate: *const fn (*z.DomElement, SearchSpec) bool,
+        processor: ?*const fn (*z.DomElement, SearchSpec) void,
+    };
+
+    var ctx = ContextType{
+        .spec = spec,
+        .results = &results,
+        .predicate = predicate,
+        .processor = processor,
+    };
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
+            if (context == null) return WalkerAction.CONTINUE.toU32();
+
+            const walk_ctx = castContext(ContextType, context);
+            if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
+            const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
+
+            const matches = walk_ctx.predicate(element, walk_ctx.spec);
+
+            if (matches) {
+                if (walk_ctx.processor) |proc| {
+                    proc(element, walk_ctx.spec);
+                }
+
+                switch (walk_ctx.spec.mode) {
+                    .find_single => {
+                        walk_ctx.results.append(element) catch {};
+                        return WalkerAction.STOP.toU32();
+                    },
+                    .collect_multiple => {
+                        walk_ctx.results.append(element) catch {};
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                    .process_all => {
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                }
+            }
+
+            return WalkerAction.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(root, callback, &ctx);
+    return results.toOwnedSlice();
+}
+
+/// walker function that can be customized for different operations
+fn runtime_walker(
+    allocator: std.mem.Allocator,
+    root: *z.DomNode,
+    spec: SearchSpec,
+    predicate: *const fn (*z.DomElement, SearchSpec) bool,
+    processor: ?*const fn (*z.DomElement, SearchSpec) void,
+) ![]const *z.DomElement {
+    var results = std.ArrayList(*z.DomElement).init(allocator);
+    defer results.deinit();
+
+    // Create the context type first
+    const WalkerContextType = struct {
+        spec: SearchSpec,
+        results: *std.ArrayList(*z.DomElement),
+        predicate: *const fn (*z.DomElement, SearchSpec) bool,
+        processor: ?*const fn (*z.DomElement, SearchSpec) void,
+    };
+
+    var ctx = WalkerContextType{
+        .spec = spec,
+        .results = &results,
+        .predicate = predicate,
+        .processor = processor,
+    };
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
+            if (context == null) return WalkerAction.CONTINUE.toU32();
+
+            // Cast to the correct context type
+            const walker_context = castContext(WalkerContextType, context);
+            if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
+            const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
+
+            // Call predicate with the spec
+            const matches = walker_context.predicate(element, walker_context.spec);
+
+            if (matches) {
+                // Apply processor function if provided
+                if (walker_context.processor) |proc| {
+                    proc(element, walker_context.spec);
+                }
+
+                switch (walker_context.spec.mode) {
+                    .find_single => {
+                        walker_context.results.append(element) catch {};
+                        return WalkerAction.STOP.toU32();
+                    },
+                    .collect_multiple => {
+                        walker_context.results.append(element) catch {};
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                    .process_all => {
+                        return WalkerAction.CONTINUE.toU32();
+                    },
+                }
+            }
+
+            return WalkerAction.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(root, callback, &ctx);
+    return results.toOwnedSlice();
+}
+
+fn mypredicate(element: *z.DomElement, ctx: SearchSpec) bool {
+    if (!z.hasAttribute(element, ctx.target_attr)) return false;
+    const value = z.getElementId_zc(element);
+    return std.mem.eql(u8, value, ctx.target_value.?);
+}
+
+fn myprocessor(element: *z.DomElement, ctx: SearchSpec) void {
+    _ = element;
+    _ = ctx;
+    // Process the element as needed
+}
+
+fn getByIdRuntime(
+    allocator: std.mem.Allocator,
+    root_node: *z.DomNode,
+    context: SearchSpec,
+    predicate: *const fn (*z.DomElement, SearchSpec) bool,
+    processor: ?*const fn (*z.DomElement, SearchSpec) void,
+) ![]const *z.DomElement {
+    _ = processor;
+    return runtime_walker(
+        allocator,
+        root_node,
+        context,
+        predicate,
+        null,
+    );
+}
+
+fn getByIdComptime(
+    allocator: std.mem.Allocator,
+    root_node: *z.DomNode,
+    context: SearchSpec,
+) ![]const *z.DomElement {
+    return comptime_walker(
+        allocator,
+        root_node,
+        context,
+        &universalPredicate,
+        null,
+    );
+}
+
+fn universalPredicate(element: *z.DomElement, spec: SearchSpec) bool {
+    return switch (std.hash_map.hashString(spec.target_attr)) {
+        std.hash_map.hashString("id") => {
+            if (!z.hasAttribute(element, "id")) return false;
+            const value = z.getElementId_zc(element);
+            return std.mem.eql(u8, value, spec.target_value orelse return false);
+        },
+        std.hash_map.hashString("class") => {
+            // class matching logic
+            return z.hasClass(element, spec.target_value orelse return false);
+        },
+        std.hash_map.hashString("data-*") => {
+            // data attribute logic
+            if (!z.hasAttribute(element, spec.target_attr)) return false;
+            if (spec.target_value) |expected| {
+                const actual = z.getAttribute_zc(element, spec.target_attr) orelse return false;
+                return std.mem.eql(u8, actual, expected);
+            }
+            return true; // Just existence check
+        },
+        else => {
+            // Generic attribute matching (fallback)
+            if (!z.hasAttribute(element, spec.target_attr)) return false;
+            if (spec.target_value) |expected| {
+                const actual = z.getAttribute_zc(element, spec.target_attr) orelse return false;
+                return std.mem.eql(u8, actual, expected);
+            }
+            return true;
+        },
+    };
+}
+
+test "getById Runtime & Comptime" {
+    const allocator = testing.allocator;
+
+    const html = "<div id='test-id'>Content</div>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    const root_node = z.documentRoot(doc) orelse return;
+
+    // Test getById
+    const runtime_element = try getByIdRuntime(
+        allocator,
+        root_node,
+        .{
+            .target_attr = "id",
+            .target_value = "test-id",
+            .mode = .find_single,
+        },
+        &mypredicate,
+        null,
+    );
+    defer allocator.free(runtime_element);
+    try testing.expect(runtime_element.len > 0);
+
+    try testing.expectEqualStrings(
+        z.getElementId_zc(runtime_element[0]),
+        "test-id",
+    );
+
+    const comptime_element = try getByIdComptime(allocator, root_node, .{
+        .target_attr = "id",
+        .target_value = "test-id",
+        .mode = .find_single,
+    });
+    defer allocator.free(comptime_element);
+
+    try testing.expect(comptime_element.len > 0);
+    try testing.expectEqualStrings(
+        z.getElementId_zc(comptime_element[0]),
+        "test-id",
+    );
 }
 
 //==================================================================
