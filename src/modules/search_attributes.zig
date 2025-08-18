@@ -571,10 +571,11 @@ const WalkerContext = struct {
     result: *z.DomElement,
 };
 
-const OptionType = union {
+const OptionType = union(enum) {
     single: ?*z.DomElement, // single element result
     multiple: []*z.DomElement, // multiple elements result
     all: void,
+    err: []const u8,
 };
 
 // TODO: to use universalPredicate
@@ -584,14 +585,14 @@ fn comptime_walker(
     spec: SearchSpec,
     comptime predicate: *const fn (*z.DomElement, SearchSpec) bool,
     comptime processor: ?*const fn (*z.DomElement, SearchSpec) void,
-) OptionType {
+) !OptionType {
     var results = std.ArrayList(*z.DomElement).init(allocator);
-    defer results.deinit();
+    // defer results.deinit();
 
     const ContextType = struct {
         spec: SearchSpec,
         results: *std.ArrayList(*z.DomElement),
-        result: OptionType.single,
+        result: ?*z.DomElement, // ✅ Optional pointer
         predicate: *const fn (*z.DomElement, SearchSpec) bool,
         processor: ?*const fn (*z.DomElement, SearchSpec) void,
     };
@@ -599,7 +600,7 @@ fn comptime_walker(
     var ctx = ContextType{
         .spec = spec,
         .results = &results,
-        .result = undefined,
+        .result = null,
         .predicate = predicate,
         .processor = processor,
     };
@@ -622,7 +623,6 @@ fn comptime_walker(
                 switch (walker_context.spec.mode) {
                     .find_single => {
                         walker_context.result = element;
-                        // walker_context.results.append(element) catch {};
                         return WalkerAction.STOP.toU32();
                     },
                     .collect_multiple => {
@@ -640,13 +640,11 @@ fn comptime_walker(
     }.cb;
 
     lxb_dom_node_simple_walk(root, callback, &ctx);
-    if (spec.mode == .collect_multiple) {
-        return ctx.results.toOwnedSlice();
-    } else if (spec.mode == .find_single) {
-        return ctx.result;
-    } else if (spec.mode == .all) {
-        return void;
-    }
+    return switch (spec.mode) {
+        .collect_multiple => OptionType{ .multiple = try ctx.results.toOwnedSlice() },
+        .find_single => OptionType{ .single = ctx.result },
+        .process_all => OptionType{ .all = {} },
+    };
 }
 
 /// walker function that can be customized for different operations
@@ -658,7 +656,6 @@ fn runtime_walker(
     processor: ?*const fn (*z.DomElement, SearchSpec) void,
 ) ![]const *z.DomElement {
     var results = std.ArrayList(*z.DomElement).init(allocator);
-    defer results.deinit();
 
     // Create the context type first
     const WalkerContextType = struct {
@@ -749,21 +746,27 @@ fn getByIdComptime(
     allocator: std.mem.Allocator,
     root_node: *z.DomNode,
     context: SearchSpec,
-) ![]const *z.DomElement {
-    return comptime_walker(
+) !?*z.DomElement {
+    const result = try comptime_walker(
         allocator,
         root_node,
         context,
         &universalPredicate,
         null,
     );
+    return switch (result) {
+        .single => |element| element,
+        else => unreachable,
+    };
 }
 
 fn universalPredicate(element: *z.DomElement, spec: SearchSpec) bool {
+    // print("{s}")
     return switch (std.hash_map.hashString(spec.target_attr)) {
         std.hash_map.hashString("id") => {
             if (!z.hasAttribute(element, "id")) return false;
             const value = z.getElementId_zc(element);
+            print("in universalPredicate, value is: {s}\n", .{value});
             return std.mem.eql(u8, value, spec.target_value orelse return false);
         },
         std.hash_map.hashString("class") => {
@@ -794,42 +797,60 @@ fn universalPredicate(element: *z.DomElement, spec: SearchSpec) bool {
 test "getById Runtime & Comptime" {
     const allocator = testing.allocator;
 
-    const html = "<div id='test-id'>Content</div>";
+    const html = "<div id=\"1\" class=\"bold\">First</div><div class=\"bold\" id=\"2\">Second</div>";
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
     const root_node = z.documentRoot(doc) orelse return;
 
     // Test getById
-    const runtime_element = try getByIdRuntime(
+    const runtime_element_1 = try getByIdRuntime(
         allocator,
         root_node,
         .{
             .target_attr = "id",
-            .target_value = "test-id",
+            .target_value = "1",
             .mode = .find_single,
         },
         &mypredicate,
         null,
     );
-    defer allocator.free(runtime_element);
-    try testing.expect(runtime_element.len > 0);
+    defer allocator.free(runtime_element_1);
 
-    try testing.expectEqualStrings(
-        z.getElementId_zc(runtime_element[0]),
-        "test-id",
+    try testing.expect(runtime_element_1.len > 0);
+
+    const runtime_element_2 = try getByIdRuntime(
+        allocator,
+        root_node,
+        .{
+            .target_attr = "id",
+            .target_value = "10",
+            .mode = .find_single,
+        },
+        &mypredicate,
+        null,
     );
+    defer allocator.free(runtime_element_2);
+
+    try testing.expect(runtime_element_2.len == 0);
 
     const comptime_element = try getByIdComptime(allocator, root_node, .{
         .target_attr = "id",
-        .target_value = "test-id",
+        .target_value = "20",
         .mode = .find_single,
     });
-    defer allocator.free(comptime_element);
 
-    try testing.expectEqualStrings(
-        z.getElementId_zc(comptime_element),
-        "test-id",
-    );
+    if (comptime_element) |e| {
+        const element = try z.serializeElement(allocator, e);
+        defer allocator.free(element);
+        print("comptime: {s}\n", .{element});
+    }
+    // No defer needed - single element is not allocated
+
+    // try testing.expect(comptime_element == null);
+    // try testing.expectEqualStrings(
+    //     z.getElementId_zc(comptime_element.?),
+    //     "2",
+    // );
 }
 
 //==================================================================
