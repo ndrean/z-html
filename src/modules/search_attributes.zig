@@ -568,11 +568,13 @@ const WalkerContext = struct {
     allocator: std.mem.Allocator,
     spec: SearchSpec, // What we're looking for
     results: std.ArrayList(*z.DomElement),
+    result: *z.DomElement,
 };
 
 const OptionType = union {
-    single: *z.DomElement, // single element result
+    single: ?*z.DomElement, // single element result
     multiple: []*z.DomElement, // multiple elements result
+    all: void,
 };
 
 // TODO: to use universalPredicate
@@ -582,13 +584,14 @@ fn comptime_walker(
     spec: SearchSpec,
     comptime predicate: *const fn (*z.DomElement, SearchSpec) bool,
     comptime processor: ?*const fn (*z.DomElement, SearchSpec) void,
-) ![]const *z.DomElement {
+) OptionType {
     var results = std.ArrayList(*z.DomElement).init(allocator);
     defer results.deinit();
 
     const ContextType = struct {
         spec: SearchSpec,
         results: *std.ArrayList(*z.DomElement),
+        result: OptionType.single,
         predicate: *const fn (*z.DomElement, SearchSpec) bool,
         processor: ?*const fn (*z.DomElement, SearchSpec) void,
     };
@@ -596,6 +599,7 @@ fn comptime_walker(
     var ctx = ContextType{
         .spec = spec,
         .results = &results,
+        .result = undefined,
         .predicate = predicate,
         .processor = processor,
     };
@@ -604,24 +608,25 @@ fn comptime_walker(
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
             if (context == null) return WalkerAction.CONTINUE.toU32();
 
-            const walk_ctx = castContext(ContextType, context);
+            const walker_context = castContext(ContextType, context);
             if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
             const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
 
-            const matches = walk_ctx.predicate(element, walk_ctx.spec);
+            const matches = walker_context.predicate(element, walker_context.spec);
 
             if (matches) {
-                if (walk_ctx.processor) |proc| {
-                    proc(element, walk_ctx.spec);
+                if (walker_context.processor) |proc| {
+                    proc(element, walker_context.spec);
                 }
 
-                switch (walk_ctx.spec.mode) {
+                switch (walker_context.spec.mode) {
                     .find_single => {
-                        walk_ctx.results.append(element) catch {};
+                        walker_context.result = element;
+                        // walker_context.results.append(element) catch {};
                         return WalkerAction.STOP.toU32();
                     },
                     .collect_multiple => {
-                        walk_ctx.results.append(element) catch {};
+                        walker_context.results.append(element) catch {};
                         return WalkerAction.CONTINUE.toU32();
                     },
                     .process_all => {
@@ -635,7 +640,13 @@ fn comptime_walker(
     }.cb;
 
     lxb_dom_node_simple_walk(root, callback, &ctx);
-    return results.toOwnedSlice();
+    if (spec.mode == .collect_multiple) {
+        return ctx.results.toOwnedSlice();
+    } else if (spec.mode == .find_single) {
+        return ctx.result;
+    } else if (spec.mode == .all) {
+        return void;
+    }
 }
 
 /// walker function that can be customized for different operations
@@ -815,9 +826,8 @@ test "getById Runtime & Comptime" {
     });
     defer allocator.free(comptime_element);
 
-    try testing.expect(comptime_element.len > 0);
     try testing.expectEqualStrings(
-        z.getElementId_zc(comptime_element[0]),
+        z.getElementId_zc(comptime_element),
         "test-id",
     );
 }
