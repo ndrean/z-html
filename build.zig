@@ -4,8 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lexbor_static_lib_path = b.path("lexbor_src_2.4.0/build/liblexbor_static.a");
-    const lexbor_src_path = b.path("lexbor_src_2.4.0/source");
+    const lexbor_static_lib_path = b.path("lexbor_src_2.5.0/build/liblexbor_static.a");
+    const lexbor_src_path = b.path("lexbor_src_2.5.0/source");
 
     // Wrapper library
     const wrapper_lib = b.addStaticLibrary(.{
