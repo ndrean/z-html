@@ -244,28 +244,52 @@ pub fn getElementByIdComptime(comptime id: []const u8, doc: *z.HtmlDocument) ?*z
 /// No allocation needed, returns null if not found
 pub fn getElementByClassComptime(comptime class_name: []const u8, doc: *z.HtmlDocument) ?*z.DomElement {
     const root_node = z.documentRoot(doc) orelse return null;
-    return comptimeWalker(ClassSearch, .{ .target_class = class_name }, .single, null, root_node);
+    return comptimeWalker(
+        ClassSearch,
+        .{ .target_class = class_name },
+        .single,
+        null,
+        root_node,
+    );
 }
 
 /// Compile-time getElementByTagName - maximum performance for known tags
 /// No allocation needed, returns null if not found
 pub fn getElementByTagComptime(comptime tag: z.HtmlTag, doc: *z.HtmlDocument) ?*z.DomElement {
     const root_node = z.documentRoot(doc) orelse return null;
-    return comptimeWalker(TagSearch, .{ .target_tag = tag }, .single, null, root_node);
+    return comptimeWalker(
+        TagSearch,
+        .{ .target_tag = tag },
+        .single,
+        null,
+        root_node,
+    );
 }
 
 /// Compile-time getElementsByClass - maximum performance for known classes
 /// Caller owns returned slice and must free it
 pub fn getElementsByClassComptime(comptime class_name: []const u8, allocator: std.mem.Allocator, doc: *z.HtmlDocument) ![]const *z.DomElement {
     const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
-    return comptimeWalker(ClassSearch, .{ .target_class = class_name }, .multiple, allocator, root_node);
+    return comptimeWalker(
+        ClassSearch,
+        .{ .target_class = class_name },
+        .multiple,
+        allocator,
+        root_node,
+    );
 }
 
 /// Compile-time getElementsByTagName - maximum performance for known tags
 /// Caller owns returned slice and must free it
 pub fn getElementsByTagComptime(comptime tag: z.HtmlTag, allocator: std.mem.Allocator, doc: *z.HtmlDocument) ![]const *z.DomElement {
     const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
-    return comptimeWalker(TagSearch, .{ .target_tag = tag }, .multiple, allocator, root_node);
+    return comptimeWalker(
+        TagSearch,
+        .{ .target_tag = tag },
+        .multiple,
+        allocator,
+        root_node,
+    );
 }
 
 //==================================================================
@@ -303,6 +327,111 @@ test "unified comptimeWalker examples" {
     const span_elements = try comptimeWalker(TagSearch, .{ .target_tag = .span }, .multiple, allocator, root_node);
     defer allocator.free(span_elements);
     try testing.expect(span_elements.len == 2);
+}
+
+//==================================================================
+// ENHANCED RUNTIME WALKER FOR DOM PROCESSING
+//==================================================================
+
+/// Simplified runtime walker for "process all elements" pattern
+/// When you don't need a predicate (process everything), this is cleaner
+pub fn processAllElements(root_node: *z.DomNode, processor: *const fn (*z.DomElement) void) void {
+    const ProcessAllContext = struct {
+        processor: *const fn (*z.DomElement) void,
+    };
+
+    var ctx = ProcessAllContext{ .processor = processor };
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+
+            const proc_ctx = castContext(ProcessAllContext, context);
+            proc_ctx.processor(element);
+
+            return Action.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(root_node, callback, &ctx);
+}
+
+/// Remove all attributes from all elements (useful for cleaning HTML)
+pub fn removeAllAttributes(root_node: *z.DomNode) void {
+    const processor = struct {
+        fn clean(element: *z.DomElement) void {
+            // Get all attribute names first, then remove them
+            // This avoids iterator invalidation issues
+            var attr_names = std.ArrayList([]const u8).init(std.heap.page_allocator);
+            defer attr_names.deinit();
+
+            var attr = z.getFirstAttribute(element);
+            while (attr != null) {
+                const name = z.getAttributeName_zc(attr.?);
+                attr_names.append(name) catch {};
+                attr = z.getNextAttribute(attr.?);
+            }
+
+            // Now remove all attributes by name
+            for (attr_names.items) |name| {
+                z.removeAttribute(element, name) catch {};
+            }
+        }
+    }.clean;
+
+    processAllElements(root_node, processor);
+}
+
+/// Remove specific attribute from all elements
+pub fn removeAttributeFromAll(root_node: *z.DomNode, attr_name: []const u8) void {
+    const RemoveAttrContext = struct {
+        attr_name: []const u8,
+    };
+
+    var ctx = RemoveAttrContext{ .attr_name = attr_name };
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+
+            const remove_ctx = castContext(RemoveAttrContext, context);
+            z.removeAttribute(element, remove_ctx.attr_name) catch {};
+
+            return Action.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(root_node, callback, &ctx);
+}
+
+test "enhanced runtime walker - processAllElements" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div id="main" class="container" data-test="value">
+        \\  <span class="highlight" title="tooltip">Content</span>
+        \\  <p style="color: red;" data-id="123">Text</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    const root_node = z.documentRoot(doc).?;
+
+    // Test removing all attributes
+    removeAllAttributes(root_node);
+
+    // Verify attributes are gone
+    const body = try z.bodyElement(doc);
+    const serialized = try z.serializeElement(allocator, body);
+    defer allocator.free(serialized);
+
+    // Should have no attributes left
+    try testing.expect(!std.mem.containsAtLeast(u8, serialized, 1, "class="));
+    try testing.expect(!std.mem.containsAtLeast(u8, serialized, 1, "id="));
+    try testing.expect(!std.mem.containsAtLeast(u8, serialized, 1, "data-"));
 }
 
 //==================================================================
