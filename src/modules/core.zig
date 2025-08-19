@@ -16,6 +16,9 @@ const writer = std.io.getStdOut().writer();
 
 pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 
+extern "c" fn lxb_html_template_element_interface_create(doc: *z.HtmlDocument) *z.HtmlTemplate;
+extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HtmlTemplate) *z.HtmlTemplate;
+
 // External lexbor functions
 extern "c" fn lxb_html_interface_template_wrapper() ?*const anyopaque;
 extern "c" fn lxb_html_template_content_wrapper(template_element: *anyopaque) ?*z.DomNode;

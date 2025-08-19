@@ -143,6 +143,26 @@ pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     return result;
 }
 
+/// [attributes] Get attribute name as borrowed slice (zero-copy)
+pub fn getAttributeName_zc(attr: *DomAttr) []const u8 {
+    var name_len: usize = 0;
+    const name_ptr = lxb_dom_attr_qualified_name(
+        attr,
+        &name_len,
+    );
+    return name_ptr[0..name_len];
+}
+
+/// [attributes] Get attribute value as borrowed slice (zero-copy)
+pub fn getAttributeValue_zc(attr: *DomAttr) []const u8 {
+    var value_len: usize = 0;
+    const value_ptr = lxb_dom_attr_value_noi(
+        attr,
+        &value_len,
+    );
+    return value_ptr[0..value_len];
+}
+
 /// [attributes] Get attribute value as owned string
 ///
 /// Caller needs to free the slice

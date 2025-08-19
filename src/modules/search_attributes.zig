@@ -481,15 +481,14 @@ pub fn getElementsByAttribute(allocator: std.mem.Allocator, doc: *z.HtmlDocument
 // }
 
 /// Example: Remove all attributes matching a pattern (like your C++ example)
-pub fn removeAttributesMatching(doc: *z.HtmlDocument, attr_pattern: []const u8) !u32 {
-    const RemoveContext = struct {
-        pattern: []const u8,
-        removed_count: u32 = 0,
-        allocator: std.mem.Allocator,
+pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNode, attr_pattern: []const u8) ![]*z.DomElement {
+    const rmCtx = WalkSpec{
+        .target_attr = attr_pattern,
+        .target_value = null,
     };
 
     const predicate = struct {
-        fn check(element: *z.DomElement, context: *RemoveContext) bool {
+        fn check(element: *z.DomElement, context: WalkSpec) bool {
             _ = element; // All elements are processed
             _ = context; // All elements are processed
             return true; // Process all elements
@@ -497,38 +496,70 @@ pub fn removeAttributesMatching(doc: *z.HtmlDocument, attr_pattern: []const u8) 
     }.check;
 
     const processor = struct {
-        fn process(element: *z.DomElement, context: *RemoveContext) void {
-            // Get all attributes and check for matches
-            const attrs = z.getAttributes(context.allocator, element) catch return;
-            defer {
-                for (attrs) |attr| {
-                    context.allocator.free(attr.name);
-                    context.allocator.free(attr.value);
+        fn process(element: *z.DomElement, context: WalkSpec) void {
+            var attribute = z.getFirstAttribute(element);
+            while (attribute != null) {
+                if (z.hasAttribute(element, context.target_attr)) {
+                    z.removeAttribute(element, context.target_attr) catch {};
                 }
-                context.allocator.free(attrs);
-            }
-
-            // Remove attributes that match the pattern
-            for (attrs) |attr| {
-                if (std.mem.indexOf(u8, attr.name, context.pattern) != null) {
-                    z.removeAttribute(element, attr.name) catch {};
-                    context.removed_count += 1;
-                }
+                attribute = z.getNextAttribute(attribute.?);
             }
         }
     }.process;
 
-    const root_node = z.documentRoot(doc) orelse return 0;
-    var walker_ctx = GenericWalkerContext(RemoveContext, .process).init(std.heap.page_allocator, .{
-        .pattern = attr_pattern,
-        .allocator = std.heap.page_allocator,
-    });
-    defer walker_ctx.deinit();
+    return compWalk(
+        allocator,
+        root_node,
+        rmCtx,
+        predicate,
+        processor,
+    );
+}
 
-    const callback = genericWalker(RemoveContext, .process, predicate, processor);
-    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+test "removeMatchingAttribute" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<div id=\"1\" class=\"bold text-xs\"><span id=\"2\"></span><span id=\"3\"></span><span  class=\"bold\"></span> <span class=\"text-xs\"></span><span class=\"bold\"></span></div><input hidden><img src=\"img\">");
 
-    return walker_ctx.context.removed_count;
+    const root_node = try z.bodyNode(doc);
+
+    const expected_without_ids = "<body><div class=\"bold text-xs\"><span></span><span></span><span class=\"bold\"></span> <span class=\"text-xs\"></span><span class=\"bold\"></span></div><input hidden><img src=\"img\"></body>";
+    const expected_without_hidden = "<body><div class=\"bold text-xs\"><span></span><span></span><span class=\"bold\"></span> <span class=\"text-xs\"></span><span class=\"bold\"></span></div><input><img src=\"img\"></body>";
+    const expected_without_class = "<body><div><span></span><span></span><span></span> <span></span><span></span></div><input><img src=\"img\"></body>";
+    const expected_without_src = "<body><div><span></span><span></span><span></span> <span></span><span></span></div><input><img></body>";
+
+    const expectations = [_]struct { attr_name: []const u8, expected: []const u8 }{
+        .{ .attr_name = "id", .expected = expected_without_ids },
+        .{ .attr_name = "hidden", .expected = expected_without_hidden },
+        .{ .attr_name = "class", .expected = expected_without_class },
+        .{ .attr_name = "src", .expected = expected_without_src },
+    };
+
+    var i: usize = 0;
+    while (i < expectations.len) {
+        const expectation = expectations[i];
+        // Apply the removal
+        const removed = try removeMatchingAttribute(
+            allocator,
+            root_node,
+            expectation.attr_name,
+        );
+        defer allocator.free(removed);
+
+        // Serialize the result
+        const html = try z.serializeElement(
+            allocator,
+            try z.bodyElement(doc),
+        );
+        defer allocator.free(html);
+
+        // Check the result
+        try testing.expectEqualStrings(
+            expectation.expected,
+            html,
+        );
+
+        i += 1;
+    }
 }
 
 /// Example: Collect all elements with specific tag name
@@ -646,6 +677,7 @@ fn matcher(element: *z.DomElement, spec: WalkSpec) bool {
 const WalkSpec = struct {
     target_attr: []const u8,
     target_value: ?[]const u8 = null,
+    data: u8 = 0,
 };
 
 const WalkCtxType = struct {
@@ -661,7 +693,7 @@ const WalkCtxType = struct {
 
 fn compWalk(
     allocator: std.mem.Allocator,
-    root: *z.DomNode,
+    root_node: *z.DomNode,
     spec: WalkSpec,
     comptime predicate: *const fn (*z.DomElement, WalkSpec) bool,
     comptime processor: ?*const fn (*z.DomElement, WalkSpec) void,
@@ -688,7 +720,6 @@ fn compWalk(
                 if (walker_context.processor) |proc| {
                     proc(element, walker_context.spec);
                 }
-                print("{s}\t", .{walker_context.spec.target_attr});
                 walker_context.results.append(element) catch {};
                 return WalkerAction.CONTINUE.toU32();
             }
@@ -697,7 +728,11 @@ fn compWalk(
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root, callback, &ctx);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &ctx,
+    );
     return ctx.results.toOwnedSlice();
 }
 

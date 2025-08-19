@@ -283,7 +283,9 @@ pub const getElementId_zc = attrs.getElementId_zc;
 pub const hasElementId = attrs.hasElementId;
 pub const compareStrings = attrs.compareStrings;
 
+pub const getAttributeValue_zc = attrs.getAttributeValue_zc;
 pub const getAttributeValue = attrs.getAttributeValue;
+pub const getAttributeName_zc = attrs.getAttributeName_zc;
 pub const getAttributeName = attrs.getAttributeName;
 
 //=========================================
