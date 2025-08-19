@@ -480,7 +480,7 @@ pub fn getElementsByAttribute(allocator: std.mem.Allocator, doc: *z.HtmlDocument
 //     return walker_ctx.found_element;
 // }
 
-/// Example: Remove all attributes matching a pattern (like your C++ example)
+/// [walker] Remove all attributes matching a pattern
 pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNode, attr_pattern: []const u8) !u16 {
     const rmCtx = WalkSpec{
         .target_attr = attr_pattern,
@@ -565,41 +565,59 @@ test "removeMatchingAttribute" {
     }
 }
 
-/// Example: Collect all elements with specific tag name
+/// [walker] Collect all elements with specific tag name (HtmlTag)
+///
+/// Caller owns the slice
 pub fn getElementsByTagName(allocator: std.mem.Allocator, doc: *z.HtmlDocument, tag: z.HtmlTag) ![]const *z.DomElement {
-    const TagContext = struct {
-        target_tag: []const u8,
+    const spec = WalkSpec{
+        .target_tag = tag,
+        .target_attr = "",
     };
 
     const predicate = struct {
-        fn check(element: *z.DomElement, context: *TagContext) bool {
-            _ = context;
+        fn check(element: *z.DomElement, context: WalkSpec) bool {
             const element_tag = z.tagFromElement(element);
-            return tag == element_tag;
+            return context.target_tag == element_tag;
         }
     }.check;
 
     const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
 
-    var walker_ctx = GenericWalkerContext(TagContext, .multiple).init(
+    return compWalk(
         allocator,
-        .{ .target_tag = tag },
-    );
-    defer walker_ctx.deinit();
-
-    const callback = genericWalker(
-        TagContext,
-        .multiple,
+        root_node,
+        spec,
         predicate,
         null,
     );
-    lxb_dom_node_simple_walk(
-        root_node,
-        callback,
-        &walker_ctx,
-    );
+}
 
-    return walker_ctx.getResults();
+test "collect multiple elements: getElementsByTagName" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div>
+        \\  <p>First paragraph</p>
+        \\  <span>Span element</span>
+        \\  <p>Second paragraph</p>
+        \\  <div>Nested div</div>
+        \\  <p>Third paragraph</p>
+        \\</div>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Collect all P elements
+    const paragraphs = try getElementsByTagName(allocator, doc, .p);
+    defer allocator.free(paragraphs);
+
+    try testing.expect(paragraphs.len == 3);
+
+    // Verify they are all P elements
+    for (paragraphs) |p| {
+        try testing.expectEqualStrings("P", z.tagName_zc(p));
+    }
 }
 
 /// Example: Add class to all elements matching a condition
@@ -693,6 +711,7 @@ fn matcher(element: *z.DomElement, spec: WalkSpec) bool {
 
 const WalkSpec = struct {
     target_attr: []const u8,
+    target_tag: ?z.HtmlTag = null,
     target_value: ?[]const u8 = null,
     data: u16 = 0,
 };
@@ -723,6 +742,7 @@ fn compWalk(
     };
     errdefer ctx.deinit();
 
+    // follows the pattern needed by lexbor simple_walker callback with the context casted.
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
             if (context == null) return WalkerAction.CONTINUE.toU32();
@@ -1764,34 +1784,6 @@ test "elementHasNamedAttribute - isolated test" {
 //     const html_output = try z.serializeToString(allocator, body_node);
 //     defer allocator.free(html_output);
 //     try testing.expect(std.mem.indexOf(u8, html_output, "data-") == null);
-// }
-
-// test "enhanced generic walker - collect multiple elements" {
-//     const allocator = testing.allocator;
-
-//     const html =
-//         \\<div>
-//         \\  <p>First paragraph</p>
-//         \\  <span>Span element</span>
-//         \\  <p>Second paragraph</p>
-//         \\  <div>Nested div</div>
-//         \\  <p>Third paragraph</p>
-//         \\</div>
-//     ;
-
-//     const doc = try z.parseFromString(html);
-//     defer z.destroyDocument(doc);
-
-//     // Collect all P elements
-//     const paragraphs = try getElementsByTagNameGeneric(allocator, doc, "P");
-//     defer allocator.free(paragraphs);
-
-//     try testing.expect(paragraphs.len == 3);
-
-//     // Verify they are all P elements
-//     for (paragraphs) |p| {
-//         try testing.expectEqualStrings("P", z.tagName_zc(p));
-//     }
 // }
 
 // test "enhanced generic walker - modify elements" {
