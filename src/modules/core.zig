@@ -2242,7 +2242,7 @@ test "Append JS fragment" {
 
     // try z.printDocumentStructure(doc);
 
-    const tree = try z.documentToTupleTree(allocator, doc);
+    const tree = try z.documentToHtmlTree(allocator, doc, null);
     defer z.freeHtmlTree(allocator, tree);
 
     for (tree, 0..) |node, i| {
@@ -2252,7 +2252,7 @@ test "Append JS fragment" {
         // z.printNode(node, 0);
     }
 
-    const json_tree = try z.documentToJsonTree(allocator, doc);
+    const json_tree = try z.documentToJsonTree(allocator, doc, null);
     defer z.freeJsonTree(allocator, json_tree);
     const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);

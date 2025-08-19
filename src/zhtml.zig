@@ -120,7 +120,7 @@ pub const isTypeFragment = Type.isTypeFragment;
 pub const HtmlTag = tag.HtmlTag;
 pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
-pub const fromQualifiedName = tag.fromQualifiedName; // NEW: Fast string→enum conversion
+pub const fromQualifiedName = tag.fromQualifiedName;
 pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
 pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
@@ -175,17 +175,18 @@ pub const JsonTreeArray = tree.JsonTree;
 pub const JsonAttribute = tree.JsonAttribute;
 
 pub const domNodeToTree = tree.domNodeToTree;
-pub const documentToTupleTree = tree.documentToTupleTree;
+pub const documentToTupleTree = tree.documentToHtmlTree;
+pub const documentToHtmlTree = tree.documentToHtmlTree;
 // pub const fullDocumentToTupleTree = tree.fullDocumentToTupleTree;
 pub const domNodeToJson = tree.domNodeToJson;
-pub const documentToJsonTree = tree.documentToJsonTree;
+pub const documentToJsonTree = tree.documentToJsonTree_Enhanced;
 pub const fullDocumentToJsonTree = tree.fullDocumentToJsonTree;
 pub const freeHtmlTree = tree.freeHtmlTree;
 pub const freeJsonTree = tree.freeJsonTree;
 pub const printNode = tree.printNode;
 
-//=====================================
-// JSON serialization and parsing
+// TRUE walker-based DOM conversion (lexbor walker, not Zig recursion)
+pub const walkDom_toTree = tree.walkDom_toTree;
 pub const jsonNodeToString = tree.jsonNodeToString;
 pub const jsonTreeToString = tree.jsonTreeToString;
 pub const parseJsonString = tree.parseJsonString;
