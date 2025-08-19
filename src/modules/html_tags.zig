@@ -64,6 +64,12 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     return null; // Unknown/custom element
 }
 
+/// [HtmlTag] Convert element to HtmlTag enum (inline)
+pub fn tagFromElement(element: *z.DomElement) ?HtmlTag {
+    const qualified_name = z.qualifiedName_zc(element);
+    return stringToEnum(HtmlTag, qualified_name);
+}
+
 /// [HtmlTag] Tag name matcher function
 pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
     const tag = z.parseTag(z.qualifiedName_zc(element));

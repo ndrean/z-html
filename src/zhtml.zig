@@ -50,6 +50,8 @@ pub const parseFragment = fragments.parseFragment;
 pub const parseFragmentSimple = fragments.parseFragmentSimple;
 pub const parseFragmentInto = fragments.parseFragmentInto;
 
+// Tempalte
+
 //=====================================
 // Core
 //=====================================
@@ -120,6 +122,7 @@ pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
 pub const fromQualifiedName = tag.fromQualifiedName; // NEW: Fast string→enum conversion
 pub const matchesTagName = tag.matchesTagName;
+pub const tagFromElement = tag.tagFromElement;
 pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
 pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // RECOMMENDED: Fast enum-based
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements

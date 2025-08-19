@@ -481,13 +481,14 @@ pub fn getElementsByAttribute(allocator: std.mem.Allocator, doc: *z.HtmlDocument
 // }
 
 /// Example: Remove all attributes matching a pattern (like your C++ example)
-pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNode, attr_pattern: []const u8) ![]*z.DomElement {
+pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNode, attr_pattern: []const u8) !u16 {
     const rmCtx = WalkSpec{
         .target_attr = attr_pattern,
         .target_value = null,
+        .data = 0,
     };
 
-    const predicate = struct {
+    const matchAll = struct {
         fn check(element: *z.DomElement, context: WalkSpec) bool {
             _ = element; // All elements are processed
             _ = context; // All elements are processed
@@ -495,8 +496,8 @@ pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNo
         }
     }.check;
 
-    const processor = struct {
-        fn process(element: *z.DomElement, context: WalkSpec) void {
+    const process = struct {
+        fn run(element: *z.DomElement, context: WalkSpec) void {
             var attribute = z.getFirstAttribute(element);
             while (attribute != null) {
                 if (z.hasAttribute(element, context.target_attr)) {
@@ -505,15 +506,18 @@ pub fn removeMatchingAttribute(allocator: std.mem.Allocator, root_node: *z.DomNo
                 attribute = z.getNextAttribute(attribute.?);
             }
         }
-    }.process;
+    }.run;
 
-    return compWalk(
+    const results = try compWalk(
         allocator,
         root_node,
         rmCtx,
-        predicate,
-        processor,
+        matchAll,
+        process,
     );
+    defer allocator.free(results);
+
+    return @intCast(results.len);
 }
 
 test "removeMatchingAttribute" {
@@ -538,12 +542,11 @@ test "removeMatchingAttribute" {
     while (i < expectations.len) {
         const expectation = expectations[i];
         // Apply the removal
-        const removed = try removeMatchingAttribute(
+        _ = try removeMatchingAttribute(
             allocator,
             root_node,
             expectation.attr_name,
         );
-        defer allocator.free(removed);
 
         // Serialize the result
         const html = try z.serializeElement(
@@ -563,24 +566,38 @@ test "removeMatchingAttribute" {
 }
 
 /// Example: Collect all elements with specific tag name
-pub fn getElementsByTagNameGeneric(allocator: std.mem.Allocator, doc: *z.HtmlDocument, tag_name: []const u8) ![]const *z.DomElement {
+pub fn getElementsByTagName(allocator: std.mem.Allocator, doc: *z.HtmlDocument, tag: z.HtmlTag) ![]const *z.DomElement {
     const TagContext = struct {
         target_tag: []const u8,
     };
 
     const predicate = struct {
         fn check(element: *z.DomElement, context: *TagContext) bool {
-            const element_tag = z.tagName_zc(element);
-            return std.mem.eql(u8, element_tag, context.target_tag);
+            _ = context;
+            const element_tag = z.tagFromElement(element);
+            return tag == element_tag;
         }
     }.check;
 
     const root_node = z.documentRoot(doc) orelse return &[_]*z.DomElement{};
-    var walker_ctx = GenericWalkerContext(TagContext, .multiple).init(allocator, .{ .target_tag = tag_name });
+
+    var walker_ctx = GenericWalkerContext(TagContext, .multiple).init(
+        allocator,
+        .{ .target_tag = tag },
+    );
     defer walker_ctx.deinit();
 
-    const callback = genericWalker(TagContext, .multiple, predicate, null);
-    lxb_dom_node_simple_walk(root_node, callback, &walker_ctx);
+    const callback = genericWalker(
+        TagContext,
+        .multiple,
+        predicate,
+        null,
+    );
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &walker_ctx,
+    );
 
     return walker_ctx.getResults();
 }
@@ -677,7 +694,7 @@ fn matcher(element: *z.DomElement, spec: WalkSpec) bool {
 const WalkSpec = struct {
     target_attr: []const u8,
     target_value: ?[]const u8 = null,
-    data: u8 = 0,
+    data: u16 = 0,
 };
 
 const WalkCtxType = struct {
@@ -697,6 +714,53 @@ fn compWalk(
     spec: WalkSpec,
     comptime predicate: *const fn (*z.DomElement, WalkSpec) bool,
     comptime processor: ?*const fn (*z.DomElement, WalkSpec) void,
+) ![]*z.DomElement {
+    var ctx = WalkCtxType{
+        .spec = spec,
+        .results = std.ArrayList(*z.DomElement).init(allocator),
+        .matcher = predicate,
+        .processor = processor,
+    };
+    errdefer ctx.deinit();
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
+            if (context == null) return WalkerAction.CONTINUE.toU32();
+
+            const walker_context = castContext(WalkCtxType, context);
+            if (!z.isTypeElement(node)) return WalkerAction.CONTINUE.toU32();
+            const element = z.nodeToElement(node) orelse return WalkerAction.CONTINUE.toU32();
+
+            const matches = walker_context.matcher(element, walker_context.spec);
+
+            if (matches) {
+                if (walker_context.processor) |proc| {
+                    proc(element, walker_context.spec);
+                    walker_context.spec.data += 1;
+                }
+                walker_context.results.append(element) catch {};
+                return WalkerAction.CONTINUE.toU32();
+            }
+
+            return WalkerAction.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &ctx,
+    );
+    return ctx.results.toOwnedSlice();
+}
+
+/// Runtime walker - takes function pointers (no comptime requirement)
+fn runtimeWalk(
+    allocator: std.mem.Allocator,
+    root_node: *z.DomNode,
+    spec: WalkSpec,
+    predicate: *const fn (*z.DomElement, WalkSpec) bool,
+    processor: ?*const fn (*z.DomElement, WalkSpec) void,
 ) ![]*z.DomElement {
     var ctx = WalkCtxType{
         .spec = spec,
@@ -743,29 +807,24 @@ test "compWalk" {
 
         const root_1 = z.documentRoot(doc).?; // <html>
 
-        const spec_1 = WalkSpec{
-            .target_attr = "class",
-            .target_value = "bold",
+        const expectations = [_]struct { spec: WalkSpec, len: u8 }{
+            .{ .spec = .{ .target_attr = "class", .target_value = "bold" }, .len = 1 },
+            .{ .spec = .{ .target_attr = "class", .target_value = "text-xs" }, .len = 2 },
         };
-        const result_1 = try compWalk(
-            allocator,
-            root_1,
-            spec_1,
-            &matcher,
-            null,
-        );
-        defer allocator.free(result_1);
-        print("{d}\n", .{result_1.len});
-        try testing.expect(result_1.len == 1);
 
-        const spec_2 = WalkSpec{
-            .target_attr = "class",
-            .target_value = "text-xs",
-        };
-        const result_2 = try compWalk(allocator, root_1, spec_2, matcher, null);
-        defer allocator.free(result_2);
-        print("{d}\n", .{result_2.len});
-        try testing.expect(result_2.len == 2);
+        var i: usize = 0;
+        while (i < expectations.len) : (i += 1) {
+            const exp = expectations[i];
+            const result = try compWalk(
+                allocator,
+                root_1,
+                exp.spec,
+                matcher,
+                null,
+            );
+            defer allocator.free(result);
+            try testing.expect(result.len == exp.len);
+        }
     }
     {
         // test a fragment of the DOM
@@ -773,6 +832,7 @@ test "compWalk" {
 
         const root = try z.bodyNode(doc);
         const div = z.firstChild(root).?;
+
         const txt = try z.serializeElement(
             allocator,
             z.nodeToElement(div).?,
@@ -783,33 +843,24 @@ test "compWalk" {
             txt,
         );
 
-        const spec_1 = WalkSpec{
-            .target_attr = "class",
-            .target_value = "bold",
+        const expectations = [_]struct { spec: WalkSpec, len: u8 }{
+            .{ .spec = .{ .target_attr = "class", .target_value = "bold" }, .len = 0 },
+            .{ .spec = .{ .target_attr = "class", .target_value = "text-xs" }, .len = 1 },
         };
-        const result_1 = try compWalk(
-            allocator,
-            div,
-            spec_1,
-            matcher,
-            null,
-        );
-        defer allocator.free(result_1);
-        try testing.expect(result_1.len == 0);
 
-        const spec_2 = WalkSpec{
-            .target_attr = "class",
-            .target_value = "text-xs",
-        };
-        const result_2 = try compWalk(
-            allocator,
-            div,
-            spec_2,
-            matcher,
-            null,
-        );
-        defer allocator.free(result_2);
-        try testing.expect(result_2.len == 1);
+        var i: usize = 0;
+        while (i < expectations.len) : (i += 1) {
+            const exp = expectations[i];
+            const result = try compWalk(
+                allocator,
+                div,
+                exp.spec,
+                matcher,
+                null,
+            );
+            defer allocator.free(result);
+            try testing.expect(result.len == exp.len);
+        }
     }
 }
 
@@ -823,7 +874,7 @@ pub fn getElementsByWalk(
     node: *z.DomNode,
     context: WalkSpec,
 ) ![]*z.DomElement {
-    return compWalk(
+    return runtimeWalk(
         allocator,
         node,
         context,
@@ -834,91 +885,31 @@ pub fn getElementsByWalk(
 
 test "getElementsByWalk" {
     const allocator = testing.allocator;
-    {
-        const doc = try z.parseFromString("<p id=\"1\" class=\"bold\"></p><p class=\"text-xs\" id=\"2\"></p> <p id=\"3\" phx-click=\"increment\"></p><img src= ><img src=\"img\" data-id /></p><p ><p id=\"4\" class=\"text-xs\" data-id=\"4\"></p>");
 
-        const root = z.documentRoot(doc).?; // <html>
+    const doc = try z.parseFromString("<p id=\"1\" class=\"bold\"></p><p class=\"text-xs\" id=\"2\"></p> <p id=\"3\" phx-click=\"increment\"></p><img src= ><img src=\"img\" data-id /></p><p ><p id=\"4\" class=\"text-xs\" data-id=\"4\"></p>");
 
-        const result_1 = try getElementsByWalk(
+    const root = z.documentRoot(doc).?; // <html>
+
+    const expectations = [_]struct { spec: WalkSpec, len: u8 }{
+        .{ .spec = .{ .target_attr = "phx-click" }, .len = 1 },
+        .{ .spec = .{ .target_attr = "phx-click", .target_value = "increment" }, .len = 1 },
+        .{ .spec = .{ .target_attr = "src" }, .len = 2 },
+        .{ .spec = .{ .target_attr = "src", .target_value = "img" }, .len = 1 },
+        .{ .spec = .{ .target_attr = "data-id" }, .len = 2 },
+        .{ .spec = .{ .target_attr = "id", .target_value = "4" }, .len = 1 },
+        .{ .spec = .{ .target_attr = "id" }, .len = 0 },
+    };
+
+    var i: usize = 0;
+    while (i < expectations.len) : (i += 1) {
+        const exp = expectations[i];
+        const result = try getElementsByWalk(
             allocator,
             root,
-            WalkSpec{
-                .target_attr = "phx-click",
-            },
+            exp.spec,
         );
-        defer allocator.free(result_1);
-        print("T1-phx-click: {d}\n", .{result_1.len});
-        try testing.expect(result_1.len == 1);
-
-        const result_2 = try compWalk(
-            allocator,
-            root,
-            WalkSpec{
-                .target_attr = "phx-click",
-                .target_value = "increment",
-            },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_2);
-        print("T2-phx-click-increment: {d}\n", .{result_2.len});
-        try testing.expect(result_2.len == 1);
-
-        const result_3 = try compWalk(
-            allocator,
-            root,
-            WalkSpec{ .target_attr = "src" },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_3);
-        print("T3-src: {d}\n", .{result_3.len});
-        try testing.expect(result_3.len == 2);
-
-        const result_3b = try compWalk(
-            allocator,
-            root,
-            WalkSpec{ .target_attr = "src", .target_value = "img" },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_3b);
-        print("T3B-src-img: {d}\n", .{result_3b.len});
-        try testing.expect(result_3b.len == 1);
-
-        const result_4 = try compWalk(
-            allocator,
-            root,
-            WalkSpec{ .target_attr = "data-id" },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_4);
-        print("T4-data-id: {d}\n", .{result_4.len});
-        try testing.expect(result_4.len == 2);
-
-        const result_5 = try compWalk(
-            allocator,
-            root,
-            WalkSpec{ .target_attr = "id", .target_value = "4" },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_5);
-        print("T5-id-4: {d}\n", .{result_5.len});
-        try testing.expect(result_5.len == 1);
-
-        // Test with non-existing ID: we don't count it => 0
-        const result_5b = try compWalk(
-            allocator,
-            root,
-            WalkSpec{ .target_attr = "id" },
-            matcher,
-            null,
-        );
-        defer allocator.free(result_5b);
-        print("T5B-id: {d}\n", .{result_5b.len});
-        try testing.expect(result_5b.len == 0);
+        defer allocator.free(result);
+        try testing.expect(result.len == exp.len);
     }
 }
 
