@@ -300,65 +300,6 @@ pub fn compareStrings(first: []const u8, second: []const u8) bool {
 
 // ----------------------------------------------------------}
 
-/// [attributes] Class list return type
-pub const ClassListType = enum { string, array };
-
-/// [attributes] Class list enum result type.
-///
-/// Represents the two possible return types for the class list
-/// - `string`: Full class string (empty string `""` if no classes)
-/// - `array`: Array of individual classes (empty if no classes)
-pub const ClassListResult = union(ClassListType) { string: []u8, array: [][]u8 };
-
-// /// [attributes] Get element class as string or array.
-// ///
-// /// Return types for the class list
-// /// - `string`: Full class string (empty string `""` if no classes)
-// /// - `array`: Array of individual classes (empty `[]` if no classes)
-// ///
-// /// Caller needs to free the returned data appropriately
-// pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement, return_type: ClassListType) !ClassListResult {
-//     var class_len: usize = 0;
-//     const class_ptr = lxb_dom_element_class_noi(
-//         element,
-//         &class_len,
-//     );
-
-//     // If no class or empty class
-//     if (class_len == 0) {
-//         return switch (return_type) {
-//             .string => ClassListResult{ .string = try allocator.dupe(u8, "") },
-//             .array => ClassListResult{ .array = &[_][]u8{} },
-//         };
-//     }
-
-//     // Copy lexbor memory to Zig-managed memory
-//     const class_string = try allocator.alloc(u8, class_len);
-//     @memcpy(class_string, class_ptr[0..class_len]);
-
-//     return switch (return_type) {
-//         .string => ClassListResult{ .string = class_string },
-//         .array => blk: {
-//             // Split the string into array
-//             defer allocator.free(class_string); // Free the intermediate string
-
-//             var classes = std.ArrayList([]u8).init(allocator);
-//             defer classes.deinit();
-
-//             var iterator = std.mem.splitScalar(u8, class_string, ' ');
-//             while (iterator.next()) |class| {
-//                 const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-//                 if (trimmed_class.len > 0) {
-//                     const class_copy = try allocator.dupe(u8, trimmed_class);
-//                     try classes.append(class_copy);
-//                 }
-//             }
-
-//             break :blk ClassListResult{ .array = try classes.toOwnedSlice() };
-//         },
-//     };
-// }
-
 test "named attribute operations" {
     const allocator = testing.allocator;
 

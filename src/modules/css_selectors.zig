@@ -791,8 +791,7 @@ test "CSS selector edge cases" {
 test "debug what classes lexbor sees" {
     const allocator = testing.allocator;
 
-    const html =
-        "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
+    const html = "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
 
     const doc = try z.parseFromString(html);
     defer z.destroyDocument(doc);
@@ -804,17 +803,12 @@ test "debug what classes lexbor sees" {
     const container_div = z.firstChild(body_node).?;
     const container_div_element = z.nodeToElement(container_div);
 
-    var tokenList = try z.DOMTokenList.init(
+    var tokenList = try z.classList(
         allocator,
         container_div_element.?,
     );
     defer tokenList.deinit();
 
-    // const class_result = try z.classList(
-    //     allocator,
-    //     container_div_element.?,
-    //     .string,
-    // );
     const class = try tokenList.toString(allocator);
     defer allocator.free(class);
     try testing.expectEqualStrings("container", class);

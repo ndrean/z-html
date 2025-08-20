@@ -412,7 +412,7 @@ test "class search functionality" {
                     try testing.expect(!z.hasClass(element, "any"));
 
                     // classList should return null for elements with no class attribute
-                    var tokenList_2 = try z.DOMTokenList.init(
+                    var tokenList_2 = try z.classList(
                         allocator,
                         element,
                     );
@@ -423,7 +423,7 @@ test "class search functionality" {
                 // Span should have active class
                 try testing.expect(z.hasClass(element, "active"));
                 try testing.expect(!z.hasClass(element, "container"));
-                var tokenList_3 = try z.DOMTokenList.init(
+                var tokenList_3 = try z.classList(
                     allocator,
                     element,
                 );
@@ -436,39 +436,3 @@ test "class search functionality" {
         child = z.nextSibling(child.?);
     }
 }
-
-// test "ID and CLASS attribute getters" {
-//     const allocator = testing.allocator;
-
-//     const html = "<section class='main-section' id='content'>Section content</section>";
-//     const doc = try z.parseFromString(html);
-//     defer z.destroyDocument(doc);
-
-//     const body_node = try z.bodyNode(doc);
-//     const section_node = z.firstChild(body_node);
-//     const section_element = z.nodeToElement(section_node.?).?;
-
-//     // Test ID getter
-//     const id = try getElementId(allocator, section_element);
-//     defer allocator.free(id);
-//     try testing.expectEqualStrings("content", id);
-
-//     // Test class getter using unified classList
-//     const class_result = try classList(
-//         allocator,
-//         section_element,
-//         .string,
-//     );
-//     const class = class_result.string;
-//     defer allocator.free(class);
-//     try testing.expectEqualStrings("main-section", class);
-
-//     const class_result_bis = try classListBis(
-//         allocator,
-//         section_element,
-//     );
-//     defer allocator.free(class_result_bis);
-//     try testing.expectEqualStrings(&.{"main-section"}, class_result_bis);
-
-//     // print("✅ ID and CLASS attribute getters\n", .{});
-// }
