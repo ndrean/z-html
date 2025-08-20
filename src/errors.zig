@@ -37,4 +37,5 @@ pub const LexborError = error{
     InvalidNodeType,
     NoParentNode,
     InvalidPosition,
+    InvalidClassName,
 };

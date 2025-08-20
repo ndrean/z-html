@@ -635,8 +635,9 @@ test "multiple fragment parsing and composition" {
     // Create a target document to compose fragments into
     const doc = try z.parseFromString("<html><body><div id='app'></div></body></html>");
     defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
 
-    const app_div = try z.getElementById(doc, "app");
+    const app_div = z.getElementById(body, "app");
     const app_node = z.elementToNode(app_div.?);
 
     // Parse and add header fragment

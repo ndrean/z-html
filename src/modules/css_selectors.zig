@@ -803,12 +803,19 @@ test "debug what classes lexbor sees" {
     const body_node = try z.bodyNode(doc);
     const container_div = z.firstChild(body_node).?;
     const container_div_element = z.nodeToElement(container_div);
-    const class_result = try z.classList(
+
+    var tokenList = try z.DOMTokenList.init(
         allocator,
         container_div_element.?,
-        .string,
     );
-    const class = class_result.string;
+    defer tokenList.deinit();
+
+    // const class_result = try z.classList(
+    //     allocator,
+    //     container_div_element.?,
+    //     .string,
+    // );
+    const class = try tokenList.toString(allocator);
     defer allocator.free(class);
     try testing.expectEqualStrings("container", class);
 

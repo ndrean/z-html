@@ -1,20 +1,20 @@
 //! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
-// Re-export all modules
 const lxb = @import("modules/core.zig");
+const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
 const fragments = @import("modules/fragments.zig");
-const css = @import("modules/css_selectors.zig");
-const attrs = @import("modules/attributes.zig");
-const serialize = @import("modules/serializer.zig");
-const collection = @import("modules/collection.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
-const tree = @import("modules/dom_tree.zig");
 const traverse = @import("modules/traverse.zig");
+const tree = @import("modules/dom_tree.zig");
+const collection = @import("modules/collection.zig");
+const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
+const attrs = @import("modules/attributes.zig");
 const smart_text = @import("modules/smart_text.zig");
 const walker = @import("modules/search_attributes.zig");
+const classes = @import("modules/class_list.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -168,25 +168,19 @@ pub const nodeMatchCollector = traverse.nodeMatchCollector;
 // DOM Tree representation utilities (aliased to avoid conflicts)
 //=====================================
 pub const DomTreeNode = tree.HtmlNode;
-// JsonTreeNode follows W3C DOM specification with nodeType, tagName, attributes, children
 pub const DomTreeArray = tree.HtmlTree;
 pub const JsonTreeNode = tree.JsonNode;
 pub const JsonTreeArray = tree.JsonTree;
 pub const JsonAttribute = tree.JsonAttribute;
 
-pub const domNodeToTree = tree.domNodeToTree;
-pub const documentToTupleTree = tree.documentToHtmlTree;
-pub const documentToHtmlTree = tree.documentToHtmlTree;
-// pub const fullDocumentToTupleTree = tree.fullDocumentToTupleTree;
-pub const domNodeToJson = tree.domNodeToJson;
-pub const documentToJsonTree = tree.documentToJsonTree_Enhanced;
-pub const fullDocumentToJsonTree = tree.fullDocumentToJsonTree;
+// Canonical conversion functions
 pub const freeHtmlTree = tree.freeHtmlTree;
 pub const freeJsonTree = tree.freeJsonTree;
-pub const printNode = tree.printNode;
+pub const documentToJsonTree = tree.documentToJsonTree;
+pub const documentToTupleTree = tree.documentToTupleTree;
 
-// TRUE walker-based DOM conversion (lexbor walker, not Zig recursion)
-pub const walkDom_toTree = tree.walkDom_toTree;
+// Pretty logging helpers
+pub const printNode = tree.printNode;
 pub const jsonNodeToString = tree.jsonNodeToString;
 pub const jsonTreeToString = tree.jsonTreeToString;
 pub const parseJsonString = tree.parseJsonString;
@@ -263,7 +257,7 @@ pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
 
 //=========================================
-// CSS selectors - unified top-level access
+// CSS selectors
 //=========================================
 pub const querySelectorAll = css.querySelectorAll;
 pub const querySelector = css.querySelector;
@@ -277,6 +271,7 @@ pub const hasAttributes = attrs.hasAttributes;
 
 pub const getAttribute = attrs.getAttribute;
 pub const getAttribute_zc = attrs.getAttribute_zc;
+pub const setAttribute = attrs.setAttribute;
 
 pub const getAttributes = attrs.getAttributes;
 pub const setAttributes = attrs.setAttributes;
@@ -292,29 +287,35 @@ pub const getAttributeValue = attrs.getAttributeValue;
 pub const getAttributeName_zc = attrs.getAttributeName_zc;
 pub const getAttributeName = attrs.getAttributeName;
 
+// ------- Walker Search
+pub const getElementById = walker.getElementById;
+pub const getElementByTag = walker.getElementByTag;
+pub const getElementByClass = walker.getElementByClass;
+pub const getElementByAttribute = walker.getElementByAttribute;
+pub const getElementByDataAttribute = walker.getElementByDataAttribute;
+// multiple
+pub const getElementsByClass = walker.getElementsByClass;
+pub const getElementsByTag = walker.getElementsByTag;
+
 //=========================================
 // Element search functions
 //=========================================
-pub const getElementById = collection.getElementById;
-pub const getElementByIdFast = walker.getElementByIdFast; // Optimized version using DOM walker
-pub const getElementByClassFast = walker.getElementByClassFast; // Optimized class search using DOM walker
-pub const getElementByAttributeFast = walker.getElementByAttributeFast; // Optimized attribute search using DOM walker
-pub const getElementByDataAttributeFast = walker.getElementByDataAttributeFast; // Optimized data-* attribute search
+// pub const getElementById = collection.getElementById;
 pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 
 pub const getElementsByClassName = collection.getElementsByClassName;
 pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 pub const getElementsByTagName = collection.getElementsByTagName;
 pub const getElementsByName = collection.getElementsByName;
-pub const getElementsByClassWalker = walker.getElementsByClassWalker;
 
 //=========================================
 // Class handling - unified function and convenience wrappers
 //=========================================
-pub const ClassListType = attrs.ClassListType;
-pub const ClassListResult = attrs.ClassListResult;
-pub const classList = attrs.classList;
-pub const hasClass = attrs.hasClass;
+pub const hasClass = classes.hasClass;
+pub const classListAsString = classes.classListAsString;
+
+pub const DOMTokenList = classes.DOMTokenList;
+pub const classList = classes.classList;
 
 //=========================================
 // Attribute struct reflexion

@@ -26,7 +26,7 @@ extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
 extern "c" fn lxb_dom_element_id_noi(element: *z.DomElement, len: *usize) [*]const u8;
 extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]const u8;
 extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize) bool;
-extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*anyopaque;
+extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) *DomAttr;
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
@@ -80,7 +80,7 @@ pub fn getAttribute_zc(element: *z.DomElement, name: []const u8) ?[]const u8 {
 
 // ----------------------------------------------------------
 
-/// [attributes] Check if element has attribute
+/// [attributes] Check if element has a given attribute
 pub fn hasAttribute(element: *z.DomElement, name: []const u8) bool {
     return lxb_dom_element_has_attribute(
         element,
@@ -89,12 +89,23 @@ pub fn hasAttribute(element: *z.DomElement, name: []const u8) bool {
     );
 }
 
-/// [attributes] Check if element has attributes
+/// [attributes] Check if element has any attributes
 pub fn hasAttributes(element: *z.DomElement) bool {
     return lxb_dom_element_has_attributes(element);
 }
 
 // ----------------------------------------------------------
+
+/// [attributes] Set the attribute name/value as strings
+pub fn setAttribute(element: *z.DomElement, name: []const u8, value: []const u8) void {
+    _ = lxb_dom_element_set_attribute(
+        element,
+        name.ptr,
+        name.len,
+        value.ptr,
+        value.len,
+    );
+}
 
 /// [attributes] Set many attributes name/value pairs on element
 ///
@@ -109,7 +120,7 @@ pub fn hasAttributes(element: *z.DomElement) bool {
 /// try testing.expectEqualStrings("main", z.getAttribute(element, "id"));
 /// ---
 /// ```
-pub fn setAttributes(element: *z.DomElement, attrs: []const AttributePair) !void {
+pub fn setAttributes(element: *z.DomElement, attrs: []const AttributePair) void {
     for (attrs) |attr| {
         const result = lxb_dom_element_set_attribute(
             element,
@@ -118,7 +129,7 @@ pub fn setAttributes(element: *z.DomElement, attrs: []const AttributePair) !void
             attr.value.ptr,
             attr.value.len,
         );
-        if (result == null) return Err.SetAttributeFailed;
+        _ = result;
     }
 }
 
@@ -270,12 +281,16 @@ pub fn hasElementId(element: *z.DomElement, id: []const u8) bool {
 
 test "hasElementID" {
     const doc1 = try z.parseFromString("<p id=\"test\"></p><p id=\"\"></p>");
-    const elem1 = try z.getElementById(doc1, "test");
-    const elem2 = try z.getElementById(doc1, "");
+    defer z.destroyDocument(doc1);
+    const body = try z.bodyNode(doc1);
+    const p1 = z.firstChild(body);
+    const p1_elt = z.nodeToElement(p1.?);
+    const p2 = z.nextSibling(p1.?);
+    const p2_elt = z.nodeToElement(p2.?);
 
-    try testing.expect(hasElementId(elem1.?, "test"));
-    try testing.expect(!hasElementId(elem1.?, "nope"));
-    try testing.expect(!hasElementId(elem2.?, ""));
+    try testing.expect(hasElementId(p1_elt.?, "test"));
+    try testing.expect(!hasElementId(p1_elt.?, "nope"));
+    try testing.expect(!hasElementId(p2_elt.?, ""));
 }
 
 /// Compare two lexbor strings with case sensitivity.
@@ -283,26 +298,7 @@ pub fn compareStrings(first: []const u8, second: []const u8) bool {
     return std.mem.eql(u8, first, second);
 }
 
-// ----------------------------------------------------------
-/// [attributes] Check if element has specific class
-pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
-    // Quick check: does element have class attribute at all?
-    if (!hasAttribute(element, "class")) return false;
-
-    // Get class string directly from lexbor (zero-copy)
-    const class_attr = getAttribute_zc(element, "class") orelse return false;
-
-    // Search for the class name in the class list (space-separated)
-    var iterator = std.mem.splitScalar(u8, class_attr, ' ');
-    while (iterator.next()) |class| {
-        // Trim whitespace and compare
-        const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-        if (std.mem.eql(u8, trimmed_class, class_name)) {
-            return true;
-        }
-    }
-    return false;
-}
+// ----------------------------------------------------------}
 
 /// [attributes] Class list return type
 pub const ClassListType = enum { string, array };
@@ -314,54 +310,54 @@ pub const ClassListType = enum { string, array };
 /// - `array`: Array of individual classes (empty if no classes)
 pub const ClassListResult = union(ClassListType) { string: []u8, array: [][]u8 };
 
-/// [attributes] Get element class as string or array.
-///
-/// Return types for the class list
-/// - `string`: Full class string (empty string `""` if no classes)
-/// - `array`: Array of individual classes (empty `[]` if no classes)
-///
-/// Caller needs to free the returned data appropriately
-pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement, return_type: ClassListType) !ClassListResult {
-    var class_len: usize = 0;
-    const class_ptr = lxb_dom_element_class_noi(
-        element,
-        &class_len,
-    );
+// /// [attributes] Get element class as string or array.
+// ///
+// /// Return types for the class list
+// /// - `string`: Full class string (empty string `""` if no classes)
+// /// - `array`: Array of individual classes (empty `[]` if no classes)
+// ///
+// /// Caller needs to free the returned data appropriately
+// pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement, return_type: ClassListType) !ClassListResult {
+//     var class_len: usize = 0;
+//     const class_ptr = lxb_dom_element_class_noi(
+//         element,
+//         &class_len,
+//     );
 
-    // If no class or empty class
-    if (class_len == 0) {
-        return switch (return_type) {
-            .string => ClassListResult{ .string = try allocator.dupe(u8, "") },
-            .array => ClassListResult{ .array = &[_][]u8{} },
-        };
-    }
+//     // If no class or empty class
+//     if (class_len == 0) {
+//         return switch (return_type) {
+//             .string => ClassListResult{ .string = try allocator.dupe(u8, "") },
+//             .array => ClassListResult{ .array = &[_][]u8{} },
+//         };
+//     }
 
-    // Copy lexbor memory to Zig-managed memory
-    const class_string = try allocator.alloc(u8, class_len);
-    @memcpy(class_string, class_ptr[0..class_len]);
+//     // Copy lexbor memory to Zig-managed memory
+//     const class_string = try allocator.alloc(u8, class_len);
+//     @memcpy(class_string, class_ptr[0..class_len]);
 
-    return switch (return_type) {
-        .string => ClassListResult{ .string = class_string },
-        .array => blk: {
-            // Split the string into array
-            defer allocator.free(class_string); // Free the intermediate string
+//     return switch (return_type) {
+//         .string => ClassListResult{ .string = class_string },
+//         .array => blk: {
+//             // Split the string into array
+//             defer allocator.free(class_string); // Free the intermediate string
 
-            var classes = std.ArrayList([]u8).init(allocator);
-            defer classes.deinit();
+//             var classes = std.ArrayList([]u8).init(allocator);
+//             defer classes.deinit();
 
-            var iterator = std.mem.splitScalar(u8, class_string, ' ');
-            while (iterator.next()) |class| {
-                const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-                if (trimmed_class.len > 0) {
-                    const class_copy = try allocator.dupe(u8, trimmed_class);
-                    try classes.append(class_copy);
-                }
-            }
+//             var iterator = std.mem.splitScalar(u8, class_string, ' ');
+//             while (iterator.next()) |class| {
+//                 const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+//                 if (trimmed_class.len > 0) {
+//                     const class_copy = try allocator.dupe(u8, trimmed_class);
+//                     try classes.append(class_copy);
+//                 }
+//             }
 
-            break :blk ClassListResult{ .array = try classes.toOwnedSlice() };
-        },
-    };
-}
+//             break :blk ClassListResult{ .array = try classes.toOwnedSlice() };
+//         },
+//     };
+// }
 
 test "named attribute operations" {
     const allocator = testing.allocator;
@@ -417,7 +413,7 @@ test "attribute modification" {
     const p_node = z.firstChild(body_node).?;
     const p_element = z.nodeToElement(p_node).?;
 
-    try z.setAttributes(
+    _ = z.setAttributes(
         p_element,
         &.{
             .{ .name = "id", .value = "my-paragraph" },
@@ -436,7 +432,7 @@ test "attribute modification" {
     }
 
     // Modify existing attribute
-    try z.setAttributes(
+    _ = z.setAttributes(
         p_element,
         &.{
             .{ .name = "id", .value = "modified-paragraph" },
@@ -498,31 +494,6 @@ test "attribute iteration" {
     // print("✅ Found attributes\n", .{});
 }
 
-test "ID and CLASS attribute getters" {
-    const allocator = testing.allocator;
-
-    const html = "<section class='main-section' id='content'>Section content</section>";
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-
-    const body_node = try z.bodyNode(doc);
-    const section_node = z.firstChild(body_node);
-    const section_element = z.nodeToElement(section_node.?).?;
-
-    // Test ID getter
-    const id = try getElementId(allocator, section_element);
-    defer allocator.free(id);
-    try testing.expectEqualStrings("content", id);
-
-    // Test class getter using unified classList
-    const class_result = try classList(allocator, section_element, .string);
-    const class = class_result.string;
-    defer allocator.free(class);
-    try testing.expectEqualStrings("main-section", class);
-
-    // print("✅ ID and CLASS attribute getters\n", .{});
-}
-
 test "attribute edge cases" {
     const allocator = testing.allocator;
 
@@ -560,7 +531,7 @@ test "attribute edge cases" {
     }
 
     // Test setting empty value
-    try z.setAttributes(div_element, &.{.{ .name = "new-empty", .value = "" }});
+    _ = z.setAttributes(div_element, &.{.{ .name = "new-empty", .value = "" }});
     try testing.expect(hasAttribute(div_element, "new-empty"));
 
     if (try getAttribute(

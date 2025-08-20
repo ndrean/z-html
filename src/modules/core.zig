@@ -162,7 +162,7 @@ pub fn createElement(doc: *z.HtmlDocument, name: []const u8, attrs: []const z.At
     if (attrs.len == 0) return element;
 
     for (attrs) |attr| {
-        try z.setAttributes(
+        _ = z.setAttributes(
             element,
             &.{
                 z.AttributePair{ .name = attr.name, .value = attr.value },
@@ -927,7 +927,7 @@ test "insertBefore / insertAfter" {
     defer destroyDocument(doc);
 
     const body = try bodyNode(doc);
-    const first_li = try z.getElementById(doc, "1");
+    const first_li = z.getElementById(body, "1");
     const new_li = try z.createElement(
         doc,
         "li",
@@ -1047,7 +1047,8 @@ test "insertAdjacentElement - all positions & invalid" {
     const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
 
     // Test beforebegin - insert before the target element
     const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
@@ -1068,7 +1069,6 @@ test "insertAdjacentElement - all positions & invalid" {
     const invalid = insertAdjacentElement(target.?, "invalid", after_element);
     try testing.expectError(Err.InvalidPosition, invalid);
 
-    const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
@@ -1158,7 +1158,9 @@ test "enum / string insertAdjacentHTML" {
     const doc = try parseFromString("<html><body><div id=\"target\">Original</div></body></html>");
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+
+    const target = z.getElementById(body, "target");
 
     // Test 1: Using enum values directly (most natural for Zig)
     try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>Before Begin</p>");
@@ -1172,7 +1174,6 @@ test "enum / string insertAdjacentHTML" {
     // Test 4: Using string for afterend
     try insertAdjacentHTML(allocator, target.?, "afterend", "<p>After End</p>");
 
-    const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
@@ -1196,7 +1197,8 @@ test "insertAdjacentHTML - all positions" {
     const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
 
     // Test beforebegin
     try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p id=\"before\">Before</p>");
@@ -1210,7 +1212,6 @@ test "insertAdjacentHTML - all positions" {
     // Test afterend
     try insertAdjacentHTML(allocator, target.?, .afterend, "<p id=\"after\">After</p>");
 
-    const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
@@ -1223,12 +1224,12 @@ test "insertAdjacentHTML - multiple elements" {
     const doc = try parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
 
     // Insert multiple elements at once
     try insertAdjacentHTML(allocator, target.?, .afterend, "<p>First</p><p>Second</p><span>Third</span>");
 
-    const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
@@ -1241,13 +1242,13 @@ test "insertAdjacentElement - empty target" {
     const doc = try parseFromString("<html><body><div id=\"target\"></div></body></html>");
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
 
     // Test afterbegin on empty element
     const child_element = try z.createElement(doc, "p", &.{.{ .name = "class", .value = "child" }});
     try insertAdjacentElement(target.?, .afterbegin, child_element);
 
-    const body = try bodyNode(doc);
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
@@ -1268,7 +1269,8 @@ test "insertAdjacent demo" {
     );
     defer destroyDocument(doc);
 
-    const target = try z.getElementById(doc, "target");
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
 
     // Demo 1: insertAdjacentElement with all positions
     const before_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "before" }});
@@ -1280,7 +1282,6 @@ test "insertAdjacent demo" {
     try insertAdjacentElement(target.?, .afterend, after_elem);
 
     // Show result after insertAdjacentElement
-    const body = try bodyNode(doc);
     const html1 = try z.serializeToString(allocator, body);
     defer allocator.free(html1);
 
@@ -1318,7 +1319,7 @@ test "insertAdjacent demo" {
     try testing.expectEqual(@as(usize, 4), valid_count); // Should have 4 valid positions
 
     // Demo 4: Multiple elements insertion
-    const container = try z.getElementById(doc, "container");
+    const container = z.getElementById(body, "container");
     try insertAdjacentHTML(allocator, container.?, .beforeend, "<p>First</p><p>Second</p><span>Third</span>");
 
     const html3 = try z.serializeToString(allocator, body);
@@ -2242,7 +2243,8 @@ test "Append JS fragment" {
 
     // try z.printDocumentStructure(doc);
 
-    const tree = try z.documentToHtmlTree(allocator, doc, null);
+    // Use legacy tuple tree conversion (no root_element param)
+    const tree = try z.documentToTupleTree(allocator, doc);
     defer z.freeHtmlTree(allocator, tree);
 
     for (tree, 0..) |node, i| {
@@ -2252,7 +2254,7 @@ test "Append JS fragment" {
         // z.printNode(node, 0);
     }
 
-    const json_tree = try z.documentToJsonTree(allocator, doc, null);
+    const json_tree = try z.documentToJsonTree(allocator, doc);
     defer z.freeJsonTree(allocator, json_tree);
     const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
     defer allocator.free(json_string);
@@ -2353,81 +2355,6 @@ test "void vs empty element detection" {
     try testing.expect(empty_nodes == 3); // empty elements: <br/>, <img/>, <div>  </div>
     try testing.expect(empty_text_nodes_count == 0); // empty text elements (no longer counted since nodeToElement returns null for text)
     try testing.expect(empty_non_self_closing_non_text_nodes_count == 1); // 1 empty non-self-closing non-text element
-}
-
-test "class search functionality" {
-    const allocator = testing.allocator;
-
-    // Create HTML with multiple classes
-    const html =
-        \\<div class="container main active">First div</div>
-        \\<div class="container secondary">Second div</div>
-        \\<span class="active">Span element</span>
-        \\<div>No class div</div>
-    ;
-
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-
-    const body_node = try z.bodyNode(doc);
-    var child = z.firstChild(body_node);
-
-    // Test hasClass function and compare with existing classList
-    while (child != null) {
-        if (z.nodeToElement(child.?)) |element| {
-            const element_name = z.tagName_zc(element);
-            if (std.mem.eql(u8, element_name, "div")) {
-                const text_content = try z.getTextContent(allocator, child.?);
-                defer allocator.free(text_content);
-                if (std.mem.eql(u8, text_content, "First div")) {
-                    // First div should have all three classes
-                    try testing.expect(z.hasClass(element, "container"));
-                    try testing.expect(z.hasClass(element, "main"));
-                    try testing.expect(z.hasClass(element, "active"));
-                    try testing.expect(!z.hasClass(element, "missing"));
-
-                    // Test unified classList function - returns full class string
-                    const class_result = try z.classList(allocator, element, .string);
-                    const full_class_list = class_result.string;
-                    defer allocator.free(class_result.string);
-                    // defer if (full_class_list) |class_str| allocator.free(class_str);
-                    // if (full_class_list) |class_str| {
-                    try testing.expect(std.mem.eql(u8, "container main active", full_class_list));
-                    // }
-
-                    // Test new getClasses function - returns array of individual classes
-                    const classes = try z.classList(allocator, element, .array);
-                    defer {
-                        for (classes.array) |class| allocator.free(class);
-                        allocator.free(classes.array);
-                    }
-                    try testing.expect(classes.array.len == 3);
-                    try testing.expect(std.mem.eql(u8, classes.array[0], "container"));
-                    try testing.expect(std.mem.eql(u8, classes.array[1], "main"));
-                    try testing.expect(std.mem.eql(u8, classes.array[2], "active"));
-                } else if (std.mem.eql(u8, text_content, "Second div")) {
-                    // Second div should have container and secondary
-                    try testing.expect(z.hasClass(element, "container"));
-                    try testing.expect(z.hasClass(element, "secondary"));
-                    try testing.expect(!z.hasClass(element, "main"));
-                    try testing.expect(!z.hasClass(element, "active"));
-                } else if (std.mem.eql(u8, text_content, "No class div")) {
-                    // Third div should have no classes
-                    try testing.expect(!z.hasClass(element, "container"));
-                    try testing.expect(!z.hasClass(element, "any"));
-
-                    // classList should return null for elements with no class attribute
-                    const no_class_result = try z.classList(allocator, element, .string);
-                    try testing.expect(no_class_result.string.len == 0);
-                }
-            } else if (std.mem.eql(u8, element_name, "span")) {
-                // Span should have active class
-                try testing.expect(z.hasClass(element, "active"));
-                try testing.expect(!z.hasClass(element, "container"));
-            }
-        }
-        child = z.nextSibling(child.?);
-    }
 }
 
 test "CSS selector nth-child functionality" {
@@ -2785,7 +2712,9 @@ test "practical string-to-DOM scenarios" {
     const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
     defer destroyDocument(template_doc);
 
-    const content_div = try z.getElementById(template_doc, "content");
+    const template_root = z.documentRoot(template_doc);
+
+    const content_div = z.getElementById(template_root.?, "content");
 
     // Simulate user data
     const user_data = [_]struct { name: []const u8, email: []const u8 }{
@@ -2825,8 +2754,9 @@ test "practical string-to-DOM scenarios" {
 
     const app_doc = try parseFromString("<html><body><div id='app'></div></body></html>");
     defer destroyDocument(app_doc);
+    const app_root = z.documentRoot(app_doc);
 
-    const app_div = try z.getElementById(app_doc, "app");
+    const app_div = z.getElementById(app_root.?, "app");
 
     // Add each component to the app
     for (components, 0..) |component, i| {
