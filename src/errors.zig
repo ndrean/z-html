@@ -30,6 +30,7 @@ pub const LexborError = error{
     CssEngineNotInitialized,
     SetAttributeFailed,
     CreateCommentFailed,
+    CreateTemplateFailed,
     GetAttributeFailed,
     SetAttributeValueFailed,
     NotTextNode,

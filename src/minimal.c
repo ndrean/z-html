@@ -40,24 +40,15 @@ void lexbor_destroy_text_wrapper(lxb_dom_node_t *node, lxb_char_t *text)
     lxb_dom_document_destroy_text_noi(node->owner_document, text);
 }
 
-// Template element interface functions - simplified approach
-// Check if a node has LXB_TAG_TEMPLATE tag
-bool lxb_html_tree_node_is_wrapper(lxb_dom_node_t *node, lxb_tag_id_t tag_id)
-{
-  return lxb_html_tree_node_is(node, tag_id);
-}
-
-// Get template content - fallback implementation
+// Working wrapper to get template content
 lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template_element_t *template_element)
 {
-  // Fallback: template content access may not be available in this lexbor version
-  // Return NULL for now - template detection still works via tag checking
-  (void)template_element; // Suppress unused parameter warning
-  return NULL;
-}
+  if (template_element == NULL)
+  {
+    return NULL;
+  }
 
-// Template interface - simplified
-void *lxb_html_interface_template_wrapper()
-{
-  return NULL; // Simplified for now - template detection works via tag check
+  // Access the content field directly from the template structure
+  // In lexbor, template elements have a 'content' field
+  return template_element->content;
 }

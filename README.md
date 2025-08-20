@@ -440,9 +440,10 @@ TODO
     - collection.zig
     - cleaner.zig
     - serializer.zig
-    - tree.zig
-    - title.zig (TODO?)
-    - head ?
+    - class_list.zig
+    - DOM_tree.zig
+    - head / title.zig (TODO?)
+  
 
   - main.zig (demo ? TODO:
     - URL fetch from internet

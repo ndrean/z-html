@@ -16,48 +16,6 @@ const writer = std.io.getStdOut().writer();
 
 pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 
-extern "c" fn lxb_html_template_element_interface_create(doc: *z.HtmlDocument) *z.HtmlTemplate;
-extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HtmlTemplate) *z.HtmlTemplate;
-
-// External lexbor functions
-extern "c" fn lxb_html_interface_template_wrapper() ?*const anyopaque;
-extern "c" fn lxb_html_template_content_wrapper(template_element: *anyopaque) ?*z.DomNode;
-extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
-
-/// Check if a node is a template element
-pub fn isTemplateElement(node: *z.DomNode) bool {
-    return lxb_html_tree_node_is_wrapper(node, LXB_TAG_TEMPLATE);
-}
-
-/// Get template interface for template elements
-pub fn templateInterface(element: *z.DomElement) ?*z.HtmlTemplate {
-    _ = element; // For compatibility - wrapper doesn't need element parameter
-    return @ptrCast(@constCast(lxb_html_interface_template_wrapper()));
-}
-
-/// Template-aware first child - handles template elements correctly
-pub fn templateAwareFirstChild(node: *z.DomNode) ?*z.DomNode {
-    if (isTemplateElement(node)) {
-        // Template elements store content in DocumentFragment
-        if (getTemplateContent(node)) |content| {
-            return firstChild(content);
-        }
-        return null;
-    }
-    return firstChild(node);
-}
-
-// Helper function for template content access (needs implementation)
-/// Get the content of a template element
-pub fn getTemplateContent(node: *z.DomNode) ?*z.DomNode {
-    if (!isTemplateElement(node)) return null;
-    return lxb_html_template_content_wrapper(node);
-}
-
-fn templateContentFirstChild(template: *z.HtmlTemplate) ?*z.DomNode {
-    _ = template; // Simplified - use node-based approach
-    return null; // Will be replaced by getTemplateContent flow
-}
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
@@ -134,6 +92,7 @@ extern "c" fn lxb_dom_element_tag_name(element: *z.DomElement, len: ?*usize) [*:
 extern "c" fn lxb_dom_element_qualified_name(element: *z.DomElement, len: *usize) [*:0]const u8;
 extern "c" fn lxb_dom_node_remove_wo_events(node: *z.DomNode) void;
 extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
+extern "c" fn lxb_dom_document_destroy_text_noi(node: *z.DomNode, text: []const u8) void;
 
 /// [core] Element creation and returns a !Element
 ///
@@ -199,7 +158,6 @@ pub fn createComment(doc: *z.HtmlDocument, data: []const u8) !*z.Comment {
         data.len,
     ) orelse Err.CreateCommentFailed;
 }
-
 /// [core] Create a document fragment and returns a !Node
 ///
 /// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations
@@ -294,6 +252,10 @@ pub fn elementToNode(element: *z.DomElement) *z.DomNode {
 /// [core] Convert Comment to Node
 pub fn commentToNode(comment: *z.Comment) *z.DomNode {
     return objectToNode(comment);
+}
+
+pub fn templateToNode(template: *z.Template) *z.DomNode {
+    return objectToNode(template);
 }
 
 /// [core] Convert DOM node to Element

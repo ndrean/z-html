@@ -15,6 +15,7 @@ const attrs = @import("modules/attributes.zig");
 const smart_text = @import("modules/smart_text.zig");
 const walker = @import("modules/search_attributes.zig");
 const classes = @import("modules/class_list.zig");
+const template = @import("modules/template.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -50,8 +51,6 @@ pub const parseFragment = fragments.parseFragment;
 pub const parseFragmentSimple = fragments.parseFragmentSimple;
 pub const parseFragmentInto = fragments.parseFragmentInto;
 
-// Tempalte
-
 //=====================================
 // Core
 //=====================================
@@ -59,6 +58,7 @@ pub const HtmlDocument = opaque {};
 pub const DomNode = opaque {};
 pub const DomElement = opaque {};
 pub const Comment: type = opaque {};
+pub const Template = opaque {};
 
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
@@ -154,10 +154,11 @@ pub const getChildren = lxb.getChildren;
 // Template element support
 //=====================================
 pub const HtmlTemplate = opaque {};
-pub const isTemplateElement = lxb.isTemplateElement;
-pub const templateInterface = lxb.templateInterface;
-pub const templateAwareFirstChild = lxb.templateAwareFirstChild;
+// Template
+pub const createTemplate = template.createTemplate;
+pub const destroyTemplate = template.destroyTemplate;
 
+// ===========================================================================
 // DOM Traversal utilities
 pub const collectChildItems = traverse.collectChildItems;
 pub const collectChildElements = traverse.collectChildElements;
