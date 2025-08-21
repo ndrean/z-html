@@ -12,9 +12,9 @@ const print = std.debug.print;
 extern "c" fn lxb_html_parser_create() *z.HtmlParser;
 extern "c" fn lxb_html_parser_init(*z.HtmlParser) usize;
 extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) void;
-extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HtmlDocument) usize;
-extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HtmlDocument) usize;
-extern "c" fn lxb_html_document_parse_chunk(document: *z.HtmlDocument, chunk: [*:0]const u8, len: usize) usize;
+extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HTMLDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HTMLDocument) usize;
+extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*:0]const u8, len: usize) usize;
 
 /// [chunks] Chunk engine.
 ///
@@ -26,7 +26,7 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HtmlDocument, chunk: [*
 /// - `endParsing`: end the parsing process
 /// - `getDocument`: get the underlying HTML document
 pub const ChunkParser = struct {
-    doc: *z.HtmlDocument,
+    doc: *z.HTMLDocument,
     parser: *z.HtmlParser,
     allocator: std.mem.Allocator,
     parsing_active: bool = false,
@@ -91,11 +91,11 @@ pub const ChunkParser = struct {
         self.parsing_active = false;
     }
 
-    pub fn getDocument(self: *ChunkParser) *z.HtmlDocument {
+    pub fn getDocument(self: *ChunkParser) *z.HTMLDocument {
         return self.doc;
     }
 
-    // pub fn getHtmlDocument(self: *ChunkParser) z.HtmlDocument {
+    // pub fn getHtmlDocument(self: *ChunkParser) z.Document {
     //     return .{ .doc = self.doc };
     // }
 };

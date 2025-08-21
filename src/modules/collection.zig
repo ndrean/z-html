@@ -10,17 +10,17 @@ const Instant = std.time.Instant;
 const Timer = std.time.Timer;
 
 // External C functions - using _noi versions for ABI compatibility
-extern "c" fn lxb_dom_collection_create(doc: *z.HtmlDocument) ?*z.DomCollection;
+extern "c" fn lxb_dom_collection_create(doc: *z.HTMLDocument) ?*z.DomCollection;
 extern "c" fn lxb_dom_collection_init(collection: *z.DomCollection, start_size: usize) usize;
 extern "c" fn lxb_dom_collection_destroy(collection: *z.DomCollection, self_destroy: bool) ?*z.DomCollection;
 extern "c" fn lxb_dom_collection_clean_noi(collection: *z.DomCollection) void;
 extern "c" fn lxb_dom_collection_length_noi(collection: *z.DomCollection) usize;
-extern "c" fn lxb_dom_collection_element_noi(collection: *z.DomCollection, idx: usize) ?*z.DomElement;
+extern "c" fn lxb_dom_collection_element_noi(collection: *z.DomCollection, idx: usize) ?*z.HTMLElement;
 extern "c" fn lxb_dom_collection_append_noi(collection: *z.DomCollection, value: ?*anyopaque) usize;
 
 // Element search by attribute
 extern "c" fn lxb_dom_elements_by_attr(
-    root: *z.DomElement,
+    root: *z.HTMLElement,
     collection: *z.DomCollection,
     qualified_name: [*]const u8,
     qname_len: usize,
@@ -98,7 +98,7 @@ pub const CapacityOpt = union(enum) {
 /// .{.custom = .{.value = N }}
 /// ```
 ///
-pub fn createCollection(doc: *z.HtmlDocument, capacity: CapacityOpt) ?*z.DomCollection {
+pub fn createCollection(doc: *z.HTMLDocument, capacity: CapacityOpt) ?*z.DomCollection {
     const collection = lxb_dom_collection_create(doc) orelse return null;
 
     const status = lxb_dom_collection_init(collection, capacity.getValue());
@@ -110,12 +110,12 @@ pub fn createCollection(doc: *z.HtmlDocument, capacity: CapacityOpt) ?*z.DomColl
 }
 
 /// [collection] Create a collection with default size `.default = 10` (good for most use cases)
-pub fn createDefaultCollection(doc: *z.HtmlDocument) ?*z.DomCollection {
+pub fn createDefaultCollection(doc: *z.HTMLDocument) ?*z.DomCollection {
     return createCollection(doc, .default);
 }
 
 ///[collection]  Create a collection optimized for single element search (like `getElementById`)
-pub fn createSingleElementCollection(doc: *z.HtmlDocument) ?*z.DomCollection {
+pub fn createSingleElementCollection(doc: *z.HTMLDocument) ?*z.DomCollection {
     return createCollection(doc, .single);
 }
 
@@ -137,7 +137,7 @@ pub fn collectionLength(collection: *z.DomCollection) usize {
 /// [collection] Get element at specific index (0-based)
 ///
 /// Returns null if index is out of bounds
-pub fn getCollectionElementAt(collection: *z.DomCollection, index: usize) ?*z.DomElement {
+pub fn getCollectionElementAt(collection: *z.DomCollection, index: usize) ?*z.HTMLElement {
     if (index >= collectionLength(collection)) {
         return null;
     }
@@ -147,13 +147,13 @@ pub fn getCollectionElementAt(collection: *z.DomCollection, index: usize) ?*z.Do
 /// [collection] Get the first element in the collection
 ///
 /// Returns null if collection is empty
-pub fn getCollectionFirstElement(collection: *z.DomCollection) ?*z.DomElement {
+pub fn getCollectionFirstElement(collection: *z.DomCollection) ?*z.HTMLElement {
     return getCollectionElementAt(collection, 0);
 }
 
 /// [collection] Get the last element in the collection
 /// Returns null if collection is empty
-pub fn getCollectionLastElement(collection: *z.DomCollection) ?*z.DomElement {
+pub fn getCollectionLastElement(collection: *z.DomCollection) ?*z.HTMLElement {
     const len = collectionLength(collection);
     if (len == 0) return null;
     return getCollectionElementAt(collection, len - 1);
@@ -165,7 +165,7 @@ pub fn isCollectionEmpty(collection: *z.DomCollection) bool {
 }
 
 /// [collection] Add an element to the collection
-pub fn appendElementToCollection(collection: *z.DomCollection, element: *z.DomElement) !void {
+pub fn appendElementToCollection(collection: *z.DomCollection, element: *z.HTMLElement) !void {
     const status = lxb_dom_collection_append_noi(collection, element);
     if (status != 0) {
         return error.AppendFailed;
@@ -188,7 +188,7 @@ pub const CollectionIterator = struct {
         };
     }
 
-    pub fn next(self: *CollectionIterator) ?*z.DomElement {
+    pub fn next(self: *CollectionIterator) ?*z.HTMLElement {
         if (self.index >= collectionLength(self.collection)) {
             return null;
         }
@@ -218,7 +218,7 @@ pub fn iterator(collection: *z.DomCollection) CollectionIterator {
 /// Examples: "div", "p", "span", "img", etc.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
-pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.DomCollection {
+pub fn getElementsByTagName(doc: *z.HTMLDocument, tag_name: []const u8) !?*z.DomCollection {
     // Start from the body element but also check the body itself
     const root = try z.bodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
@@ -232,7 +232,7 @@ pub fn getElementsByTagName(doc: *z.HtmlDocument, tag_name: []const u8) !?*z.Dom
 }
 
 /// [collection] Helper function to recursively collect elements with a specific tag name
-fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection, tag_name: []const u8) bool {
+fn collectElementsByTagName(element: *z.HTMLElement, collection: *z.DomCollection, tag_name: []const u8) bool {
     // Check if current element matches the tag name
     const element_tag_name = z.tagName_zc(element);
     if (std.mem.eql(u8, element_tag_name, tag_name)) {
@@ -258,7 +258,7 @@ fn collectElementsByTagName(element: *z.DomElement, collection: *z.DomCollection
 /// This is implemented as a wrapper around getElementsByAttributePair for the name attribute.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
-pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollection {
+pub fn getElementsByName(doc: *z.HTMLDocument, name: []const u8) !?*z.DomCollection {
     return getElementsByAttributePair(
         doc,
         .{ .name = "name", .value = name },
@@ -271,7 +271,7 @@ pub fn getElementsByName(doc: *z.HtmlDocument, name: []const u8) !?*z.DomCollect
 /// Returns the first element with the matching ID, or null if not found.
 ///
 /// If you want to detect multiple IDs, use `getElementsByAttributePair`.
-pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
+pub fn getElementById(doc: *z.HTMLDocument, id: []const u8) !?*z.HTMLElement {
     const root = try z.bodyElement(doc);
 
     const collection = createSingleElementCollection(doc) orelse return Err.CollectionFailed;
@@ -305,7 +305,7 @@ pub fn getElementById(doc: *z.HtmlDocument, id: []const u8) !?*z.DomElement {
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
 ///
 /// Caller is responsible for freeing the return collection with `destroyCollection`
-pub fn getElementsByAttributePair(doc: *z.HtmlDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
+pub fn getElementsByAttributePair(doc: *z.HTMLDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
     const root = try z.bodyElement(doc);
     const collection = createDefaultCollection(doc) orelse return null;
     const name = attr.name;
@@ -336,7 +336,7 @@ pub fn getElementsByAttributePair(doc: *z.HtmlDocument, attr: z.AttributePair, c
 /// You can use the collection primitives such as `getCollectionFirstElement`, `getCollectionLastElement`, etc.
 ///
 /// Caller is responsible for freeing the collection with `destroyCollection`
-pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z.DomCollection {
+pub fn getElementsByClassName(doc: *z.HTMLDocument, class_name: []const u8) !?*z.DomCollection {
     return getElementsByAttributePair(
         doc,
         .{
@@ -370,7 +370,7 @@ pub fn getElementsByClassName(doc: *z.HtmlDocument, class_name: []const u8) !?*z
 /// defer destroyCollection(elements);
 /// ```
 ///
-pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
+pub fn getElementsByAttributeName(doc: *z.HTMLDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
     const root = try z.bodyElement(doc);
     const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
@@ -383,7 +383,7 @@ pub fn getElementsByAttributeName(doc: *z.HtmlDocument, attr_name: []const u8, c
 }
 
 /// [collection] Helper function to recursively collect elements with a specific attribute _name_
-fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollection, attr_name: []const u8) bool {
+fn collectElementsWithAttribute(element: *z.HTMLElement, collection: *z.DomCollection, attr_name: []const u8) bool {
     // Check if current element has the target attribute
     if (z.hasAttribute(element, attr_name)) {
         const status = lxb_dom_collection_append_noi(collection, element);
@@ -410,11 +410,11 @@ fn collectElementsWithAttribute(element: *z.DomElement, collection: *z.DomCollec
 /// [collection] Convert collection to Zig slice (allocates memory)
 ///
 /// Caller needs to free the returned slice
-pub fn collectionToSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*z.DomElement {
+pub fn collectionToSlice(allocator: std.mem.Allocator, collection: *z.DomCollection) ![]?*z.HTMLElement {
     const len = collectionLength(collection);
-    if (len == 0) return &[_]?*z.DomElement{};
+    if (len == 0) return &[_]?*z.HTMLElement{};
 
-    const slice = try allocator.alloc(?*z.DomElement, len);
+    const slice = try allocator.alloc(?*z.HTMLElement, len);
     for (0..len) |i| {
         slice[i] = getCollectionElementAt(collection, i);
     }
@@ -1315,21 +1315,18 @@ test "configurable default capacity usage example" {
     // print("Creating collection with .default capacity (should be 50)...\n", .{});
     if (createDefaultCollection(doc)) |default_collection| {
         defer destroyCollection(default_collection);
-        // print("✅ Default collection created successfully\n", .{});
     }
 
     // Single element collection (always capacity 1)
     // print("Creating collection with .single capacity (always 1)...\n", .{});
     if (createSingleElementCollection(doc)) |single_collection| {
         defer destroyCollection(single_collection);
-        // print("✅ Single element collection created successfully\n", .{});
     }
 
     // Custom capacity collection (explicit capacity)
     // print("Creating collection with custom capacity of 100...\n", .{});
     if (createCollection(doc, .{ .custom = .{ .value = 100 } })) |custom_collection| {
         defer destroyCollection(custom_collection);
-        // print("✅ Custom capacity collection created successfully\n", .{});
     }
 
     // 5. Test with getElementsByAttributeName (uses configurable default)

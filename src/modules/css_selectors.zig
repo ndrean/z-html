@@ -381,7 +381,7 @@ const FirstNodeContext = struct {
 
 // Special context for early stopping (elements)
 const FirstElementContext = struct {
-    first_element: ?*z.DomElement,
+    first_element: ?*z.HTMLElement,
 
     fn init() FirstElementContext {
         return .{ .first_element = null };
@@ -421,7 +421,7 @@ fn findFirstElementCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, c
 /// [selectors] High-level function: Find all elements by CSS selector in a document
 ///
 /// Caller needs to free the returned slice.
-pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HtmlDocument, selector: []const u8) ![]*z.DomElement {
+pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HTMLDocument, selector: []const u8) ![]*z.HTMLElement {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
@@ -432,7 +432,7 @@ pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HtmlDocument, sele
     defer allocator.free(nodes);
 
     // Convert nodes to elements
-    var elements = std.ArrayList(*z.DomElement).init(allocator);
+    var elements = std.ArrayList(*z.HTMLElement).init(allocator);
     defer elements.deinit();
 
     for (nodes) |node| {
@@ -447,7 +447,7 @@ pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HtmlDocument, sele
 /// [selectors] High-level function: Find first element by CSS selector in a document
 ///
 /// Returns null if no element found.
-pub fn querySelector(allocator: std.mem.Allocator, doc: *z.HtmlDocument, selector: []const u8) !?*z.DomElement {
+pub fn querySelector(allocator: std.mem.Allocator, doc: *z.HTMLDocument, selector: []const u8) !?*z.HTMLElement {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
@@ -1041,6 +1041,6 @@ test "CSS selector caching performance" {
     // The cache should now contain at least 1 selector: ".item-7" (manual compilation doesn't go into main cache)
     try testing.expect(css_engine.selector_cache.count() >= 1);
 
-    // std.debug.print("\n🚀 Selector caching working! Cache contains {} compiled selectors.\n", .{css_engine.selector_cache.count()});
-    // std.debug.print("   Repeated queries now 10-100x faster! 🎯\n", .{});
+    // std.debug.print("\n Selector caching working! Cache contains {} compiled selectors.\n", .{css_engine.selector_cache.count()});
+    // std.debug.print("   Repeated queries now 10-100x faster!\n", .{});
 }

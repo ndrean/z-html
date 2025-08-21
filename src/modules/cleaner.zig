@@ -73,7 +73,7 @@ fn cleanElementNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.T
 }
 
 // List all attributes, remove them, and re-add with trimmed whitespace
-fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.DomElement) !usize {
+fn cleanElementAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) !usize {
     if (!z.hasAttributes(element)) {
         return 0;
     }
@@ -821,7 +821,6 @@ test "complete DOM cleaning with proper node removal" {
 
     // printDocumentStructure(doc);
 
-    // print("✅ Complete DOM cleaning works perfectly!\n", .{});
 }
 
 test "comment removal between text nodes concatenation issue" {
@@ -975,7 +974,6 @@ test "comment removal with proper spacing" {
 
         // Check if the expected text is in the result
         const found = std.mem.indexOf(u8, after, test_case.expected) != null;
-        // print("  Result: {s}\n\n", .{if (found) "✅ PASS" else "❌ FAIL"});
 
         try testing.expect(found);
     }
@@ -1020,6 +1018,4 @@ test "escape option works correctly for text insertion (not cleaning)" {
         try testing.expect(std.mem.indexOf(u8, result, "&amp;lt;script&amp;gt;") != null);
         try testing.expect(std.mem.indexOf(u8, result, "&amp;amp;") != null);
     }
-
-    // print("✅ Escape option works correctly for text insertion!\n", .{});
 }

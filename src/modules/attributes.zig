@@ -18,15 +18,15 @@ pub const AttributePair = struct {
 };
 
 // ----------------------------------------------------------
-extern "c" fn lxb_dom_element_get_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value_len: *usize) ?[*]const u8;
-extern "c" fn lxb_dom_element_has_attributes(element: *z.DomElement) bool;
-extern "c" fn lxb_dom_element_remove_attribute(element: *z.DomElement, qualified_name: [*]const u8, qn_len: usize) ?*anyopaque;
-extern "c" fn lxb_dom_element_first_attribute_noi(element: *z.DomElement) ?*DomAttr;
+extern "c" fn lxb_dom_element_get_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize, value_len: *usize) ?[*]const u8;
+extern "c" fn lxb_dom_element_has_attributes(element: *z.HTMLElement) bool;
+extern "c" fn lxb_dom_element_remove_attribute(element: *z.HTMLElement, qualified_name: [*]const u8, qn_len: usize) ?*anyopaque;
+extern "c" fn lxb_dom_element_first_attribute_noi(element: *z.HTMLElement) ?*DomAttr;
 extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
-extern "c" fn lxb_dom_element_id_noi(element: *z.DomElement, len: *usize) [*]const u8;
-extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, len: *usize) [*]const u8;
-extern "c" fn lxb_dom_element_has_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize) bool;
-extern "c" fn lxb_dom_element_set_attribute(element: *z.DomElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) *DomAttr;
+extern "c" fn lxb_dom_element_id_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_has_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize) bool;
+extern "c" fn lxb_dom_element_set_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) *DomAttr;
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
@@ -45,7 +45,7 @@ extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8
 /// try testing.expectEqualStrings("card", c.?);
 /// ----
 /// ```
-pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: []const u8) !?[]u8 {
+pub fn getAttribute(allocator: std.mem.Allocator, element: *z.HTMLElement, name: []const u8) !?[]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(
         element,
@@ -67,7 +67,7 @@ pub fn getAttribute(allocator: std.mem.Allocator, element: *z.DomElement, name: 
 ///  ⚠️ pointing to lexbor memory. Short-lived uses only.
 ///
 /// Use `getAttribute()` if you need to store the value.
-pub fn getAttribute_zc(element: *z.DomElement, name: []const u8) ?[]const u8 {
+pub fn getAttribute_zc(element: *z.HTMLElement, name: []const u8) ?[]const u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_element_get_attribute(
         element,
@@ -81,7 +81,7 @@ pub fn getAttribute_zc(element: *z.DomElement, name: []const u8) ?[]const u8 {
 // ----------------------------------------------------------
 
 /// [attributes] Check if element has a given attribute
-pub fn hasAttribute(element: *z.DomElement, name: []const u8) bool {
+pub fn hasAttribute(element: *z.HTMLElement, name: []const u8) bool {
     return lxb_dom_element_has_attribute(
         element,
         name.ptr,
@@ -90,14 +90,14 @@ pub fn hasAttribute(element: *z.DomElement, name: []const u8) bool {
 }
 
 /// [attributes] Check if element has any attributes
-pub fn hasAttributes(element: *z.DomElement) bool {
+pub fn hasAttributes(element: *z.HTMLElement) bool {
     return lxb_dom_element_has_attributes(element);
 }
 
 // ----------------------------------------------------------
 
 /// [attributes] Set the attribute name/value as strings
-pub fn setAttribute(element: *z.DomElement, name: []const u8, value: []const u8) void {
+pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8) void {
     _ = lxb_dom_element_set_attribute(
         element,
         name.ptr,
@@ -120,7 +120,7 @@ pub fn setAttribute(element: *z.DomElement, name: []const u8, value: []const u8)
 /// try testing.expectEqualStrings("main", z.getAttribute(element, "id"));
 /// ---
 /// ```
-pub fn setAttributes(element: *z.DomElement, attrs: []const AttributePair) void {
+pub fn setAttributes(element: *z.HTMLElement, attrs: []const AttributePair) void {
     for (attrs) |attr| {
         const result = lxb_dom_element_set_attribute(
             element,
@@ -192,7 +192,7 @@ pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
 /// [attributes] Get first attribute of an HTMLElement
 ///
 /// Returns a DomAttr
-pub fn getFirstAttribute(element: *z.DomElement) ?*DomAttr {
+pub fn getFirstAttribute(element: *z.HTMLElement) ?*DomAttr {
     return lxb_dom_element_first_attribute_noi(element);
 }
 
@@ -208,7 +208,7 @@ pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 /// [attributes] Collect all attributes from an element.
 ///
 /// Caller needs to free the slice
-pub fn getAttributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]AttributePair {
+pub fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
     var attribute = getFirstAttribute(element);
     if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
 
@@ -237,7 +237,7 @@ pub fn getAttributes(allocator: std.mem.Allocator, element: *z.DomElement) ![]At
 /// [attributes] Remove attribute from element
 ///
 /// Fails silently
-pub fn removeAttribute(element: *z.DomElement, name: []const u8) !void {
+pub fn removeAttribute(element: *z.HTMLElement, name: []const u8) !void {
     const result = lxb_dom_element_remove_attribute(
         element,
         name.ptr,
@@ -251,7 +251,7 @@ pub fn removeAttribute(element: *z.DomElement, name: []const u8) !void {
 /// [attributes] Get element ID as owned string
 ///
 /// Caller needs to free the slice
-pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn getElementId(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
         element,
@@ -264,7 +264,7 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 
 }
 
 /// [core] Get element ID as borrowed string for faster access
-pub fn getElementId_zc(element: *z.DomElement) []const u8 {
+pub fn getElementId_zc(element: *z.HTMLElement) []const u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
         element,
@@ -273,7 +273,7 @@ pub fn getElementId_zc(element: *z.DomElement) []const u8 {
     return id_ptr[0..id_len];
 }
 
-pub fn hasElementId(element: *z.DomElement, id: []const u8) bool {
+pub fn hasElementId(element: *z.HTMLElement, id: []const u8) bool {
     const id_value = z.getElementId_zc(element);
     if (id_value.len != id.len or id_value.len == 0) return false;
     return std.mem.eql(u8, id_value, id);
@@ -339,8 +339,6 @@ test "named attribute operations" {
     // Test non-existent attribute
     const missing = try getAttribute(allocator, div_element, "missing");
     try testing.expect(missing == null);
-
-    // print("✅ Named attribute operations work!\n", .{});
 }
 
 test "attribute modification" {
@@ -395,8 +393,6 @@ test "attribute modification" {
     // Verify other attributes still exist
     try testing.expect(z.hasAttribute(p_element, "id"));
     try testing.expect(z.hasAttribute(p_element, "data-test"));
-
-    // print("✅ Attribute modification works\n", .{});
 }
 
 test "attribute iteration" {
@@ -432,7 +428,6 @@ test "attribute iteration" {
     }
 
     try testing.expect(found_count == 5);
-    // print("✅ Found attributes\n", .{});
 }
 
 test "attribute edge cases" {
@@ -483,8 +478,6 @@ test "attribute edge cases" {
         defer allocator.free(new_empty);
         try testing.expectEqualStrings("", new_empty);
     }
-
-    // print("✅ Edge cases handled correctly!\n", .{});
 }
 
 test "attribute error handling" {
@@ -516,5 +509,4 @@ test "attribute error handling" {
         "missing",
     );
     try testing.expect(missing_attr == null);
-    // print("✅ Error handling works!\n", .{});
 }

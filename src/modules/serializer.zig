@@ -18,7 +18,7 @@ const lxbString = extern struct {
 
 extern "c" fn lxb_html_serialize_tree_str(node: *z.DomNode, str: *lxbString) usize;
 extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
-extern "c" fn lxb_html_element_inner_html_set(body: *z.DomElement, inner: [*]const u8, inner_len: usize) *z.DomElement;
+extern "c" fn lxb_html_element_inner_html_set(body: *z.HTMLElement, inner: [*]const u8, inner_len: usize) *z.HTMLElement;
 
 /// [Serialize] Serialize the node tree (most common use case).
 ///
@@ -74,7 +74,7 @@ pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
 /// [Serialize] Serializes the HTMLElement tree
 ///
 /// Caller needs to free the returned slice.
-pub fn serializeElement(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn serializeElement(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     const node = z.elementToNode(element);
     return try serializeToString(allocator, node);
 }
@@ -88,7 +88,7 @@ pub fn serializeElement(allocator: std.mem.Allocator, element: *z.DomElement) ![
 /// When called on an element, it serializes all child nodes of that element.
 ///
 /// Caller needs to free the returned slice
-pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn innerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
 
@@ -128,7 +128,7 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
 /// try setInnerHTML(allocator, element, "<script> alert('XSS')</script>", .{ .allow_html = false, .escape = true });
 ///  "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;"
 /// ```
-pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.DomElement, content: []const u8, options: z.TextOptions) !*z.DomElement {
+pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8, options: z.TextOptions) !*z.HTMLElement {
     if (options.allow_html) {
         // Developer explicitly allowed HTML parsing - use at your own risk
         return lxb_html_element_inner_html_set(element, content.ptr, content.len);
@@ -148,7 +148,7 @@ pub fn setInnerHTML(allocator: std.mem.Allocator, element: *z.DomElement, conten
 /// [Serialize]Sets element's inner HTML directly without safety checks.
 ///
 /// For user content, use setInnerHTML() with TextOptions instead.
-fn setInnerHTMLUnsafe(element: *z.DomElement, inner: []const u8) *z.DomElement {
+fn setInnerHTMLUnsafe(element: *z.HTMLElement, inner: []const u8) *z.HTMLElement {
     return lxb_html_element_inner_html_set(
         element,
         inner.ptr,
@@ -159,7 +159,7 @@ fn setInnerHTMLUnsafe(element: *z.DomElement, inner: []const u8) *z.DomElement {
 /// [Serialize] Gets element's outer HTML (including the element itself)
 ///
 /// Caller needs to free the returned slice
-pub fn outerHTML(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn outerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     return try serializeElement(allocator, element);
 }
 
@@ -467,8 +467,6 @@ test "setInnerHTML security model" {
 
     // This WILL contain script tag - developer responsibility!
     try testing.expect(std.mem.indexOf(u8, dangerous_result, "<script>") != null);
-
-    // print("✅ Security model tests passed!\n", .{});
 }
 test "serializeNode vs serializeTree comparison" {
     const allocator = testing.allocator;

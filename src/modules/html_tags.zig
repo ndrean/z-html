@@ -6,6 +6,11 @@ const z = @import("../zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
+// from lexbor source: /tag/const.h
+pub const LXB_TAG_TEMPLATE: u32 = 179; // From lexbor source
+pub const LXB_TAG_STYLE: u32 = 171;
+pub const LXB_TAG_SCRIPT: u32 = 162;
+
 /// [HtmlTag] Optional: Parse string to HtmlTag (inline)
 pub fn parseTag(name: []const u8) ?HtmlTag {
     return stringToEnum(HtmlTag, name);
@@ -65,13 +70,13 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
 }
 
 /// [HtmlTag] Convert element to HtmlTag enum (inline)
-pub fn tagFromElement(element: *z.DomElement) ?HtmlTag {
+pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
     const qualified_name = z.qualifiedName_zc(element);
     return stringToEnum(HtmlTag, qualified_name);
 }
 
 /// [HtmlTag] Tag name matcher function
-pub fn matchesTagName(element: *z.DomElement, tag_name: []const u8) bool {
+pub fn matchesTagName(element: *z.HTMLElement, tag_name: []const u8) bool {
     const tag = z.parseTag(z.qualifiedName_zc(element));
     const target_tag = parseTag(tag_name); // Safe for immediate use
     return tag == target_tag;
@@ -295,7 +300,7 @@ pub fn isNoEscapeElementFast(qualified_name: []const u8) bool {
 ///     // Handle void element (like <br>, <img>)
 /// }
 /// ```
-pub fn isVoidElementFastZeroCopy(element: *z.DomElement) bool {
+pub fn isVoidElementFastZeroCopy(element: *z.HTMLElement) bool {
     const qualified_name = z.qualifiedName_zc(element);
     return isVoidElementFast(qualified_name);
 }
@@ -314,7 +319,7 @@ pub fn isVoidElementFastZeroCopy(element: *z.DomElement) bool {
 ///     // Regular content - escape HTML entities
 /// }
 /// ```
-pub fn isNoEscapeElementFastZeroCopy(element: *z.DomElement) bool {
+pub fn isNoEscapeElementFastZeroCopy(element: *z.HTMLElement) bool {
     const qualified_name = z.qualifiedName_zc(element);
     return isNoEscapeElementFast(qualified_name);
 }

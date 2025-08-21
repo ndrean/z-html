@@ -317,7 +317,7 @@ pub fn printNode(node: HtmlNode, indent: usize) void {
 /// [tree] Convert entire DOM document to HtmlTree
 ///
 /// Caller must free the returned HtmlTree slice
-pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlTree {
+pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !HtmlTree {
     const body_node = try z.bodyNode(doc);
 
     var tree_list = std.ArrayList(HtmlNode).init(allocator);
@@ -335,7 +335,7 @@ pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !
 }
 
 /// [tree] Convert entire document including HTML element (for full document structure)
-pub fn fulldocumentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !HtmlNode {
+pub fn fulldocumentToTupleTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !HtmlNode {
     // Try to get HTML element if it exists
     const html_element = z.bodyElement(doc) catch {
         // Fallback to body if no HTML element found
@@ -351,7 +351,7 @@ pub fn fulldocumentToTupleTree(allocator: std.mem.Allocator, doc: *z.HtmlDocumen
 }
 
 /// [json] Convert entire DOM document to JsonTree
-pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonTree {
+pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonTree {
     const body_node = try z.bodyNode(doc);
 
     var tree_list = std.ArrayList(JsonNode).init(allocator);
@@ -368,7 +368,7 @@ pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !J
 }
 
 /// [json] Convert entire document including HTML element to JSON format
-pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HtmlDocument) !JsonNode {
+pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonNode {
     // Try to get HTML element if it exists
     const html_element = z.bodyElement(doc) catch {
         // Fallback to body if no HTML element found
@@ -676,7 +676,7 @@ pub fn walkTree(node: *z.DomNode, depth: u32) void {
 }
 
 /// [tree] Debug: print document structure (for debugging)
-pub fn printDocumentStructure(doc: *z.HtmlDocument) !void {
+pub fn printDocumentStructure(doc: *z.HTMLDocument) !void {
     // print("\n--- DOCUMENT STRUCTURE ----\n", .{});
     const root = try z.bodyNode(doc);
     walkTree(root, 0);

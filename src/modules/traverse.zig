@@ -14,7 +14,7 @@ const testing = std.testing;
 /// Caller must ensure the returned slice is freed.
 pub fn collectChildElements(
     allocator: std.mem.Allocator,
-    parent_element: *z.DomElement,
+    parent_element: *z.HTMLElement,
     comptime T: type,
     target_tag: z.HtmlTag,
     collectFn: *const fn (element: T, tag: z.HtmlTag) ?T,
@@ -64,7 +64,7 @@ pub fn collectChildItems(
 }
 
 /// [traverse] Callback to collect elements with a given HTML tag
-pub fn elementMatchCollector(element: *z.DomElement, tag: z.HtmlTag) ?*z.DomElement {
+pub fn elementMatchCollector(element: *z.HTMLElement, tag: z.HtmlTag) ?*z.HTMLElement {
     if (z.parseTag(z.qualifiedName_zc(element))) |element_tag| {
         if (element_tag == tag) return element;
     }
@@ -101,7 +101,7 @@ test "DOM traversal utilities" {
     const p_elements = try collectChildElements(
         allocator,
         div,
-        *z.DomElement,
+        *z.HTMLElement,
         .p,
         elementMatchCollector,
     );
@@ -112,7 +112,7 @@ test "DOM traversal utilities" {
     const span_elements = try collectChildElements(
         allocator,
         div,
-        *z.DomElement,
+        *z.HTMLElement,
         .span,
         elementMatchCollector,
     );
@@ -168,11 +168,11 @@ test "DOM traversal utilities" {
 // Trial fns
 
 // returns true if element is a `P`
-fn areAllPs(element: *z.DomElement) bool {
+fn areAllPs(element: *z.HTMLElement) bool {
     return z.parseTag(z.qualifiedName_zc(element)).? == .p;
 }
 
-fn areAllOfType(element: *z.DomElement, tag: z.HtmlTag) bool {
+fn areAllOfType(element: *z.HTMLElement, tag: z.HtmlTag) bool {
     return z.parseTag(z.qualifiedName_zc(element)).? == tag;
 }
 
@@ -192,8 +192,8 @@ fn forEachChildNode(
 }
 
 fn forEachChildElement(
-    parent_element: *z.DomElement,
-    callback: *const fn (elt: *z.DomElement) bool,
+    parent_element: *z.HTMLElement,
+    callback: *const fn (elt: *z.HTMLElement) bool,
 ) bool {
     var child_element = z.firstElementChild(parent_element);
     while (child_element) |child| {

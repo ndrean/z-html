@@ -11,23 +11,15 @@ pub const NodeType = enum(u16) {
     document = 9,
     fragment = 11,
     unknown = 0,
-
-    tag_template = 0x31,
-    tag_style = 0x2d,
-    tag_script = 0x29,
 };
 
 pub const LXB_DOM_NODE_TYPE_ELEMENT: u32 = 1;
 pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
 pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
 
-pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
-pub const LXB_TAG_STYLE: u32 = 0x2d;
-pub const LXB_TAG_SCRIPT: u32 = 0x29;
-
 /// [node_types] Get node type for enum comparison (Inlined)
 ///
-/// Values are: `.text`, `.element`, `.comment`, `.document`, `.unknown`.
+/// Values are: `.text`, `.comment`, `.document`, `.fragment`, `.element`, `.unknown`.
 pub inline fn nodeType(node: *z.DomNode) NodeType {
     const node_name = z.nodeName_zc(node);
 
@@ -38,7 +30,7 @@ pub inline fn nodeType(node: *z.DomNode) NodeType {
         return .comment;
     } else if (std.mem.eql(u8, node_name, "#document")) {
         return .document;
-    } else if (std.mem.eql(u8, node_name, "#fragment")) {
+    } else if (std.mem.eql(u8, node_name, "#document-fragment")) {
         return .fragment;
     } else if (node_name.len > 0 and node_name[0] != '#') {
         // Regular HTML tag names (div, p, span, strong, em...)
@@ -61,8 +53,8 @@ pub inline fn nodeTypeName(node: *z.DomNode) []const u8 {
         return "#comment";
     } else if (std.mem.eql(u8, node_name, "#document")) {
         return "#document";
-    } else if (std.mem.eql(u8, node_name, "#fragment")) {
-        return "#fragment";
+    } else if (std.mem.eql(u8, node_name, "#document-fragment")) {
+        return "#document-fragment";
     } else if (node_name.len > 0 and node_name[0] != '#') {
         // Regular HTML tag names (div, p, span, strong, em...)
         return "#element";
@@ -96,15 +88,15 @@ pub inline fn isTypeFragment(node: *z.DomNode) bool {
     return nodeType(node) == .fragment;
 }
 
-test "node type detection using getNodeName" {
+test "type / name checking" {
     const frag =
-        \\<!-- This is a comment -->
         \\<div>
+        \\<!-- This is a comment -->
         \\  Some text content
         \\  <span>nested element</span>
         \\  More text
-        \\  <!-- comment --x
-        \\  <em>  </em>
+        \\  <!-- comment -->
+        \\  <em> Emphasis </em>
         \\</div>
     ;
 
@@ -113,9 +105,20 @@ test "node type detection using getNodeName" {
 
     const body_node = try z.bodyNode(doc);
     const fragment = try z.createDocumentFragment(doc);
-    z.appendFragment(body_node, fragment);
+    const p_elt = try z.createElement(doc, "p", &.{});
+    const frag_node = z.fragmentToNode(fragment);
+    z.appendChild(frag_node, z.elementToNode(p_elt));
 
-    var child = z.firstChild(body_node);
+    const div = z.firstChild(body_node);
+    z.appendChild(div.?, frag_node);
+    // try z.printDocumentStructure(doc);
+
+    var element_count: usize = 0;
+    var text_count: usize = 0;
+    var comment_count: usize = 0;
+    var fragment_count: usize = 0;
+
+    var child = z.firstChild(div.?);
     while (child != null) {
         const node_name = z.nodeName_zc(child.?);
         const node_type = z.nodeType(child.?);
@@ -130,7 +133,19 @@ test "node type detection using getNodeName" {
             );
             try testing.expect(isTypeElement(child.?));
         }
+
+        if (node_type == .element) {
+            element_count += 1;
+            try testing.expect(isTypeElement(child.?));
+            try testing.expect(@intFromEnum(node_type) == 1);
+            try testing.expectEqualStrings(
+                "#element",
+                node_type_name,
+            );
+        }
+
         if (std.mem.eql(u8, node_name, "#text")) {
+            text_count += 1;
             try testing.expect(@intFromEnum(node_type) == 3);
             try testing.expect(node_type == .text);
             try testing.expectEqualStrings(
@@ -141,25 +156,49 @@ test "node type detection using getNodeName" {
         }
 
         if (std.mem.eql(u8, node_name, "#comment")) {
+            comment_count += 1;
             try testing.expect(@intFromEnum(node_type) == 8);
             try testing.expect(node_type == .comment);
             try testing.expectEqualStrings(
                 "#comment",
                 node_type_name,
             );
-            try testing.expect(isTypeFragment(child.?));
+            try testing.expect(isTypeComment(child.?));
         }
 
-        if (std.mem.eql(u8, node_name, "#fragment")) {
+        if (std.mem.eql(u8, node_name, "#document-fragment")) {
+            fragment_count += 1;
             try testing.expect(@intFromEnum(node_type) == 11);
             try testing.expect(node_type == .fragment);
             try testing.expectEqualStrings(
-                "#fragment",
+                "#document-fragment",
                 node_type_name,
             );
             try testing.expect(isTypeFragment(child.?));
+            const p = z.firstChild(child.?);
+            try testing.expect(isTypeElement(p.?));
         }
 
-        child = z.firstChild(child.?);
+        child = z.nextSibling(child.?);
     }
+    try testing.expect(element_count == 2);
+    try testing.expect(text_count == 5);
+    try testing.expect(comment_count == 2);
+    try testing.expect(fragment_count == 1);
+
+    // documenet structure is:
+    // DIV
+    //     #text
+    //     #comment
+    //     #text
+    //     SPAN
+    //         #text
+    //     #text
+    //     #comment
+    //     #text
+    //     EM
+    //         #text
+    //     #text
+    //     #document-fragment
+    //         P
 }

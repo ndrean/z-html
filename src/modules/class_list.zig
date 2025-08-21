@@ -10,12 +10,12 @@ const Err = z.Err;
 
 const testing = std.testing;
 
-extern "c" fn lxb_dom_element_class_noi(element: *z.DomElement, length: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, length: *usize) [*]const u8;
 
 // ====================================================================
 
 /// [classList] Check if element has specific class without creating the classList
-pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
+pub fn hasClass(element: *z.HTMLElement, class_name: []const u8) bool {
     // Quick check: does element have class attribute at all?
     if (!z.hasAttribute(element, "class")) return false;
 
@@ -37,7 +37,7 @@ pub fn hasClass(element: *z.DomElement, class_name: []const u8) bool {
 /// [classList] Get the class attribute list as a borrowed string from lexbor
 ///
 /// Unsafe: Use it only for parsing
-fn classListAsString_zc(element: *z.DomElement) ?[]const u8 {
+fn classListAsString_zc(element: *z.HTMLElement) ?[]const u8 {
     if (!z.hasAttribute(element, "class")) return null;
 
     var class_len: usize = 0;
@@ -49,7 +49,7 @@ fn classListAsString_zc(element: *z.DomElement) ?[]const u8 {
 ///
 /// Return
 /// Caller owns the slice
-pub fn classListAsString(allocator: std.mem.Allocator, element: *z.DomElement) ![]u8 {
+pub fn classListAsString(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var class_len: usize = 0;
     const class_ptr = lxb_dom_element_class_noi(
         element,
@@ -72,13 +72,13 @@ pub fn classListAsString(allocator: std.mem.Allocator, element: *z.DomElement) !
 /// [classList] Browser-like DOMTokenList using StringHashMap as a set
 pub const DOMTokenList = struct {
     allocator: std.mem.Allocator,
-    element: *z.DomElement,
+    element: *z.HTMLElement,
     classes: std.StringHashMap(void),
     dirty: bool = false,
 
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator, element: *z.DomElement) !Self {
+    pub fn init(allocator: std.mem.Allocator, element: *z.HTMLElement) !Self {
         var token_list = Self{
             .allocator = allocator,
             .element = element,
@@ -262,7 +262,7 @@ pub const DOMTokenList = struct {
 };
 
 /// Convenience function to get classList for an element
-pub fn classList(allocator: std.mem.Allocator, element: *z.DomElement) !DOMTokenList {
+pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !DOMTokenList {
     return DOMTokenList.init(allocator, element);
 }
 

@@ -1,3 +1,6 @@
+//! Fragment utilities
+//! waiting lexbor issue on `appendChild` vs `appendFragment`
+
 const std = @import("std");
 const z = @import("../zhtml.zig");
 
@@ -5,18 +8,49 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
-// External lexbor functions for fragment parsing
+//<- z.objectToNode made pub
+// extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
+
 extern "c" fn lxb_html_document_parse_fragment(
-    document: *z.HtmlDocument,
-    element: *z.DomElement, // Context element
+    document: *z.HTMLDocument,
+    element: *z.HTMLElement, // Context element
     html: [*]const u8,
     html_len: usize,
 ) ?*z.DomNode; // Returns parse root node, not status
 
-extern "c" fn lxb_dom_document_create_element(document: *z.HtmlDocument, local_name: [*]const u8, local_name_len: usize, reserved: ?*anyopaque) ?*z.DomElement;
+extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 
 // Cross-document node cloning
-extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HtmlDocument) ?*z.DomNode;
+extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode;
+
+/// [fragments] Get the underlying DOM node from a fragment
+pub fn fragmentToNode(fragment: *z.DocumentFragment) *z.DomNode {
+    return z.objectToNode(fragment);
+}
+
+/// [fragment] Create a document fragment and returns a !Fragment
+///
+/// !! lexbor behaviour does not match the browser's specs on insertion. Use `appendFragment` for this.
+///
+/// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations
+///
+/// Official browser spec: when you append a fragment to the DOM, only its children are added, not the fragment itself which is destroyed.
+pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
+    return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentParseFailed;
+}
+
+/// [fragments] Append all children from a document fragment to a parent node
+///
+///
+/// The fragment children are moved (not copied)
+pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
+    var fragment_child = z.firstChild(fragment);
+    while (fragment_child != null) {
+        const next_sibling = z.nextSibling(fragment_child.?);
+        z.appendChild(parent, fragment_child.?);
+        fragment_child = next_sibling;
+    }
+}
 
 /// Fragment parsing context - defines how the fragment should be interpreted
 pub const FragmentContext = enum {
@@ -91,9 +125,9 @@ pub const FragmentContext = enum {
 
 /// Fragment parsing result
 pub const FragmentResult = struct {
-    document: *z.HtmlDocument,
+    document: *z.HTMLDocument,
     fragment_root: *z.DomNode,
-    context_element: *z.DomElement,
+    context_element: *z.HTMLElement,
 
     pub fn deinit(self: FragmentResult) void {
         z.destroyDocument(self.document);
@@ -105,11 +139,11 @@ pub const FragmentResult = struct {
     }
 
     /// Get all top-level elements from the fragment (skipping text nodes)
-    pub fn getElements(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.DomElement {
+    pub fn getElements(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.HTMLElement {
         const all_nodes = try self.getNodes(allocator);
         defer allocator.free(all_nodes);
 
-        var elements = std.ArrayList(*z.DomElement).init(allocator);
+        var elements = std.ArrayList(*z.HTMLElement).init(allocator);
         for (all_nodes) |node| {
             if (z.nodeToElement(node)) |element| {
                 try elements.append(element);
@@ -121,12 +155,19 @@ pub const FragmentResult = struct {
     /// Serialize the fragment back to HTML
     pub fn serialize(self: FragmentResult, allocator: std.mem.Allocator) ![]u8 {
         // Serialize the fragment_root's innerHTML
-        return z.innerHTML(allocator, z.nodeToElement(self.fragment_root).?);
+        return z.innerHTML(
+            allocator,
+            z.nodeToElement(self.fragment_root).?,
+        );
     }
 };
 
 /// Parse an HTML fragment with specified context
-pub fn parseFragment(allocator: std.mem.Allocator, html_fragment: []const u8, context: FragmentContext) !FragmentResult {
+pub fn parseFragment(
+    allocator: std.mem.Allocator,
+    html_fragment: []const u8,
+    context: FragmentContext,
+) !FragmentResult {
     _ = allocator; // May be needed for error handling in future
 
     // Create a new document for the fragment
@@ -134,13 +175,18 @@ pub fn parseFragment(allocator: std.mem.Allocator, html_fragment: []const u8, co
 
     // Create context element that determines parsing rules
     const tag_name = context.toTagName();
-    const context_element = lxb_dom_document_create_element(doc, tag_name.ptr, tag_name.len, null) orelse {
+    const context_element = z.createElement(doc, tag_name, &.{}) catch {
         z.destroyDocument(doc);
         return Err.CreateElementFailed;
     };
 
     // Parse the fragment within the context
-    const parse_root = lxb_html_document_parse_fragment(doc, context_element, html_fragment.ptr, html_fragment.len) orelse {
+    const parse_root = lxb_html_document_parse_fragment(
+        doc,
+        context_element,
+        html_fragment.ptr,
+        html_fragment.len,
+    ) orelse {
         z.destroyDocument(doc);
         return Err.ParseFailed;
     };
@@ -153,13 +199,26 @@ pub fn parseFragment(allocator: std.mem.Allocator, html_fragment: []const u8, co
 }
 
 /// Parse fragment with default body context
-pub fn parseFragmentSimple(allocator: std.mem.Allocator, html_fragment: []const u8) !FragmentResult {
+pub fn parseFragmentSimple(
+    allocator: std.mem.Allocator,
+    html_fragment: []const u8,
+) !FragmentResult {
     return parseFragment(allocator, html_fragment, .body);
 }
 
 /// Parse fragment and immediately extract to existing document
-pub fn parseFragmentInto(allocator: std.mem.Allocator, target_doc: *z.HtmlDocument, target_parent: *z.DomNode, html_fragment: []const u8, context: FragmentContext) !void {
-    const fragment_result = try parseFragment(allocator, html_fragment, context);
+pub fn parseFragmentInto(
+    allocator: std.mem.Allocator,
+    target_doc: *z.HTMLDocument,
+    target_parent: *z.DomNode,
+    html_fragment: []const u8,
+    context: FragmentContext,
+) !void {
+    const fragment_result = try parseFragment(
+        allocator,
+        html_fragment,
+        context,
+    );
     defer fragment_result.deinit();
 
     // Get all nodes from the fragment
@@ -696,4 +755,145 @@ test "malformed fragment recovery" {
     try testing.expect(std.mem.indexOf(u8, serialized, "</h3>") != null);
     try testing.expect(std.mem.indexOf(u8, serialized, "</p>") != null);
     try testing.expect(std.mem.indexOf(u8, serialized, "</span>") != null);
+}
+
+test "append createDocumentFragment" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<html><body><ul id=\"ul\"></ul></body></html>");
+    defer z.destroyDocument(doc);
+
+    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
+
+    const fragment = try z.createDocumentFragment(doc);
+
+    for (browsers) |browser| {
+        const li = try z.createElement(doc, "li", &.{});
+        const text = try z.createTextNode(doc, browser);
+        z.appendChild(z.elementToNode(li), text);
+        z.appendChild(z.fragmentToNode(fragment), z.elementToNode(li));
+    }
+
+    const fragment_node = z.fragmentToNode(fragment);
+
+    const body_node = try z.bodyNode(doc);
+    const ul_element = z.getElementById(body_node, "ul");
+    const ul = z.elementToNode(ul_element.?);
+
+    // z.appendChild(ul, fragment_node); // !!!<-- "official" behaviour
+    z.appendFragment(ul, fragment_node);
+
+    // try z.printDocumentStructure(doc);
+
+    var p_count: usize = 0;
+    var child = z.firstChild(ul);
+    while (child != null) : (child = z.nextSibling(child.?)) {
+        if (!z.isTypeElement(child.?)) continue;
+
+        if (z.tagFromElement(z.nodeToElement(child.?).?)) |tag| {
+            if (tag == .li) {
+                p_count += 1;
+            }
+        }
+    }
+    try testing.expectEqual(@as(usize, 5), p_count);
+
+    const child_elements = try z.getChildren(allocator, ul_element.?);
+    defer allocator.free(child_elements);
+
+    try testing.expect(child_elements.len == 5);
+}
+
+test "show" {
+    const allocator = testing.allocator;
+
+    const doc = try z.parseFromString("");
+    defer z.destroyDocument(doc);
+
+    const main_elt = try z.createElement(
+        doc,
+        "main",
+        &.{},
+    );
+    const div_elt = try z.createElement(
+        doc,
+        "div",
+        &.{.{ .name = "class", .value = "container-list" }},
+    );
+
+    const div = z.elementToNode(div_elt);
+    const main = z.elementToNode(main_elt);
+
+    const comment_node = try z.createComment(doc, "a comment");
+    z.appendChild(div, z.commentToNode(comment_node));
+
+    const ul_elt = try z.createElement(doc, "ul", &.{});
+    const ul = z.elementToNode(ul_elt);
+
+    for (1..4) |i| {
+        const inner_content = try std.fmt.allocPrint(
+            allocator,
+            "<li data-id=\"{d}\">Item {d}</li>",
+            .{ i, i },
+        );
+        defer allocator.free(inner_content);
+
+        const temp_div_elt = try z.createElement(doc, "div", &.{});
+        const temp_div = z.elementToNode(temp_div_elt);
+
+        _ = try z.setInnerHTML(
+            allocator,
+            temp_div_elt,
+            inner_content,
+            .{},
+        );
+
+        // Move the LI element to the UL
+        if (z.firstChild(temp_div)) |li| {
+            z.appendChild(ul, li);
+        }
+        z.destroyNode(temp_div);
+    }
+    z.appendChild(div, ul);
+    z.appendChild(main, div);
+
+    const fragment_elt = try z.createDocumentFragment(doc);
+    const fragment_node = z.fragmentToNode(fragment_elt);
+    try testing.expect(
+        z.nodeType(fragment_node) == z.NodeType.fragment,
+    ); // #document-fragment
+
+    // z.appendChild(main, fragment_node);
+    // batch it into the DOM
+    z.appendFragment(main, fragment_node);
+    try z.printDocumentStructure(doc);
+
+    const lis = try z.getElementsByTagName(doc, "LI");
+    defer if (lis) |collection| {
+        z.destroyCollection(collection);
+    };
+    const li_count = z.collectionLength(lis.?);
+    try testing.expect(li_count == 0);
+
+    const fragment_txt = try z.serializeToString(allocator, main);
+    // print("\n\n{s}\n\n", .{fragment_txt});
+
+    defer allocator.free(fragment_txt);
+
+    const pretty_expected =
+        \\<main>
+        \\  <div class="container-list">
+        \\      <!--a comment-->
+        \\      <ul>
+        \\          <li data-id="1">Item 1</li>
+        \\          <li data-id="2">Item 2</li>
+        \\          <li data-id="3">Item 3</li>
+        \\      </ul>
+        \\  </div>
+        \\</main>
+    ;
+
+    const expected = try z.normalizeWhitespace(allocator, pretty_expected, .{});
+    defer allocator.free(expected);
+
+    try testing.expectEqualStrings(expected, fragment_txt);
 }

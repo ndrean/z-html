@@ -22,8 +22,6 @@ pub const Err = @import("errors.zig").LexborError;
 
 pub const LXB_STATUS_OK: usize = 0;
 pub var default_collection_capacity: u8 = 10;
-// pub const lxb_char_t = u8;
-// pub const lxb_status_t = usize;
 
 pub const TextOptions = struct {
     escape: bool = false,
@@ -33,49 +31,27 @@ pub const TextOptions = struct {
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
 
-// CSS selectors
-pub const CssSelectorEngine = css.CssSelectorEngine;
-pub const CssParser = opaque {};
-pub const CssSelectors = opaque {};
-pub const CssSelectorList = opaque {};
-pub const CssSelectorSpecificity = opaque {};
-
-// Chunk parsing
-pub const ChunkParser = chunks.ChunkParser;
-pub const HtmlParser = chunks.HtmlParser;
-
-// Fragment parsing
-pub const FragmentContext = fragments.FragmentContext;
-pub const FragmentResult = fragments.FragmentResult;
-pub const parseFragment = fragments.parseFragment;
-pub const parseFragmentSimple = fragments.parseFragmentSimple;
-pub const parseFragmentInto = fragments.parseFragmentInto;
-
 //=====================================
 // Core
 //=====================================
-pub const HtmlDocument = opaque {};
+pub const HTMLDocument = opaque {};
 pub const DomNode = opaque {};
-pub const DomElement = opaque {};
+pub const HTMLElement = opaque {};
 pub const Comment: type = opaque {};
-pub const Template = opaque {};
 
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
 pub const createElement = lxb.createElement;
 pub const createTextNode = lxb.createTextNode;
-pub const createComment = lxb.createComment;
-pub const createDocumentFragment = lxb.createDocumentFragment;
 
 //=====================================
 pub const parseFromString = lxb.parseFromString;
 //=====================================
 
 //=====================================
-// DOM destruction
+// Destruction Node / Element
 //=====================================
 pub const removeNode = lxb.removeNode;
-pub const destroyComment = lxb.destroyComment;
 pub const destroyNode = lxb.destroyNode;
 pub const destroyElement = lxb.destroyElement;
 
@@ -85,15 +61,24 @@ pub const ownerDocument = lxb.ownerDocument;
 pub const bodyElement = lxb.bodyElement;
 pub const bodyNode = lxb.bodyNode;
 
-//=====================================
+//====================================
 // Node / Element / Comment conversions
-//=====================================
+//====================================
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
+pub const objectToNode = lxb.objectToNode;
+
+// ===================================
+// Comment
+// ===================================
 pub const commentToNode = lxb.commentToNode;
 pub const nodeToComment = lxb.nodeToComment;
+pub const createComment = lxb.createComment;
+pub const destroyComment = lxb.destroyComment;
 
+// ===================================
 // Node and Element name functions (both safe and unsafe versions)
+// ===================================
 pub const nodeName = lxb.nodeName; // Safe version
 pub const nodeName_zc = lxb.nodeName_zc;
 pub const tagName = lxb.tagName;
@@ -118,13 +103,18 @@ pub const isTypeFragment = Type.isTypeFragment;
 // HTML tags
 //=====================================
 pub const HtmlTag = tag.HtmlTag;
+// from lexbor source: /tag/const.h
+pub const LXB_TAG_TEMPLATE: u32 = tag.LXB_TAG_TEMPLATE;
+pub const LXB_TAG_STYLE: u32 = tag.LXB_TAG_STYLE;
+pub const LXB_TAG_SCRIPT: u32 = tag.LXB_TAG_SCRIPT;
+
 pub const parseTag = tag.parseTag;
 pub const parseTagInsensitive = tag.parseTagInsensitive;
 pub const fromQualifiedName = tag.fromQualifiedName;
 pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
-pub const isVoidElementFast = tag.isVoidElementFast; // RECOMMENDED: Fast enum-based
-pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // RECOMMENDED: Fast enum-based
+pub const isVoidElementFast = tag.isVoidElementFast; // Change name
+pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // change name
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
 
 //=====================================
@@ -145,18 +135,40 @@ pub const insertAdjacentElement = lxb.insertAdjacentElement;
 pub const insertAdjacentHTML = lxb.insertAdjacentHTML;
 pub const appendChild = lxb.appendChild;
 pub const appendChildren = lxb.appendChildren;
-pub const appendFragment = lxb.appendFragment;
 
 pub const getChildNodes = lxb.getChildNodes;
 pub const getChildren = lxb.getChildren;
 
+// ============================================================
+// Chunk processing
+// ============================================================
+pub const ChunkParser = chunks.ChunkParser;
+pub const HtmlParser = chunks.HtmlParser;
+
+// =============================================================
+// Fragment & fragment parsing
+// =============================================================
+pub const DocumentFragment = opaque {};
+pub const FragmentContext = fragments.FragmentContext;
+pub const FragmentResult = fragments.FragmentResult;
+pub const fragmentToNode = fragments.fragmentToNode;
+pub const createDocumentFragment = fragments.createDocumentFragment;
+pub const appendFragment = fragments.appendFragment;
+
+pub const parseFragment = fragments.parseFragment;
+pub const parseFragmentSimple = fragments.parseFragmentSimple;
+pub const parseFragmentInto = fragments.parseFragmentInto;
+
 //=====================================
 // Template element support
 //=====================================
-pub const HtmlTemplate = opaque {};
-// Template
+pub const HTMLTemplateElement = opaque {};
+pub const isTemplate = template.isTemplate;
+
+pub const templateToNode = template.templateToNode;
 pub const createTemplate = template.createTemplate;
 pub const destroyTemplate = template.destroyTemplate;
+pub const templateContent = template.templateContent;
 
 // ===========================================================================
 // DOM Traversal utilities
@@ -174,7 +186,7 @@ pub const JsonTreeNode = tree.JsonNode;
 pub const JsonTreeArray = tree.JsonTree;
 pub const JsonAttribute = tree.JsonAttribute;
 
-// Canonical conversion functions
+// conversion functions
 pub const freeHtmlTree = tree.freeHtmlTree;
 pub const freeJsonTree = tree.freeJsonTree;
 pub const documentToJsonTree = tree.documentToJsonTree;
@@ -222,9 +234,11 @@ pub const setDefaultCapacity = collection.setDefaultCapacity;
 pub const getDefaultCapacity = collection.getDefaultCapacity;
 pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
-// Reflexion
+// ==================================
+// Node Reflection functions
+// ==================================
 pub const isNodeEmpty = lxb.isNodeEmpty;
-pub const isSelfClosingNode = lxb.isSelfClosingNode;
+pub const isVoid = lxb.isVoid;
 pub const isWhitespaceOnlyText = lxb.isWhitespaceOnlyText;
 pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
 pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
@@ -252,7 +266,7 @@ pub const normalizeWhitespace = cleaner.normalizeWhitespace;
 //=====================================
 pub const getCommentTextContent = lxb.getCommentTextContent;
 pub const getTextContent = lxb.getTextContent;
-pub const getTextContent_zc = lxb.getTextContent_zc; // Zero-copy version
+pub const getTextContent_zc = lxb.getTextContent_zc;
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
@@ -260,6 +274,11 @@ pub const escapeHtml = lxb.escapeHtml;
 //=========================================
 // CSS selectors
 //=========================================
+pub const CssSelectorEngine = css.CssSelectorEngine;
+pub const CssParser = opaque {};
+pub const CssSelectors = opaque {};
+pub const CssSelectorList = opaque {};
+pub const CssSelectorSpecificity = opaque {};
 pub const querySelectorAll = css.querySelectorAll;
 pub const querySelector = css.querySelector;
 
@@ -288,7 +307,9 @@ pub const getAttributeValue = attrs.getAttributeValue;
 pub const getAttributeName_zc = attrs.getAttributeName_zc;
 pub const getAttributeName = attrs.getAttributeName;
 
-// ------- Walker Search
+//=======================================
+// ------- Search (simple walk)
+// ======================================
 pub const getElementById = walker.getElementById;
 pub const getElementByTag = walker.getElementByTag;
 pub const getElementByClass = walker.getElementByClass;
@@ -299,9 +320,8 @@ pub const getElementsByClass = walker.getElementsByClass;
 pub const getElementsByTag = walker.getElementsByTag;
 
 //=========================================
-// Element search functions
+// Collection based Elements Search
 //=========================================
-// pub const getElementById = collection.getElementById;
 pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 
 pub const getElementsByClassName = collection.getElementsByClassName;
@@ -310,7 +330,7 @@ pub const getElementsByTagName = collection.getElementsByTagName;
 pub const getElementsByName = collection.getElementsByName;
 
 //=========================================
-// Class handling - unified function and convenience wrappers
+// Class handling - DOMTokenList
 //=========================================
 pub const hasClass = classes.hasClass;
 pub const classListAsString = classes.classListAsString;
@@ -331,8 +351,8 @@ pub const getNextAttribute = attrs.getNextAttribute;
 //=========================================
 
 /// [zhtml] Debug: Get only element children (filter out text/comment nodes)
-pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*DomElement {
-    var elements = std.ArrayList(*DomElement).init(allocator);
+pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*HTMLElement {
+    var elements = std.ArrayList(*HTMLElement).init(allocator);
     defer elements.deinit();
 
     var child = firstChild(parent_node);

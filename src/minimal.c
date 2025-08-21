@@ -10,14 +10,34 @@
  * without exposing complex internal structures.
  */
 
+// Get the node from a generic object
 lxb_dom_node_t *lexbor_dom_interface_node_wrapper(void *obj)
 {
   return lxb_dom_interface_node(obj);
 }
 
+// node/element -> element
 lxb_dom_element_t *lexbor_dom_interface_element_wrapper(lxb_dom_node_t *node)
 {
   return lxb_dom_interface_element(node);
+}
+
+// template -> element
+lxb_dom_element_t *lxb_html_template_to_element(lxb_html_template_element_t *template_element)
+{
+  return lxb_dom_interface_element(template_element);
+}
+
+// template -> node
+lxb_dom_node_t *lxb_html_template_to_node(lxb_html_template_element_t *template_element)
+{
+  return lxb_dom_interface_node(template_element);
+}
+
+// Wrapper for checking if a node has a specific tag ID
+bool lxb_html_tree_node_is_wrapper(lxb_dom_node_t *node, lxb_tag_id_t tag_id)
+{
+  return lxb_html_tree_node_is(node, tag_id);
 }
 
 // Cross-document node cloning wrapper
@@ -40,7 +60,7 @@ void lexbor_destroy_text_wrapper(lxb_dom_node_t *node, lxb_char_t *text)
     lxb_dom_document_destroy_text_noi(node->owner_document, text);
 }
 
-// Working wrapper to get template content
+// TEMPLATE content access
 lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template_element_t *template_element)
 {
   if (template_element == NULL)
@@ -51,4 +71,45 @@ lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template
   // Access the content field directly from the template structure
   // In lexbor, template elements have a 'content' field
   return template_element->content;
+}
+
+// lxb_dom_node_t *lxb_html_template_to_node(lxb_html_template_element_t *template_element)
+// {
+//   return lxb_dom_interface_node(template_element);
+// }
+
+// / Get the tag ID of a node for debugging
+lxb_tag_id_t lxb_html_tree_node_tag_id_wrapper(lxb_dom_node_t *node)
+{
+  if (node == NULL)
+  {
+    return LXB_TAG__UNDEF;
+  }
+
+  lxb_dom_element_t *element = lxb_dom_interface_element(node);
+  if (element == NULL)
+  {
+    return LXB_TAG__UNDEF;
+  }
+
+  return element->node.local_name;
+}
+
+// Create a template element using the standard document interface which creates the Tag_id and content access.
+lxb_html_template_element_t *lxb_html_create_template_element_wrapper(lxb_html_document_t *document)
+{
+  // Create template element using the standard element creation method
+  lxb_dom_element_t *element = lxb_dom_document_create_element(
+      lxb_dom_interface_document(document),
+      (const lxb_char_t *)"template",
+      8,
+      NULL);
+
+  if (element == NULL)
+  {
+    return NULL;
+  }
+
+  // Cast to template interface
+  return lxb_html_interface_template(element);
 }
