@@ -39,4 +39,5 @@ pub const LexborError = error{
     NoParentNode,
     InvalidPosition,
     InvalidClassName,
+    ImportNodeFailed,
 };

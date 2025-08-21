@@ -165,10 +165,17 @@ pub const parseFragmentInto = fragments.parseFragmentInto;
 pub const HTMLTemplateElement = opaque {};
 pub const isTemplate = template.isTemplate;
 
-pub const templateToNode = template.templateToNode;
 pub const createTemplate = template.createTemplate;
 pub const destroyTemplate = template.destroyTemplate;
+
+pub const templateToNode = template.templateToNode;
+pub const templateToElement = template.templateToElement;
+
+pub const nodeToTemplate = template.nodeToTemplate;
+pub const elementToTemplate = template.elementToTemplate;
+
 pub const templateContent = template.templateContent;
+pub const setTemplateContent = template.setTemplateContent;
 
 // ===========================================================================
 // DOM Traversal utilities

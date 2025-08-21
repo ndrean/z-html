@@ -12,88 +12,60 @@ const print = std.debug.print;
 extern "c" fn lxb_html_create_template_element_wrapper(doc: *z.HTMLDocument) ?*z.HTMLTemplateElement;
 extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HTMLTemplateElement) *z.HTMLTemplateElement;
 
-extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
+// extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
 extern "c" fn lxb_html_template_to_element(template: *z.HTMLTemplateElement) *z.HTMLElement;
+extern "c" fn lxb_node_to_template_wrapper(node: *z.DomNode) ?*z.HTMLTemplateElement;
+extern "c" fn lxb_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLTemplateElement;
 
 extern "c" fn lxb_html_template_content_wrapper(template: *z.HTMLTemplateElement) *z.DocumentFragment;
 extern "c" fn lxb_html_template_to_node(template: *z.HTMLTemplateElement) *z.DomNode;
 extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
 extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode;
 
-/// [core] Create a template
+/// [template] Create a template
 pub fn createTemplate(doc: *z.HTMLDocument) !*z.HTMLTemplateElement {
     return lxb_html_create_template_element_wrapper(doc) orelse Err.CreateTemplateFailed;
 }
 
-/// [core] Destroy a template in the document
+/// [template] Destroy a template in the document
 pub fn destroyTemplate(template: *z.HTMLTemplateElement) void {
     _ = lxb_html_template_element_interface_destroy(template);
 }
 
-/// Check if a node is a template element
+/// [template] Check if a node is a template element
 pub fn isTemplate(node: *z.DomNode) bool {
     return lxb_html_tree_node_is_wrapper(node, z.LXB_TAG_TEMPLATE);
 }
 
+/// [template] Cast template to node
 pub fn templateToNode(template: *z.HTMLTemplateElement) ?*z.DomNode {
     return lxb_html_template_to_node(template);
     // return lexbor_dom_interface_node_wrapper(template);
 }
 
+/// [template] Cast template to element
 pub fn templateToElement(template: *z.HTMLTemplateElement) *z.HTMLElement {
     return lxb_html_template_to_element(template);
 }
 
+/// [template] Get the template element from a node
+pub fn nodeToTemplate(node: *z.DomNode) ?*z.HTMLTemplateElement {
+    return lxb_node_to_template_wrapper(node);
+}
+
+/// [template] Get the template element from an element
+pub fn elementToTemplate(element: *z.HTMLElement) ?*z.HTMLTemplateElement {
+    return lxb_element_to_template_wrapper(element);
+}
+
+/// [template] Get the content of a template
 pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
     return lxb_html_template_content_wrapper(template);
 }
 
-test "template" {
-    const doc = try z.parseFromString("<p></p>");
-    defer z.destroyDocument(doc);
-
-    const template = try createTemplate(doc);
-
-    const template_node_before = templateToNode(template);
-    try testing.expect(isTemplate(template_node_before.?));
-
-    // const template_content = templateContent(template);
-    // const content_node = z.fragmentToNode(template_content); // Get the content node from the template
-    // try testing.expect(z.isNodeEmpty(content_node));
-
-    const p = try z.createElement(
-        doc,
-        "p",
-        &.{.{ .name = "id", .value = "1" }},
-    );
-    try z.setTextContent(z.elementToNode(p), "Hello");
-    z.appendChild(z.templateToNode(template).?, z.elementToNode(p));
-    // const content_node_after = templateContent(template);
-    // try testing.expect(
-    //     !z.isNodeEmpty(z.fragmentToNode(content_node_after)),
-    // ); // fails ???????
-
-    const allocator = testing.allocator;
-    const body = try z.bodyNode(doc);
-    const html = try z.serializeToString(allocator, body);
-    defer allocator.free(html);
-    print("{s}", .{html});
-    // no attributes, no innerText ???????????????
-    try testing.expectEqualStrings("<body><p></p></body>", html);
-}
-
-pub fn importNode(node: *z.DomNode, target_doc: *z.HTMLDocument) !*z.DomNode {
-    // Use lexbor's importNode function
-    const imported_node = z.importNode(node, target_doc) orelse return Err.ImportNodeFailed;
-
-    // If the node is a template, clone its content
-    if (isTemplate(imported_node)) {
-        const template_content = templateContent(imported_node);
-        const cloned_content = z.cloneFragment(template_content, target_doc);
-        return z.fragmentToNode(cloned_content);
-    }
-
-    return imported_node;
+/// [template] JS `importNode` equivalent for templates
+pub fn importNode(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode {
+    return lexbor_clone_node_deep(node, target_doc);
 }
 
 /// Populate template content by parsing HTML fragment
@@ -102,11 +74,8 @@ pub fn setTemplateContent(
     template_elem: *z.HTMLTemplateElement,
     html_fragment: []const u8,
 ) !void {
-    // Get template content (DocumentFragment)
-    const template_content = templateContent(template_elem) orelse
-        return Err.NoTemplateContent;
+    const template_content = templateContent(template_elem);
 
-    // Parse fragment using your existing parser
     const fragment_result = try z.parseFragment(
         allocator,
         html_fragment,
@@ -119,14 +88,130 @@ pub fn setTemplateContent(
     defer allocator.free(parsed_nodes);
 
     // Clone each node into the template's document and append to template content
-    const template_doc = z.nodeOwnerDocument(z.templateToNode(template_elem));
+    const template_doc = z.ownerDocument(z.templateToNode(template_elem).?);
     const template_content_node = z.fragmentToNode(template_content);
 
     for (parsed_nodes) |node| {
-        if (lexbor_clone_node_deep(node, template_doc)) |cloned_node| {
-            z.appendChild(template_content_node, cloned_node);
-        }
+        const cloned_node = importNode(node, template_doc);
+        z.appendChild(template_content_node, cloned_node);
     }
+}
+
+pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
+    const template_content = templateContent(template);
+    const content_node = z.fragmentToNode(template_content);
+
+    const template_doc = z.ownerDocument(z.templateToNode(template).?);
+    const cloned_content = importNode(content_node, template_doc);
+
+    // Append the clone
+    z.appendFragment(target, cloned_content);
+}
+
+test "setTemplateContent" {
+    const allocator = testing.allocator;
+
+    const pretty_html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+        \\
+        \\<template id="productrow">
+        \\  <tr>
+        \\    <td class="record">Code: 1</td>
+        \\    <td>Name: 1</td>
+        \\  </tr>
+        \\</template>
+    ;
+
+    const initial_html = try z.normalizeWhitespace(allocator, pretty_html, .{});
+    defer allocator.free(initial_html);
+
+    const doc = try z.parseFromString(initial_html);
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
+    const txt = try z.serializeToString(allocator, body);
+    defer allocator.free(txt);
+
+    // check body serialization (remove whitespaces and empoty text nodes)
+    try testing.expectEqualStrings(
+        "<body><table id=\"producttable\"><thead><tr><td>UPC_Code</td><td>Product_Name</td></tr></thead><tbody><!-- existing data could optionally be included here --></tbody></table><template id=\"productrow\"><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr></template></body>",
+        txt,
+    );
+
+    const template_elt = z.getElementById(body, "productrow");
+    try testing.expect(isTemplate(z.elementToNode(template_elt.?)));
+    try testing.expect(z.isNodeEmpty(z.elementToNode(template_elt.?)));
+
+    const temp_html = try z.serializeElement(allocator, template_elt.?);
+    defer allocator.free(temp_html);
+
+    // check template serialization
+    try testing.expectEqualStrings(
+        "<template id=\"productrow\"><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr></template>",
+        temp_html,
+    );
+
+    const template = z.elementToTemplate(template_elt.?).?;
+    const tbody = z.getElementByTag(body, .tbody);
+    const tbody_node = z.elementToNode(tbody.?);
+
+    // add twice the template
+    try useTemplate(template, tbody_node);
+    try useTemplate(template, tbody_node);
+
+    const resulting_html = try z.serializeToString(allocator, body);
+    defer allocator.free(resulting_html);
+
+    const target_pretty_html =
+        \\<body>
+        \\  <table id="producttable">
+        \\    <thead>
+        \\      <tr>
+        \\        <td>UPC_Code</td>
+        \\        <td>Product_Name</td>
+        \\      </tr>
+        \\    </thead>
+        \\    <tbody>
+        \\      <!-- existing data could optionally be included here -->
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\    </tbody>
+        \\  </table>
+        \\  <template id="productrow">
+        \\    <tr>
+        \\      <td class="record">Code: 1</td>
+        \\      <td>Name: 1</td>
+        \\    </tr>
+        \\  </template>
+        \\</body>
+    ;
+
+    const target_serialized_html = try z.normalizeWhitespace(
+        allocator,
+        target_pretty_html,
+        .{},
+    );
+    defer allocator.free(target_serialized_html);
+
+    // check resulting HTML
+    try testing.expectEqualStrings(target_serialized_html, resulting_html);
+
+    try z.printDocumentStructure(doc);
 }
 
 pub fn populateTemplateDirect(

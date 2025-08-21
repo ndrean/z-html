@@ -8,9 +8,9 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
+// ===
 //<- z.objectToNode made pub
 // extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
-
 extern "c" fn lxb_html_document_parse_fragment(
     document: *z.HTMLDocument,
     element: *z.HTMLElement, // Context element
@@ -22,6 +22,7 @@ extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*
 
 // Cross-document node cloning
 extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode;
+// ===
 
 /// [fragments] Get the underlying DOM node from a fragment
 pub fn fragmentToNode(fragment: *z.DocumentFragment) *z.DomNode {
@@ -41,8 +42,9 @@ pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
 
 /// [fragments] Append all children from a document fragment to a parent node
 ///
+/// Not the normal procedure
 ///
-/// The fragment children are moved (not copied)
+/// The fragment children are moved, not copied
 pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
     var fragment_child = z.firstChild(fragment);
     while (fragment_child != null) {

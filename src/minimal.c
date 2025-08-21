@@ -113,3 +113,42 @@ lxb_html_template_element_t *lxb_html_create_template_element_wrapper(lxb_html_d
   // Cast to template interface
   return lxb_html_interface_template(element);
 }
+
+// Cast a DOM element to template interface (if it's a template)
+lxb_html_template_element_t *lxb_element_to_template_wrapper(lxb_dom_element_t *element)
+{
+  if (element == NULL)
+  {
+    return NULL;
+  }
+
+  // Verify it's actually a template element before casting
+  lxb_dom_node_t *node = lxb_dom_interface_node(element);
+  if (lxb_html_tree_node_is(node, LXB_TAG_TEMPLATE))
+  {
+    return lxb_html_interface_template(element);
+  }
+
+  return NULL;
+}
+
+// Cast a DOM node to template interface (if it's a template)
+lxb_html_template_element_t *lxb_node_to_template_wrapper(lxb_dom_node_t *node)
+{
+  if (node == NULL)
+  {
+    return NULL;
+  }
+
+  // Check if it's a template node
+  if (lxb_html_tree_node_is(node, LXB_TAG_TEMPLATE))
+  {
+    lxb_dom_element_t *element = lxb_dom_interface_element(node);
+    if (element)
+    {
+      return lxb_html_interface_template(element);
+    }
+  }
+
+  return NULL;
+}
