@@ -43,7 +43,7 @@ test "HTTP streaming response simulation" {
 
     try testing.expect(messages_ul != null);
 
-    const children = try z.getChildren(allocator, messages_ul.?);
+    const children = try z.children(allocator, messages_ul.?);
     defer allocator.free(children);
 
     try testing.expect(children.len == 2);

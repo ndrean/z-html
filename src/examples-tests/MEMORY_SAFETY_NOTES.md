@@ -4,7 +4,7 @@
 
 ```zig
 // UNSAFE: Returns a slice pointing to lexbor's internal memory
-pub fn tagName(element: *DomElement) []const u8 {
+pub fn tagName(element: *HTMLElement) []const u8 {
     const name_ptr = lxb_dom_node_name(node, null);  // C function returns [*:0]const u8
     return std.mem.span(name_ptr);                   // Converts to []const u8 but doesn't copy!
 }
@@ -34,7 +34,7 @@ We now provide **both safe and unsafe versions**:
 
 ```zig
 /// ⚠️ WARNING: Borrows lexbor's memory - use immediately, don't store
-pub fn tagName(element: *DomElement) []const u8
+pub fn tagName(element: *HTMLElement) []const u8
 ```
 
 **Use when:**
@@ -47,7 +47,7 @@ pub fn tagName(element: *DomElement) []const u8
 
 ```zig
 /// ✅ SAFE: Copies to Zig-owned memory - caller must free
-pub fn tagName(allocator: std.mem.Allocator, element: *DomElement) ![]u8
+pub fn tagName(allocator: std.mem.Allocator, element: *HTMLElement) ![]u8
 ```
 
 **Use when:**
@@ -93,7 +93,7 @@ while (child) |element| {
 ### ✅ Pattern 3: Utility Functions (Safe with fast version)
 
 ```zig
-pub fn matchesTagName(element: *DomElement, tag_name: []const u8) bool {
+pub fn matchesTagName(element: *HTMLElement, tag_name: []const u8) bool {
     const tag = tagName(element);  // Safe: immediate comparison
     return std.mem.eql(u8, tag, tag_name);
 }

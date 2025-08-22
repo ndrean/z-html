@@ -22,7 +22,7 @@ pub fn main() !void {
     std.debug.print("\n=== Using collect for P tags ===\n");
 
     // Collect all P elements
-    const p_elements = try z.collectChildElements(allocator, div, *z.DomElement, pElementCollector);
+    const p_elements = try z.collectChildElements(allocator, div, *z.HTMLElement, pElementCollector);
     defer allocator.free(p_elements);
 
     std.debug.print("Found {} P elements:\n", .{p_elements.len});
@@ -38,7 +38,7 @@ pub fn main() !void {
     z.forEachChildElement(div, testMatchers);
 }
 
-fn printElementInfo(element: *z.DomElement) bool {
+fn printElementInfo(element: *z.HTMLElement) bool {
     const tag = z.tagNameBorrow(element);
     const text = z.getElementText(std.heap.page_allocator, element) catch "no text";
     defer if (!std.mem.eql(u8, text, "no text")) std.heap.page_allocator.free(text);
@@ -47,14 +47,14 @@ fn printElementInfo(element: *z.DomElement) bool {
     return true; // Continue traversal
 }
 
-fn pElementCollector(element: *z.DomElement) ?*z.DomElement {
+fn pElementCollector(element: *z.HTMLElement) ?*z.HTMLElement {
     if (z.matchesTagName(element, "P")) {
         return element;
     }
     return null;
 }
 
-fn testMatchers(element: *z.DomElement) bool {
+fn testMatchers(element: *z.HTMLElement) bool {
     const tag = z.tagNameBorrow(element);
 
     std.debug.print("Testing element: {s}\n", .{tag});

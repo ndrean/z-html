@@ -682,6 +682,60 @@ test "CSS selector engine reuse" {
     try testing.expect(!has_nav);
 }
 
+test "CSS selector nth-child functionality" {
+    const allocator = testing.allocator;
+
+    // Create HTML with ul > li structure
+    const html =
+        \\<ul>
+        \\  <li>First item</li>
+        \\  <li>Second item</li>
+        \\  <li>Third item</li>
+        \\  <li>Fourth item</li>
+        \\</ul>
+    ;
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    const body_node = try z.bodyNode(doc);
+
+    // Test CSS selector for second li
+    var engine = try z.CssSelectorEngine.init(allocator);
+    defer engine.deinit();
+
+    // Find the second li element using nth-child
+    const second_li_results = try engine.querySelectorAll(body_node, "ul > li:nth-child(2)");
+    defer allocator.free(second_li_results);
+
+    try testing.expect(second_li_results.len == 1);
+
+    if (second_li_results.len > 0) {
+        const second_li_node = second_li_results[0];
+        const text_content = try z.getTextContent(allocator, second_li_node);
+        defer allocator.free(text_content);
+
+        // Should be "Second item"
+        try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "Second item"));
+    }
+
+    // Test finding all li elements
+    const all_li_results = try engine.querySelectorAll(body_node, "ul > li");
+    defer allocator.free(all_li_results);
+
+    try testing.expect(all_li_results.len == 4);
+
+    // Test first li using querySelector (single result)
+    const first_li_node = try engine.querySelector(body_node, "ul > li:first-child");
+    if (first_li_node) |node| {
+        const text_content = try z.getTextContent(allocator, node);
+        defer allocator.free(text_content);
+        try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "First item"));
+    } else {
+        try testing.expect(false); // Should find first li
+    }
+}
+
 test "challenging CSS selectors - lexbor example" {
     const allocator = testing.allocator;
 

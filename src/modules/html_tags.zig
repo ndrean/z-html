@@ -217,8 +217,119 @@ pub const HtmlTag = enum {
     video,
     wbr,
 
-    pub fn toString(self: HtmlTag) []const u8 {
-        return @tagName(self);
+    pub fn toString(self: @This()) []const u8 {
+        return switch (self) {
+            .a => "a",
+            .abbr => "abbr",
+            .address => "address",
+            .area => "area",
+            .article => "article",
+            .aside => "aside",
+            .audio => "audio",
+            .b => "b",
+            .base => "base",
+            .bdi => "bdi",
+            .bdo => "bdo",
+            .blockquote => "blockquote",
+            .body => "body",
+            .br => "br",
+            .button => "button",
+            .canvas => "canvas",
+            .caption => "caption",
+            .cite => "cite",
+            .code => "code",
+            .col => "col",
+            .colgroup => "colgroup",
+            .data => "data",
+            .datalist => "datalist",
+            .dd => "dd",
+            .del => "del",
+            .details => "details",
+            .dfn => "dfn",
+            .dialog => "dialog",
+            .div => "div",
+            .dl => "dl",
+            .dt => "dt",
+            .em => "em",
+            .embed => "embed",
+            .fieldset => "fieldset",
+            .figcaption => "figcaption",
+            .figure => "figure",
+            .footer => "footer",
+            .form => "form",
+            .h1 => "h1",
+            .h2 => "h2",
+            .h3 => "h3",
+            .h4 => "h4",
+            .h5 => "h5",
+            .h6 => "h6",
+            .head => "head",
+            .header => "header",
+            .hgroup => "hgroup",
+            .hr => "hr",
+            .html => "html",
+            .i => "i",
+            .iframe => "iframe",
+            .img => "img",
+            .input => "input",
+            .ins => "ins",
+            .kbd => "kbd",
+            .label => "label",
+            .legend => "legend",
+            .li => "li",
+            .link => "link",
+            .main => "main",
+            .map => "map",
+            .mark => "mark",
+            .menu => "menu",
+            .meta => "meta",
+            .meter => "meter",
+            .nav => "nav",
+            .noscript => "noscript",
+            .object => "object",
+            .ol => "ol",
+            .optgroup => "optgroup",
+            .option => "option",
+            .output => "output",
+            .p => "p",
+            .picture => "picture",
+            .pre => "pre",
+            .progress => "progress",
+            .q => "q",
+            .rp => "rp",
+            .rt => "rt",
+            .ruby => "ruby",
+            .s => "s",
+            .samp => "samp",
+            .script => "script",
+            .section => "section",
+            .select => "select",
+            .slot => "slot",
+            .small => "small",
+            .source => "source",
+            .span => "span",
+            .strong => "strong",
+            .style => "style",
+            .sub => "sub",
+            .summary => "summary",
+            .sup => "sup",
+            .table => "table",
+            .tbody => "tbody",
+            .td => "td",
+            .template => "template",
+            .textarea => "textarea",
+            .tfoot => "tfoot",
+            .th => "th",
+            .thead => "thead",
+            .time => "time",
+            .title => "title",
+            .tr => "tr",
+            .track => "track",
+            .u => "u",
+            .ul => "ul",
+            .video => "video",
+            .wbr => "wbr",
+        };
     }
 
     pub fn isVoid(self: HtmlTag) bool {
@@ -231,9 +342,83 @@ pub const HtmlTag = enum {
     }
 };
 
-/// [HtmlTag] Set of self-closing elements
+/// [HtmlTag] Fragment parsing context - defines how the fragment should be interpreted
+pub const FragmentContext = enum {
+    /// Parse as if inside <body> (default for most cases)
+    body,
+    /// Parse as if inside <div> (for general content)
+    div,
+    /// Parse as if inside <template> (for web components)
+    template,
+    /// Parse as if inside <table> (for table rows/cells)
+    table,
+    tbody,
+    tr,
+    /// Parse as if inside <select> (for options)
+    select,
+    /// Parse as if inside <ul> (for list items)
+    ul,
+    /// Parse as if inside <ol> (for ordered list items)
+    ol,
+    /// Parse as if inside <dl> (for definition terms/descriptions)
+    dl,
+    /// Parse as if inside <fieldset> (for legend elements)
+    fieldset,
+    /// Parse as if inside <details> (for summary elements)
+    details,
+    /// Parse as if inside <optgroup> (for grouped options)
+    optgroup,
+    /// Parse as if inside <map> (for area elements)
+    map,
+    /// Parse as if inside <figure> (for img/figcaption elements)
+    figure,
+    /// Parse as if inside <form> (for input/label/button elements)
+    form,
+    /// Parse as if inside <video> (for source/track elements)
+    video,
+    /// Parse as if inside <audio> (for source/track elements)
+    audio,
+    /// Parse as if inside <picture> (for source/img elements)
+    picture,
+    /// Parse as if inside <head> (for meta tags, styles)
+    head,
+    /// Custom context element
+    custom,
+    /// Convert context enum to HTML tag name string
+    /// Inlined for zero function call overhead in fragment parsing
+    pub inline fn toTagName(self: FragmentContext) []const u8 {
+        return switch (self) {
+            .body => "body",
+            .div => "div",
+            .template => "template",
+            .table => "table",
+            .tbody => "tbody",
+            .tr => "tr",
+            .select => "select",
+            .ul => "ul",
+            .ol => "ol",
+            .dl => "dl",
+            .fieldset => "fieldset",
+            .details => "details",
+            .optgroup => "optgroup",
+            .map => "map",
+            .figure => "figure",
+            .form => "form",
+            .video => "video",
+            .audio => "audio",
+            .picture => "picture",
+            .head => "head",
+            .custom => "div", // fallback
+        };
+    }
+    pub inline fn toTag(name: []const u8) ?FragmentContext {
+        return stringToEnum(FragmentContext, name);
+    }
+};
+
+/// [HtmlTag] Set of void elements
 const VoidTagSet = struct {
-    /// Fast inline check if a tag is void (self-closing)
+    /// Fast inline check if a tag is void
     pub inline fn contains(tag: HtmlTag) bool {
         return switch (tag) {
             .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,

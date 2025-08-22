@@ -137,7 +137,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
     }
 
     // Trim and collapse whitespace (mandatory normalization)
-    const cleaned = try normalizeWhitespace(
+    const cleaned = try normalizeText(
         allocator,
         text,
         options,
@@ -211,7 +211,7 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
 /// If escape is true, HTML-escapes the result after whitespace normalization.
 ///
 /// Caller needs to free the slice
-pub fn normalizeWhitespace(allocator: std.mem.Allocator, text: []const u8, options: z.TextOptions) ![]u8 {
+pub fn normalizeText(allocator: std.mem.Allocator, text: []const u8, options: z.TextOptions) ![]u8 {
     // Trim leading and trailing whitespace
     const trimmed = std.mem.trim(
         u8,
@@ -312,27 +312,27 @@ test "normalizeTextWhitespace" {
     const options = z.TextOptions{ .keep_new_lines = false };
 
     const messy_text = "  Hello   \t  World!  \n\n  ";
-    const normalized = try normalizeWhitespace(allocator, messy_text, options);
+    const normalized = try normalizeText(allocator, messy_text, options);
     defer allocator.free(normalized);
 
     try testing.expectEqualStrings("Hello World!", normalized);
     // print("Normalized: {s}\n", .{normalized});
 }
 
-test "normalizeWhitespace with escape option (note: escape ignored in cleaner)" {
+test "normalizeText with escape option (note: escape ignored in cleaner)" {
     const allocator = testing.allocator;
 
     const text_with_html = "  Hello <script>alert('xss')</script> & \"quotes\" > text  ";
 
     // Test without escaping (default)
     const options_no_escape = z.TextOptions{ .escape = false };
-    const normalized_no_escape = try normalizeWhitespace(allocator, text_with_html, options_no_escape);
+    const normalized_no_escape = try normalizeText(allocator, text_with_html, options_no_escape);
     defer allocator.free(normalized_no_escape);
     try testing.expectEqualStrings("Hello <script>alert('xss')</script> & \"quotes\" > text", normalized_no_escape);
 
-    // Test with escaping - but escape is IGNORED in normalizeWhitespace (cleaner context)
+    // Test with escaping - but escape is IGNORED in normalizeText (cleaner context)
     const options_with_escape = z.TextOptions{ .escape = true };
-    const normalized_with_escape = try normalizeWhitespace(allocator, text_with_html, options_with_escape);
+    const normalized_with_escape = try normalizeText(allocator, text_with_html, options_with_escape);
     defer allocator.free(normalized_with_escape);
     // Should be identical to non-escaped version since escape is ignored in cleaner
     try testing.expectEqualStrings("Hello <script>alert('xss')</script> & \"quotes\" > text", normalized_with_escape);
@@ -341,20 +341,20 @@ test "normalizeWhitespace with escape option (note: escape ignored in cleaner)" 
     // print("With escape (ignored): '{s}'\n", .{normalized_with_escape});
 }
 
-test "normalizeWhitespace with keep_new_lines option" {
+test "normalizeText with keep_new_lines option" {
     const allocator = testing.allocator;
 
     const text_with_newlines = "Hello\n\nWorld\nTest";
 
     // Test with keep_new_lines = false (default behavior)
     const options_collapsed = z.TextOptions{ .keep_new_lines = false };
-    const normalized_collapsed = try normalizeWhitespace(allocator, text_with_newlines, options_collapsed);
+    const normalized_collapsed = try normalizeText(allocator, text_with_newlines, options_collapsed);
     defer allocator.free(normalized_collapsed);
     try testing.expectEqualStrings("Hello World Test", normalized_collapsed);
 
     // Test with keep_new_lines = true (preserve newlines)
     const options_preserved = z.TextOptions{ .keep_new_lines = true };
-    const normalized_preserved = try normalizeWhitespace(allocator, text_with_newlines, options_preserved);
+    const normalized_preserved = try normalizeText(allocator, text_with_newlines, options_preserved);
     defer allocator.free(normalized_preserved);
     try testing.expectEqualStrings("Hello\nWorld\nTest", normalized_preserved);
 
@@ -688,7 +688,7 @@ test "keep_new_lines option comprehensive test" {
         defer z.destroyDocument(doc);
         const body_node = try z.bodyNode(doc);
 
-        const child_nodes = try z.getChildNodes(allocator, body_node);
+        const child_nodes = try z.childNodes(allocator, body_node);
         defer allocator.free(child_nodes);
 
         for (child_nodes) |child| {

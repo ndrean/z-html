@@ -272,6 +272,98 @@ pub fn getElementsByTag(root_node: *z.DomNode, tag: z.HtmlTag, allocator: std.me
     return context.results.toOwnedSlice();
 }
 
+const ChildContext = struct {
+    nodes: std.ArrayList(*z.DomNode),
+    elements: std.ArrayList(*z.HTMLElement),
+
+    pub fn init(alloc: std.mem.Allocator) @This() {
+        return .{
+            .nodes = std.ArrayList(*z.DomNode).init(alloc),
+            .elements = std.ArrayList(*z.HTMLElement).init(alloc),
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        self.nodes.deinit();
+        self.elements.deinit();
+    }
+};
+
+fn AllChildren(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) ![]const *z.HTMLElement {
+    var children_ctx = ChildContext.init(allocator);
+    defer children_ctx.deinit();
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+            const context = castContext(ChildContext, ctx);
+            if (z.isTypeElement(node)) {
+                context.elements.append(z.nodeToElement(node).?) catch {};
+            }
+
+            return Action.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(
+        z.elementToNode(root_elt),
+        callback,
+        &children_ctx,
+    );
+    return children_ctx.elements.toOwnedSlice();
+}
+
+fn AllChildNodes(allocator: std.mem.Allocator, root_node: *z.DomNode) ![]const *z.DomNode {
+    var children_ctx = ChildContext.init(allocator);
+    defer children_ctx.deinit();
+
+    const callback = struct {
+        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+            const context = castContext(ChildContext, ctx);
+            context.nodes.append(node) catch {};
+            return Action.CONTINUE.toU32();
+        }
+    }.cb;
+
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &children_ctx,
+    );
+    return children_ctx.nodes.toOwnedSlice();
+}
+
+test "getChildNodes" {
+    const allocator = testing.allocator;
+
+    const html =
+        \\<div>
+        \\  <p>One <em>1</em></p>
+        \\  <p>Two <em>2</em></p>
+        \\  <!--comment-->
+        \\  <p></p>
+        \\  <p>Three <em>3</em></p>
+        \\</div>
+    ;
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
+    const div = z.firstChild(body);
+
+    const node_list = try AllChildNodes(
+        allocator,
+        div.?,
+    );
+    defer allocator.free(node_list);
+    try testing.expect(node_list.len == 20);
+
+    const elt_list = try AllChildren(
+        allocator,
+        z.nodeToElement(div.?).?,
+    );
+    defer allocator.free(elt_list);
+    try testing.expect(elt_list.len == 7);
+}
+
 //==================================================================
 // ENHANCED RUNTIME WALKER FOR DOM PROCESSING
 //==================================================================

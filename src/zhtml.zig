@@ -41,16 +41,17 @@ pub const Comment: type = opaque {};
 
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
-pub const createElement = lxb.createElement;
-pub const createTextNode = lxb.createTextNode;
 
 //=====================================
 pub const parseFromString = lxb.parseFromString;
 //=====================================
 
 //=====================================
-// Destruction Node / Element
+// Create / Destroy Node / Element
 //=====================================
+pub const createElement = lxb.createElement;
+pub const createTextNode = lxb.createTextNode;
+
 pub const removeNode = lxb.removeNode;
 pub const destroyNode = lxb.destroyNode;
 pub const destroyElement = lxb.destroyElement;
@@ -61,30 +62,34 @@ pub const ownerDocument = lxb.ownerDocument;
 pub const bodyElement = lxb.bodyElement;
 pub const bodyNode = lxb.bodyNode;
 
+pub const cloneNode = lxb.cloneNode;
+pub const importNode = lxb.importNode;
+
 //====================================
-// Node / Element / Comment conversions
+// Node / Element conversions
 //====================================
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const objectToNode = lxb.objectToNode;
 
 // ===================================
-// Comment
-// ===================================
-pub const commentToNode = lxb.commentToNode;
-pub const nodeToComment = lxb.nodeToComment;
-pub const createComment = lxb.createComment;
-pub const destroyComment = lxb.destroyComment;
-
-// ===================================
 // Node and Element name functions (both safe and unsafe versions)
 // ===================================
-pub const nodeName = lxb.nodeName; // Safe version
-pub const nodeName_zc = lxb.nodeName_zc;
-pub const tagName = lxb.tagName;
-pub const tagName_zc = lxb.tagName_zc; // Zero-copy version
-pub const qualifiedName = lxb.qualifiedName;
-pub const qualifiedName_zc = lxb.qualifiedName_zc; // Zero-copy version
+pub const nodeName = lxb.nodeName; // Allocated
+pub const nodeName_zc = lxb.nodeName_zc; // Zero-copy
+pub const tagName = lxb.tagName; // Allocated
+pub const tagName_zc = lxb.tagName_zc; // Zero-copy
+pub const qualifiedName = lxb.qualifiedName; // Allocated
+pub const qualifiedName_zc = lxb.qualifiedName_zc; // Zero-copy
+
+// ==================================
+// Node Reflection functions
+// ==================================
+pub const isNodeEmpty = lxb.isNodeEmpty;
+pub const isVoid = lxb.isVoid;
+pub const isWhitespaceOnlyText = lxb.isWhitespaceOnlyText;
+pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
+pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 
 //===================
 // NodeTypes
@@ -103,6 +108,7 @@ pub const isTypeFragment = Type.isTypeFragment;
 // HTML tags
 //=====================================
 pub const HtmlTag = tag.HtmlTag;
+
 // from lexbor source: /tag/const.h
 pub const LXB_TAG_TEMPLATE: u32 = tag.LXB_TAG_TEMPLATE;
 pub const LXB_TAG_STYLE: u32 = tag.LXB_TAG_STYLE;
@@ -117,10 +123,29 @@ pub const isVoidElementFast = tag.isVoidElementFast; // Change name
 pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // change name
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
 
+// ===================================
+// Comment
+// ===================================
+pub const commentToNode = lxb.commentToNode;
+pub const nodeToComment = lxb.nodeToComment;
+pub const createComment = lxb.createComment;
+pub const destroyComment = lxb.destroyComment;
+pub const commentContent = lxb.commentContent;
+
+//=====================================
+// Text content
+//=====================================
+pub const getTextContent = lxb.getTextContent;
+pub const getTextContent_zc = lxb.getTextContent_zc;
+pub const setOrReplaceText = lxb.setOrReplaceText;
+pub const setTextContent = lxb.setTextContent;
+pub const escapeHtml = lxb.escapeHtml;
+
 //=====================================
 // DOM navigation
 //=====================================
 pub const firstChild = lxb.firstChild;
+pub const lastChild = lxb.lastChild;
 pub const nextSibling = lxb.nextSibling;
 pub const previousSibling = lxb.previousSibling;
 pub const parentNode = lxb.parentNode;
@@ -130,14 +155,15 @@ pub const parentElement = lxb.parentElement;
 
 pub const insertBefore = lxb.insertBefore;
 pub const insertAfter = lxb.insertAfter;
+
 pub const InsertPosition = lxb.InsertPosition;
 pub const insertAdjacentElement = lxb.insertAdjacentElement;
 pub const insertAdjacentHTML = lxb.insertAdjacentHTML;
 pub const appendChild = lxb.appendChild;
 pub const appendChildren = lxb.appendChildren;
 
-pub const getChildNodes = lxb.getChildNodes;
-pub const getChildren = lxb.getChildren;
+pub const childNodes = lxb.childNodes;
+pub const children = lxb.children;
 
 // ============================================================
 // Chunk processing
@@ -149,7 +175,8 @@ pub const HtmlParser = chunks.HtmlParser;
 // Fragment & fragment parsing
 // =============================================================
 pub const DocumentFragment = opaque {};
-pub const FragmentContext = fragments.FragmentContext;
+pub const FragmentContext = tag.FragmentContext;
+
 pub const FragmentResult = fragments.FragmentResult;
 pub const fragmentToNode = fragments.fragmentToNode;
 pub const createDocumentFragment = fragments.createDocumentFragment;
@@ -160,7 +187,7 @@ pub const parseFragmentSimple = fragments.parseFragmentSimple;
 pub const parseFragmentInto = fragments.parseFragmentInto;
 
 //=====================================
-// Template element support
+// Template element
 //=====================================
 pub const HTMLTemplateElement = opaque {};
 pub const isTemplate = template.isTemplate;
@@ -175,7 +202,7 @@ pub const nodeToTemplate = template.nodeToTemplate;
 pub const elementToTemplate = template.elementToTemplate;
 
 pub const templateContent = template.templateContent;
-pub const setTemplateContent = template.setTemplateContent;
+pub const appendParsedContent = template.appendParsedContent;
 
 // ===========================================================================
 // DOM Traversal utilities
@@ -185,7 +212,7 @@ pub const elementMatchCollector = traverse.elementMatchCollector;
 pub const nodeMatchCollector = traverse.nodeMatchCollector;
 
 //=====================================
-// DOM Tree representation utilities (aliased to avoid conflicts)
+// DOM Tree representation utilities
 //=====================================
 pub const DomTreeNode = tree.HtmlNode;
 pub const DomTreeArray = tree.HtmlTree;
@@ -241,15 +268,6 @@ pub const setDefaultCapacity = collection.setDefaultCapacity;
 pub const getDefaultCapacity = collection.getDefaultCapacity;
 pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
-// ==================================
-// Node Reflection functions
-// ==================================
-pub const isNodeEmpty = lxb.isNodeEmpty;
-pub const isVoid = lxb.isVoid;
-pub const isWhitespaceOnlyText = lxb.isWhitespaceOnlyText;
-pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
-pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
-
 //=====================================
 // Serialization
 //=====================================
@@ -266,17 +284,7 @@ pub const setInnerHTML = serialize.setInnerHTML; // Security-first API with Text
 pub const outerHTML = serialize.outerHTML;
 
 pub const cleanDomTree = cleaner.cleanDomTree;
-pub const normalizeWhitespace = cleaner.normalizeWhitespace;
-
-//=====================================
-// Text content
-//=====================================
-pub const getCommentTextContent = lxb.getCommentTextContent;
-pub const getTextContent = lxb.getTextContent;
-pub const getTextContent_zc = lxb.getTextContent_zc;
-pub const setOrReplaceText = lxb.setOrReplaceText;
-pub const setTextContent = lxb.setTextContent;
-pub const escapeHtml = lxb.escapeHtml;
+pub const normalizeText = cleaner.normalizeText;
 
 //=========================================
 // CSS selectors

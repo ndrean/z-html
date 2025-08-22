@@ -208,6 +208,38 @@ pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 /// [attributes] Collect all attributes from an element.
 ///
 /// Caller needs to free the slice
+/// ## Example
+/// ```
+/// test "getAttributes" {
+///   const doc = try z.parseFromString("");
+///   defer z.destroyDocument(doc);
+///
+///   const body = try z.bodyNode(doc);
+///   const button = try z.createElement(
+///       doc,
+///        "button",
+///        &.{
+///            .{ .name = "phx-click", .value = "increment" },
+///            .{ .name = "hidden", .value = "" },
+///        },
+///    );
+///    z.appendChild(body, z.elementToNode(button));
+///
+///    const allocator = testing.allocator;
+///    const attrs = try z.getAttributes(allocator, button);
+///    defer {
+///        for (attrs) |attr| {
+///            allocator.free(attr.name);
+///            allocator.free(attr.value);
+///        }
+///        allocator.free(attrs);
+///    }
+///    try testing.expect(attrs.len == 2);
+///    try testing.expectEqualStrings("phx-click", attrs[0].name);
+///    try testing.expectEqualStrings("hidden", attrs[1].name);
+///}
+/// ```
+///## Signature
 pub fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
     var attribute = getFirstAttribute(element);
     if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes

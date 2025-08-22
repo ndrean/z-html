@@ -19,7 +19,7 @@ pub fn collectChildElements(
     target_tag: z.HtmlTag,
     collectFn: *const fn (element: T, tag: z.HtmlTag) ?T,
 ) ![]T {
-    // the reason of using `comptime T: type` is that you can't use DomElement instead of the generic T in `std.ArrayList`
+    // the reason of using `comptime T: type` is that you can't use HTMLElement instead of the generic T in `std.ArrayList`
     var results = std.ArrayList(T).init(allocator);
     defer results.deinit();
 
@@ -48,7 +48,7 @@ pub fn collectChildItems(
     target_node_type: z.NodeType,
     collectFn: *const fn (element: T, node_type: z.NodeType) ?T,
 ) ![]T {
-    // the reason of using `comptime T: type` is that you can't use DomElement instead of the generic T in `std.ArrayList`
+    // the reason of using `comptime T: type` is that you can't use HTMLElement instead of the generic T in `std.ArrayList`
     var results = std.ArrayList(T).init(allocator);
     defer results.deinit();
 
@@ -208,7 +208,7 @@ fn forEachChildElement(
 }
 
 fn forEachChild(
-    comptime T: type, // the type of parent, either DomNode or DomElement
+    comptime T: type, // the type of parent, either DomNode or HTMLElement
     parent: anytype,
     callback: *const fn (child: @TypeOf(parent)) bool,
 ) bool {

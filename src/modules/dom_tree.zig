@@ -118,7 +118,7 @@ pub fn domNodeToTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
 
         .comment => {
             const comment: *z.Comment = @ptrCast(node);
-            const comment_content = try z.getCommentTextContent(allocator, comment);
+            const comment_content = try z.commentContent(allocator, comment);
             return HtmlNode{
                 .comment = .{
                     .tag = try allocator.dupe(u8, "comment"),
@@ -198,7 +198,7 @@ pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
 
         .comment => {
             const comment: *z.Comment = @ptrCast(node);
-            const comment_content = try z.getCommentTextContent(allocator, comment);
+            const comment_content = try z.commentContent(allocator, comment);
             return JsonNode{
                 .comment = .{
                     .nodeType = 8, // COMMENT_NODE

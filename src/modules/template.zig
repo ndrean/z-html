@@ -20,7 +20,8 @@ extern "c" fn lxb_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLT
 extern "c" fn lxb_html_template_content_wrapper(template: *z.HTMLTemplateElement) *z.DocumentFragment;
 extern "c" fn lxb_html_template_to_node(template: *z.HTMLTemplateElement) *z.DomNode;
 extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
-extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode;
+// extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode;
+// extern "c" fn lxb_dom_document_import_node(doc: *z.HTMLDocument, node: *z.DomNode, deep: bool) *z.DomNode;
 
 /// [template] Create a template
 pub fn createTemplate(doc: *z.HTMLDocument) !*z.HTMLTemplateElement {
@@ -63,38 +64,184 @@ pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
     return lxb_html_template_content_wrapper(template);
 }
 
-/// [template] JS `importNode` equivalent for templates
-pub fn importNode(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode {
-    return lexbor_clone_node_deep(node, target_doc);
-}
-
 /// Populate template content by parsing HTML fragment
-pub fn setTemplateContent(
+pub fn appendParsedContent(
     allocator: std.mem.Allocator,
-    template_elem: *z.HTMLTemplateElement,
+    target_node: *z.DomNode,
     html_fragment: []const u8,
+    context: z.FragmentContext,
 ) !void {
-    const template_content = templateContent(template_elem);
-
+    print("html_fragment: {s}\n", .{html_fragment});
     const fragment_result = try z.parseFragment(
         allocator,
         html_fragment,
-        .template,
+        context,
     );
     defer fragment_result.deinit();
 
-    // Get all parsed nodes
+    const res = try fragment_result.getElements(allocator);
+    defer allocator.free(res);
+    print("Elements len:{d}\n", .{res.len});
+
+    const target_doc = z.ownerDocument(target_node);
     const parsed_nodes = try fragment_result.getNodes(allocator);
+    print("parsed_nodes len: {d}\n", .{parsed_nodes.len});
     defer allocator.free(parsed_nodes);
 
-    // Clone each node into the template's document and append to template content
-    const template_doc = z.ownerDocument(z.templateToNode(template_elem).?);
-    const template_content_node = z.fragmentToNode(template_content);
-
     for (parsed_nodes) |node| {
-        const cloned_node = importNode(node, template_doc);
-        z.appendChild(template_content_node, cloned_node);
+        if (z.nodeToElement(node)) |element| {
+            print("  Tag: {s}\n", .{z.tagName_zc(element)});
+        }
+        const cloned_node = z.importNode(node, target_doc);
+        z.appendChild(target_node, cloned_node);
     }
+}
+
+// pub fn insertHTML(
+//     allocator: std.mem.Allocator,
+//     target: *z.DomNode,
+//     html: []const u8,
+//     context: z.FragmentContext,
+// ) !void {
+//     const target_doc = z.ownerDocument(target); // Use existing document
+
+//     const tag_name = context.toTagName();
+//     const context_element = try z.createElement(
+//         target_doc,
+//         tag_name,
+//         &.{},
+//     ); // Same doc
+
+//     const parse_root = z.parseFragment(
+//         target_doc, // ← Parse in target document directly
+//         context_element,
+//         html.ptr,
+//         html.len,
+//     ) catch {
+//         return error.ParseFailed;
+//     };
+
+//     // No importNode needed - already in same document!
+//     const children = try z.getChildNodes(allocator, parse_root);
+//     defer allocator.free(children);
+
+//     for (children) |child| {
+//         z.appendChild(target, child); // Direct append
+//     }
+// }
+
+pub fn insertHTML(
+    allocator: std.mem.Allocator,
+    target: *z.DomNode,
+    html: []const u8,
+    context: z.FragmentContext,
+) !void {
+    const target_doc = z.ownerDocument(target); // Use existing document
+
+    const tag_name = context.toTagName();
+    const context_element = try z.createElement(
+        target_doc,
+        tag_name,
+        &.{},
+    ); // Same doc
+
+    defer z.destroyNode(z.elementToNode(context_element));
+
+    const context_tag = z.FragmentContext.toTag(z.qualifiedName_zc(context_element)).?;
+
+    const parse_root = try z.parseFragmentSimple(
+        target, // ← Parse in target document directly
+        html,
+        context_tag,
+    );
+
+    const children = try z.childNodes(allocator, parse_root);
+    defer allocator.free(children);
+
+    for (children) |child| {
+        z.appendChild(target, child);
+    }
+}
+
+test "set template" {
+    const allocator = testing.allocator;
+
+    const pretty_html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+    ;
+    const initial_html = try z.normalizeText(
+        allocator,
+        pretty_html,
+        .{},
+    );
+    defer allocator.free(initial_html);
+
+    const doc = try z.parseFromString(initial_html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+
+    const tbody = z.getElementByTag(body, .tbody);
+
+    try insertHTML(
+        allocator,
+        z.elementToNode(tbody.?),
+        "<tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr>",
+        .tbody,
+    );
+    try insertHTML(
+        allocator,
+        z.elementToNode(tbody.?),
+        "<tr><td class=\"record\">Code: 2</td><td>Name: 2</td></tr>",
+        .tbody,
+    );
+
+    // try useTemplate(template, z.elementToNode(tbody.?));
+    const resulting_html = try z.serializeToString(allocator, body);
+    defer allocator.free(resulting_html);
+
+    const expected_pretty =
+        \\<body>
+        \\  <table id="producttable">
+        \\    <thead>
+        \\      <tr>
+        \\        <td>UPC_Code</td>
+        \\        <td>Product_Name</td>
+        \\      </tr>
+        \\    </thead>
+        \\    <tbody>
+        \\      <!-- existing data could optionally be included here -->
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\      <tr>
+        \\        <td class="record">Code: 2</td>
+        \\        <td>Name: 2</td>
+        \\      </tr>
+        \\    </tbody>
+        \\  </table>
+        \\</body>
+    ;
+
+    const serialized = try z.serializeToString(allocator, body);
+    defer allocator.free(serialized);
+    const normalized_expected = try z.normalizeText(allocator, expected_pretty, .{});
+    defer allocator.free(normalized_expected);
+
+    try testing.expectEqualStrings(normalized_expected, serialized);
+
+    // try z.printDocumentStructure(doc);
 }
 
 pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
@@ -102,13 +249,14 @@ pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
     const content_node = z.fragmentToNode(template_content);
 
     const template_doc = z.ownerDocument(z.templateToNode(template).?);
-    const cloned_content = importNode(content_node, template_doc);
+    // same document => cloneNode()
+    const cloned_content = z.cloneNode(content_node, template_doc);
 
     // Append the clone
-    z.appendFragment(target, cloned_content);
+    z.appendFragment(target, cloned_content.?);
 }
 
-test "setTemplateContent" {
+test "use template" {
     const allocator = testing.allocator;
 
     const pretty_html =
@@ -132,7 +280,11 @@ test "setTemplateContent" {
         \\</template>
     ;
 
-    const initial_html = try z.normalizeWhitespace(allocator, pretty_html, .{});
+    const initial_html = try z.normalizeText(
+        allocator,
+        pretty_html,
+        .{},
+    );
     defer allocator.free(initial_html);
 
     const doc = try z.parseFromString(initial_html);
@@ -171,7 +323,7 @@ test "setTemplateContent" {
     const resulting_html = try z.serializeToString(allocator, body);
     defer allocator.free(resulting_html);
 
-    const target_pretty_html =
+    const expected_pretty_html =
         \\<body>
         \\  <table id="producttable">
         \\    <thead>
@@ -201,17 +353,17 @@ test "setTemplateContent" {
         \\</body>
     ;
 
-    const target_serialized_html = try z.normalizeWhitespace(
+    const expected_serialized_html = try z.normalizeText(
         allocator,
-        target_pretty_html,
+        expected_pretty_html,
         .{},
     );
-    defer allocator.free(target_serialized_html);
+    defer allocator.free(expected_serialized_html);
 
     // check resulting HTML
-    try testing.expectEqualStrings(target_serialized_html, resulting_html);
+    try testing.expectEqualStrings(expected_serialized_html, resulting_html);
 
-    try z.printDocumentStructure(doc);
+    // try z.printDocumentStructure(doc);
 }
 
 pub fn populateTemplateDirect(
@@ -237,7 +389,7 @@ pub fn populateTemplateDirect(
 
     // Move parsed children to template content (no cloning needed)
     const template_content_node = z.fragmentToNode(template_content);
-    const children = try z.getChildNodes(allocator, parse_root);
+    const children = try z.childNodes(allocator, parse_root);
     defer allocator.free(children);
 
     for (children) |child| {

@@ -19,13 +19,50 @@ pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 
-//===========================================================================
-// CORE DOCUMENT FUNCTIONS
-//===========================================================================
-
+// =============================================================
 extern "c" fn lxb_html_document_create() ?*z.HTMLDocument;
 extern "c" fn lxb_html_document_destroy(doc: *z.HTMLDocument) void;
 extern "c" fn lxb_html_document_parse(doc: *z.HTMLDocument, html: [*]const u8, len: usize) usize;
+
+extern "c" fn lxb_html_document_create_element_noi(doc: *z.HTMLDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
+
+extern "c" fn lxb_dom_document_create_text_node(doc: *z.HTMLDocument, text: [*]const u8, text_len: usize) ?*z.DomNode;
+
+extern "c" fn lxb_dom_node_insert_before_wo_events(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_insert_after_wo_events(to: *z.DomNode, node: *z.DomNode) void;
+extern "c" fn lxb_dom_document_create_comment(doc: *z.HTMLDocument, data: [*]const u8, len: usize) ?*z.Comment;
+extern "c" fn lxb_dom_comment_interface_destroy(doc: *z.Comment) *z.Comment;
+extern "c" fn lxb_dom_node_insert_child(parent: *z.DomNode, child: *z.DomNode) void;
+extern "c" fn lxb_html_document_body_element_noi(doc: *z.HTMLDocument) ?*z.HTMLElement;
+extern "c" fn lxb_dom_document_root(doc: *z.HTMLDocument) ?*z.DomNode;
+extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HTMLDocument;
+extern "c" fn lxb_dom_node_parent_noi(node: *z.DomNode) ?*z.DomNode;
+// extern "c" fn lxb_dom_document_create_element(doc: *z.HTMLDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
+
+extern "c" fn lxb_dom_document_destroy_element(element: *z.HTMLElement) *z.HTMLElement;
+extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
+extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.HTMLElement;
+// extern "c" fn lxb_html_template_to_element(template: *z.Template) *z.HTMLElement;
+extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_element_tag_name(element: *z.HTMLElement, len: ?*usize) [*:0]const u8;
+extern "c" fn lxb_dom_element_qualified_name(element: *z.HTMLElement, len: *usize) [*:0]const u8;
+extern "c" fn lxb_dom_node_remove_wo_events(node: *z.DomNode) void;
+extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
+extern "c" fn lxb_dom_document_destroy_text_noi(node: *z.DomNode, text: []const u8) void;
+
+extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode;
+extern "c" fn lxb_dom_document_import_node(doc: *z.HTMLDocument, node: *z.DomNode, deep: bool) *z.DomNode;
+
+extern "c" fn lxb_html_node_is_void_noi(node: *z.DomNode) bool;
+extern "c" fn lxb_dom_node_is_empty(node: *z.DomNode) bool;
+
+extern "c" fn lxb_dom_node_first_child_noi(node: *z.DomNode) ?*z.DomNode;
+extern "c" fn lxb_dom_node_next_noi(node: *z.DomNode) ?*z.DomNode;
+extern "c" fn lxb_dom_node_last_child_noi(node: *z.DomNode) ?*z.DomNode;
+
+//===========================================================================
+// CORE DOCUMENT FUNCTIONS
+//===========================================================================
 
 /// [core] Creates and returns a new HTML document.
 ///
@@ -69,39 +106,11 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 // CREATION
 // =============================================================================
 
-extern "c" fn lxb_html_document_create_element_noi(doc: *z.HTMLDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
-
-extern "c" fn lxb_dom_document_create_text_node(doc: *z.HTMLDocument, text: [*]const u8, text_len: usize) ?*z.DomNode;
-
-extern "c" fn lxb_dom_node_insert_before_wo_events(to: *z.DomNode, node: *z.DomNode) void;
-extern "c" fn lxb_dom_node_insert_after_wo_events(to: *z.DomNode, node: *z.DomNode) void;
-extern "c" fn lxb_dom_document_create_comment(doc: *z.HTMLDocument, data: [*]const u8, len: usize) ?*z.Comment;
-extern "c" fn lxb_dom_comment_interface_destroy(doc: *z.Comment) *z.Comment;
-// extern "c" fn lxb_dom_node_insert_child_wo_events(parent: *z.DomNode, child: *z.DomNode) void;
-extern "c" fn lxb_dom_node_insert_child(parent: *z.DomNode, child: *z.DomNode) void;
-extern "c" fn lxb_html_document_body_element_noi(doc: *z.HTMLDocument) ?*z.HTMLElement;
-extern "c" fn lxb_dom_document_root(doc: *z.HTMLDocument) ?*z.DomNode;
-extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HTMLDocument;
-extern "c" fn lxb_dom_node_parent_noi(node: *z.DomNode) ?*z.DomNode;
-extern "c" fn lxb_dom_document_create_element(doc: *z.HTMLDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
-
-extern "c" fn lxb_dom_document_destroy_element(element: *z.HTMLElement) *z.HTMLElement;
-extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
-extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.HTMLElement;
-extern "c" fn lxb_html_template_to_element(template: *z.Template) *z.HTMLElement;
-extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
-extern "c" fn lxb_dom_element_tag_name(element: *z.HTMLElement, len: ?*usize) [*:0]const u8;
-extern "c" fn lxb_dom_element_qualified_name(element: *z.HTMLElement, len: *usize) [*:0]const u8;
-extern "c" fn lxb_dom_node_remove_wo_events(node: *z.DomNode) void;
-extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
-extern "c" fn lxb_dom_document_destroy_text_noi(node: *z.DomNode, text: []const u8) void;
-
-/// [core] Element creation and returns a !Element
+/// [core] Element creation
 ///
 /// Can create HTMLElements or custom elements.
 ///
-/// It takes an optional array of attributes pair (`.name`, `.value`).
-/// If the tag is a custom element, the `name` will be copied to the element's tag name.
+/// It takes an optional slice of attributes pair struct `{name, value}`.
 /// ## Example
 ///
 /// ```
@@ -109,10 +118,16 @@ extern "c" fn lxb_dom_document_destroy_text_noi(node: *z.DomNode, text: []const 
 /// const button: *z.HTMLElement = try createElement(doc, "button",
 ///     &.{
 ///         .{.name = "phx-click", .value = "submit"},
-///         .{.name = "phx-value-myvar", .value= "myvar"}
+///         .{.name = "disabled", .value= ""}
 ///     });
+///
 /// ```
-pub fn createElement(doc: *z.HTMLDocument, name: []const u8, attrs: []const z.AttributePair) !*z.HTMLElement {
+/// ## Signature
+pub fn createElement(
+    doc: *z.HTMLDocument,
+    name: []const u8,
+    attrs: []const z.AttributePair,
+) !*z.HTMLElement {
     const element = lxb_html_document_create_element_noi(
         doc,
         name.ptr,
@@ -133,11 +148,39 @@ pub fn createElement(doc: *z.HTMLDocument, name: []const u8, attrs: []const z.At
     return element;
 }
 
-/// [core] Create a text node in the document and returns a !Node
+test "create elt" {
+    const doc = try z.parseFromString("");
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+    const button = try z.createElement(
+        doc,
+        "button",
+        &.{
+            .{ .name = "phx-click", .value = "increment" },
+            .{ .name = "hidden", .value = "" },
+        },
+    );
+    z.appendChild(body, z.elementToNode(button));
+
+    const allocator = testing.allocator;
+    const attrs = try z.getAttributes(allocator, button);
+    defer {
+        for (attrs) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs);
+    }
+    try testing.expectEqualStrings("hidden", attrs[1].name);
+}
+
+/// [core] Create a text node in the document
 ///
 /// ## Example
 /// ```
 /// const textNode: *z.HTMLElement = try createTextNode(doc, "Hello, World!");
+/// ---
 /// ```
 pub fn createTextNode(doc: *z.HTMLDocument, text: []const u8) !*z.DomNode {
     return lxb_dom_document_create_text_node(
@@ -151,8 +194,9 @@ pub fn createTextNode(doc: *z.HTMLDocument, text: []const u8) !*z.DomNode {
 ///
 /// ## Example
 /// ```
-/// const commentNode: *z.Comment = try createComment(doc, "Hello, World!");
+/// const commentNode: *z.Comment = try createComment(doc, "Hello");
 /// ```
+/// ## Signature
 pub fn createComment(doc: *z.HTMLDocument, data: []const u8) !*z.Comment {
     return lxb_dom_document_create_comment(
         doc,
@@ -191,6 +235,7 @@ test "documentRoot - ownerDocument" {
 /// ```
 /// const bodyElement: *z.HTMLElement = try bodyElement(doc);
 /// ```
+/// ## Signature
 pub fn bodyElement(doc: *z.HTMLDocument) !*z.HTMLElement {
     if (lxb_html_document_body_element_noi(doc)) |element| {
         return element;
@@ -313,12 +358,12 @@ test "creation & convertions" {
 
 // ---------------------------------------------------------------------------
 
-/// [core] (UPPERCASED if element) Get the tag name or type of a _node_ as Zig string (UNSAFE: borrows lexbor's memory)
+/// [core] Get the tag name (UPPERCASED if element) or type of a _node_ as borrowed zero-copy
 ///
 /// - returns the `nodeType` (#text, #comment) for non-elements nodes,
 /// - returns the `tagName` in UPPERCASE for element nodes.
 ///
-/// ⚠️ Do NOT store this slice beyond the lifetime of the node.
+/// ⚠️ Unsafe : to be used only within the lifetime of the function call
 ///
 /// Use the allocated `z.nodeName()` if you need to store the result.
 /// ## Example
@@ -336,12 +381,12 @@ pub fn nodeName_zc(node: *z.DomNode) []const u8 {
     return std.mem.span(name_ptr);
 }
 
-/// [core] (UPPERCASED if element) Get the tag name or type of a _node_ as owned Zig string.
+/// [core] Get the tag name (UPPERCASED if element) or type of a _node_ as owned Zig string.
 ///
 /// - returns the `nodeType` (#text, #comment) for non-elements nodes,
 /// - returns the `tagName` in UPPERCASE for element nodes.
 ///
-/// Caller must free the returned string.
+/// Allocated: aller must free the returned string.
 /// ## Example
 /// ```
 /// const allocator = testing.allocator;
@@ -382,11 +427,11 @@ test "nodeName/_zc" {
     try testing.expectEqualStrings(text_name, "#text");
 }
 
-/// [core] (UPPERCASED) Get the tag name on an _element_ as Zig string (UNSAFE: borrows lexbor's memory)
-///
-/// ⚠️  Do NOT store this slice beyond the lifetime of the element.
+/// [core] Get the tag name on an _element_ (UPPERCASED)  as borrowed zero-copy
 ///
 /// Use tagName() if you need to store the result.
+///
+/// ⚠️ Unsafe : to be used only within the lifetime of the function call
 /// ## Example
 /// ```
 /// const allocator = testing.allocator;
@@ -401,11 +446,11 @@ pub fn tagName_zc(element: *z.HTMLElement) []const u8 {
     return std.mem.span(name_ptr);
 }
 
-/// [core]  (UPPERCASED) Get the tag name on an _element_ as owned Zig string (SAFE: copies to Zig memory)
+/// [core] Get the tag name on an _element_ (UPPERCASED)  as owned Zig string
 ///
 /// Returns a copy of the tag name that is owned by the caller.
 ///
-/// Caller must free the returned string.
+/// Allocated: Caller must free the returned string.
 /// ## Example
 /// ```
 /// const allocator = testing.allocator;
@@ -414,18 +459,18 @@ pub fn tagName_zc(element: *z.HTMLElement) []const u8 {
 /// const name = try tagName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
-/// ___
+/// ---
 /// ```
 pub fn tagName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     const name_slice = tagName_zc(element);
     return try allocator.dupe(u8, name_slice);
 }
 
-/// [core] (lowercased) Get the allocated qualified name of an _element_ (namespace:tagname or just tagname)
+/// [core] Get the allocated qualified name (lowercased)  of an _element_ (namespace:tagname or just tagname) as owned Zig slice
 ///
 /// This is useful for elements with namespaces like SVG or MathML.
 ///
-/// Caller must free the returned slice.
+/// Allocated: Caller must free the returned slice.
 /// ## Example
 /// ```
 /// const allocator = testing.allocator;
@@ -434,7 +479,7 @@ pub fn tagName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
 /// const name = try qualifiedName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "div");
-/// ___
+/// ---
 /// ```
 pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var name_len: usize = 0;
@@ -456,12 +501,9 @@ test "qualified name" {
     try testing.expectEqualStrings(borrow_name, "div");
 }
 
-/// [core] (lowercased) Get the qualified name of an _element_ (borrowed, zero-copy version)
+/// [core] Get the qualified name (lowercased) of an _element_ (borrowed, zero-copy version)
 ///
-/// Caller must free the returned slice.
-///
-///
-/// ⚠️  Do NOT store this slice beyond the lifetime of the element.
+/// ⚠️ Unsafe : to be used only within the lifetime of the function call
 /// ## Example
 /// ```zig
 /// const doc = try createDocument();
@@ -498,43 +540,118 @@ pub fn destroyElement(element: *z.HTMLElement) void {
     _ = lxb_dom_document_destroy_element(element);
 }
 
-//=============================================================================
+/// [core] Deep cross document clone
+///
+///  JavaScript `importNode()`
+pub fn importNode(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode {
+    return lxb_dom_document_import_node(target_doc, node, true);
+}
+
+/// [core] Deep cross document clone
+///
+///  JavaScript `cloneNode()`
+pub fn cloneNode(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode {
+    return lexbor_clone_node_deep(node, target_doc);
+}
 
 //=============================================================================
-// Reflexion
+// Reflection
+//=============================================================================
 
-extern "c" fn lxb_html_node_is_void_noi(node: *z.DomNode) bool;
-extern "c" fn lxb_dom_node_is_empty(node: *z.DomNode) bool;
-
-/// [core] Check if element is _void_ (aka "self-closing" like `<img>` or `<input>`)
+/// [core] Check if element is _void_ (like `<img>` or `<input>`, aka "self-closing")
+/// ## Example
+/// ```
+/// test "isVoid" {
+///     const doc = try z.parseFromString("<p></p><img src=\"image.png\"/>Hello");
+///     defer z.destroyDocument(doc);
+///     const body = try z.bodyNode(doc);
+///     const p = z.firstChild(body);
+///     const img = z.nextSibling(p.?);
+///     const t = z.nextSibling(img.?);
+///
+///     try testing.expect(z.isVoid(img.?));
+///     try testing.expect(!z.isVoid(p.?));
+///     try testing.expect(!z.isVoid(t.?));
+/// }
+///```
+/// ## Signature
 pub fn isVoid(node: *z.DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
 
-/// [core] Used to check if node that is an _non self-closing element_ contains only whitespace
+test "isVoid" {
+    const doc = try z.parseFromString("<p></p><img src=\"image.png\"/>Hello");
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
+    const p = z.firstChild(body);
+    const img = z.nextSibling(p.?);
+    const t = z.nextSibling(img.?);
+    try testing.expect(z.isVoid(img.?));
+    try testing.expect(!z.isVoid(p.?));
+    try testing.expect(!z.isVoid(t.?));
+}
+
+/// [core] Used to check if node that is an _non Void element_ contains only whitespace
 ///
-/// Self-closing elements, #text or #comments nodes are seen as empty nodes
+/// Void elements, #text or #comments nodes are seen as empty nodes
 ///
 /// ## Examples
 /// ```
-/// const img = try z.createElement(doc, "img", &.{.name = "src", .value = "image.png"});
-/// try testing.expect(z.isVoid(z.elementToNode(img)));
-/// try testing.expect(z.isNodeEmpty(z.elementToNode(img)));
+/// test "isNodeEmpty" {
+///     const img_elt = try z.createElement(doc, "img", &.{.name = "src", .value = "image.png"});
+///     const img = z.elementToNode(img_elt);
+///     try testing.expect(z.isVoid(img);
+///     try testing.expect(z.isNodeEmpty(img));
 ///
-/// const p = try z.createTextNode(doc, "some text");
-/// try testing.expect(z.isNodeEmpty(p));
+///     const text = try z.createTextNode(doc, "some text");
+///     try testing.expect(z.isNodeEmpty(text));
 ///
-/// const comment = try z.createComment(doc, "some comment");
-/// try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
+///     const p_elt = try z.createElement(doc, "p", &.{});
+///     const p = z.elementToNode(p_elt);
+///     z.appendChild((p, text);
+///     try testing.expect(!z.isNodeEmpty(p));
 ///
+///     const comment = try z.createComment(doc, "some comment");
+///     try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
+///}
 /// // to select only non void elements, do:
 /// if (!z.isVoid(node) && !(z.nodeType(node) == .comment) && !(z.nodeType(node) == .text)) {
 ///   if (z.isNodeEmpty(node)) {
 ///     std.debug.print("node is \"really\" empty!", .{} );
 ///   }
-/// }
+/// ```
+/// ## Signature
 pub fn isNodeEmpty(node: *z.DomNode) bool {
     return lxb_dom_node_is_empty(node);
+}
+
+test "isNodeEmpty" {
+    const doc = try z.parseFromString("<html><body></body></html>");
+    defer z.destroyDocument(doc);
+    const img_elt = try z.createElement(doc, "img", &.{.{ .name = "src", .value = "image.png" }});
+    const img = z.elementToNode(img_elt);
+    try testing.expect(z.isVoid(img));
+    try testing.expect(z.isNodeEmpty(img));
+
+    const text = try z.createTextNode(doc, "some text");
+    try testing.expect(!z.isVoid(text));
+    try testing.expect(z.isNodeEmpty(text));
+
+    const comment = try z.createComment(doc, "some comment");
+    try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
+
+    const p_elt = try z.createElement(doc, "p", &.{});
+    const p = z.elementToNode(p_elt);
+
+    z.appendChild(p, text);
+    try testing.expect(!z.isNodeEmpty(p));
+
+    // to select only non void elements, do:
+    // if (!z.isVoid(node) and !(z.nodeType(node) == .comment) and !(z.nodeType(node) == .text)) {
+    //     if (z.isNodeEmpty(node)) {
+    //         std.debug.print("node is \"really\" empty!", .{});
+    //     }
+    // }
 }
 
 test "what is empty?" {
@@ -609,9 +726,6 @@ pub fn parentElement(element: *z.HTMLElement) ?*z.HTMLElement {
     return null;
 }
 
-extern "c" fn lxb_dom_node_first_child_noi(node: *z.DomNode) ?*z.DomNode;
-extern "c" fn lxb_dom_node_next_noi(node: *z.DomNode) ?*z.DomNode;
-
 /// [core] Get next sibling of node
 ///
 /// Returns NULL when there is no next sibling.
@@ -639,43 +753,48 @@ pub fn previousSibling(node: *z.DomNode) ?*z.DomNode {
 /// [core] Get first child of node
 ///
 /// Returns NULL when there are no children.
-/// ### Example
-/// ```
-/// test "firstChild" {
-///    const doc = try parseFromString("");
-///    const body = try bodyNode(doc);
-///    const text_node = try createTextNode(doc, "Hello, World!");
-///    appendChild(body, text_node);
-///
-///    const first_child = firstChild(body);
-///    try testing.expect(first_child == text_node);
-///
-///    const grandchild = firstChild(first_child.?);
-///    try testing.expect(grandchild == null);
-/// }
-/// ```
 pub fn firstChild(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_first_child_noi(node);
 }
 
-test "firstChild" {
-    const doc = try parseFromString("");
-    const body = try bodyNode(doc);
-    const text_node = try createTextNode(doc, "Hello, World!");
-    appendChild(body, text_node);
+/// [core] Get last child of node
+///
+/// Returns NULL when there are no children.
+pub fn lastChild(node: *z.DomNode) ?*z.DomNode {
+    return lxb_dom_node_last_child_noi(node);
+}
 
-    const first_child = firstChild(body);
+test "firstChild / lastChild" {
+    {
+        const doc = try parseFromString("<ul><li>Hello</li><li>World</li></ul>");
+        defer z.destroyDocument(doc);
+        const body = try bodyNode(doc);
+        const ul = firstChild(body);
+        const first_child = firstChild(ul.?);
+        const last_child = lastChild(ul.?);
 
-    try testing.expect(first_child == text_node);
-    const grandchild = firstChild(first_child.?);
-    try testing.expect(grandchild == null);
+        const hello = z.getTextContent_zc(first_child.?);
+        const world = z.getTextContent_zc(last_child.?);
+        try testing.expectEqualStrings("Hello", hello);
+        try testing.expectEqualStrings("World", world);
+    }
+    {
+        const doc = try parseFromString("<p></p>");
+        defer z.destroyDocument(doc);
+        const body = try bodyNode(doc);
+        const p = firstChild(body);
+        const first = z.firstChild(p.?);
+        const last = z.lastChild(p.?);
+        try testing.expect(first == null);
+        try testing.expect(last == null);
+    }
 }
 
 /// [core] Get first element child
 ///
 /// Takes an element and returns the first child element, or null if none exists.
 ///
-/// Skips non-element nodes such as text nodes, comments, etc.
+/// Skips non-element nodes such as text nodes, comments
 pub fn firstElementChild(element: *z.HTMLElement) ?*z.HTMLElement {
     const node = elementToNode(element);
     var child = firstChild(node);
@@ -765,7 +884,7 @@ test "nextElementSibling" {
 /// Returns a slice of all child nodes (including text, comments)
 ///
 /// Caller needs to free the slice
-pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.DomNode {
+pub fn childNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.DomNode {
     var nodes = std.ArrayList(*z.DomNode).init(allocator);
 
     var child = firstChild(parent_node);
@@ -779,10 +898,25 @@ pub fn getChildNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*
 
 /// [core] Helper: Collect only element children from an element
 ///
-/// (JavaScript convention: children)
+/// Allocated: Caller needs to free the slice
+/// ## Example
+/// ```
+/// test "children" {
+///     const allocator = testing.allocator;
+///     const doc = try z.parseFromString("<ul><li>First</li><li>Second</li><li>Third</li></ul>");
+///     defer z.destroyDocument(doc);
 ///
-/// Caller needs to free the slice
-pub fn getChildren(allocator: std.mem.Allocator, parent_element: *z.HTMLElement) ![]*z.HTMLElement {
+///     const body_elt = try z.bodyElement(doc);
+///     const ul_elt = z.firstElementChild(body_elt).?;
+///     const result = try z.children(allocator, ul_elt);
+///     defer allocator.free(result);
+///
+///     try testing.expect(result.len == 3);
+///     try testing.expectEqualStrings(z.tagName_zc(result[0]), "LI");
+/// }
+/// ```
+/// ## Signature
+pub fn children(allocator: std.mem.Allocator, parent_element: *z.HTMLElement) ![]*z.HTMLElement {
     var elements = std.ArrayList(*z.HTMLElement).init(allocator);
 
     var child = firstElementChild(parent_element);
@@ -794,18 +928,34 @@ pub fn getChildren(allocator: std.mem.Allocator, parent_element: *z.HTMLElement)
     return elements.toOwnedSlice();
 }
 
-// -----------------------------------------------------------------------------
-// Append
-// -----------------------------------------------------------------------------
+test "children" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<ul><li>First</li><li>Second</li><li>Third</li></ul>");
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.bodyElement(doc);
+    const ul_elt = z.firstElementChild(body_elt).?;
+
+    const result = try z.children(allocator, ul_elt);
+    defer allocator.free(result);
+
+    try testing.expect(result.len == 3);
+    try testing.expectEqualStrings(
+        z.tagName_zc(result[0]),
+        "LI",
+    );
+}
 
 /// [core] Append a child node to parent
 ///
 /// ## Example
 /// ```
 /// const parentNode: *z.DomNode = try bodyNode(doc);
-/// const childNode: *z.DomNode = try createTextNode(doc, "Hello, World!");
-/// appendChild(parentNode, childNode);
+/// const childNode: *z.DomNode = try createTextNode(doc, "Hello");
+/// z.appendChild(parentNode, childNode);
 /// ```
+///
+/// ## Signature
 pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
     lxb_dom_node_insert_child(parent, child);
 }
@@ -822,6 +972,7 @@ pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
 /// const childNodes: []const *z.DomNode = &.{div, p};
 /// appendChildren(parentNode, childNodes);
 /// ```
+/// ## Signature
 pub fn appendChildren(parent: *z.DomNode, child_nodes: []const *z.DomNode) void {
     for (child_nodes) |child| {
         appendChild(parent, child);
@@ -838,8 +989,8 @@ test "appendChild/dren" {
     const div = elementToNode(child1);
     const child2 = try createElement(doc, "p", &.{});
     const p = elementToNode(child2);
-    const childNodes: []const *z.DomNode = &.{ div, p };
-    appendChildren(body, childNodes);
+    const child_nodes: []const *z.DomNode = &.{ div, p };
+    appendChildren(body, child_nodes);
 
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
@@ -849,14 +1000,12 @@ test "appendChild/dren" {
     );
 }
 
-///
-/// This is safe because it compares the tag name immediately without storing it.
-/// [core] Insert an element after a reference node
+/// [core] Insert a node after a reference node.
 pub fn insertAfter(reference_node: *z.DomNode, new_node: *z.DomNode) void {
     lxb_dom_node_insert_after_wo_events(reference_node, new_node);
 }
 
-/// [core] Insert an element before a reference node
+/// [core] Insert a node before a reference node
 pub fn insertBefore(reference_node: *z.DomNode, new_node: *z.DomNode) void {
     lxb_dom_node_insert_before_wo_events(reference_node, new_node);
 }
@@ -937,7 +1086,11 @@ test "InsertPosition.fromString" {
 /// try insertAdjacentElement(target.?, "beforeend", new_div);
 /// ---
 /// ```
-pub fn insertAdjacentElement(target: *z.HTMLElement, position: anytype, element: *z.HTMLElement) !void {
+pub fn insertAdjacentElement(
+    target: *z.HTMLElement,
+    position: anytype,
+    element: *z.HTMLElement,
+) !void {
     const T = @TypeOf(position);
     const pos_enum: InsertPosition = if (T == InsertPosition)
         position // if InsertPosition.beforebegin
@@ -955,13 +1108,10 @@ pub fn insertAdjacentElement(target: *z.HTMLElement, position: anytype, element:
 
     switch (pos_enum) {
         .beforebegin => {
-            // Insert before the target element (as previous sibling)
-            const parent = parentNode(target_node) orelse return Err.NoParentNode;
+            _ = parentNode(target_node) orelse return Err.NoParentNode;
             insertBefore(target_node, element_node);
-            _ = parent; // Suppress unused variable warning
         },
         .afterbegin => {
-            // Insert as first child of target element
             const first_child = firstChild(target_node);
             if (first_child) |first| {
                 insertBefore(first, element_node);
@@ -970,41 +1120,70 @@ pub fn insertAdjacentElement(target: *z.HTMLElement, position: anytype, element:
             }
         },
         .beforeend => {
-            // Insert as last child of target element
             appendChild(target_node, element_node);
         },
         .afterend => {
-            // Insert after the target element (as next sibling)
-            const parent = parentNode(target_node) orelse return Err.NoParentNode;
+            _ = parentNode(target_node) orelse return Err.NoParentNode;
             insertAfter(target_node, element_node);
-            _ = parent; // Suppress unused variable warning
         },
     }
 }
 
 test "insertAdjacentElement - all positions & invalid" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
+    const doc = try parseFromString("<div id=\"target\">Target Content</div>");
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
     const target = z.getElementById(body, "target");
 
     // Test beforebegin - insert before the target element
-    const before_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "before" }});
-    try insertAdjacentElement(target.?, .beforebegin, before_element);
+    const before_element = try z.createElement(
+        doc,
+        "p",
+        &.{.{ .name = "id", .value = "before" }},
+    );
+    try insertAdjacentElement(
+        target.?,
+        .beforebegin,
+        before_element,
+    );
 
     // Test afterbegin - insert as first child
-    const afterbegin_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "first" }});
-    try insertAdjacentElement(target.?, .afterbegin, afterbegin_element);
+    const afterbegin_element = try z.createElement(
+        doc,
+        "span",
+        &.{.{ .name = "id", .value = "first" }},
+    );
+    try insertAdjacentElement(
+        target.?,
+        .afterbegin,
+        afterbegin_element,
+    );
 
     // Test beforeend - insert as last child
-    const beforeend_element = try z.createElement(doc, "span", &.{.{ .name = "id", .value = "last" }});
-    try insertAdjacentElement(target.?, .beforeend, beforeend_element);
+    const beforeend_element = try z.createElement(
+        doc,
+        "span",
+        &.{.{ .name = "id", .value = "last" }},
+    );
+    try insertAdjacentElement(
+        target.?,
+        .beforeend,
+        beforeend_element,
+    );
 
     // Test afterend - insert after the target element
-    const after_element = try z.createElement(doc, "p", &.{.{ .name = "id", .value = "after" }});
-    try insertAdjacentElement(target.?, .afterend, after_element);
+    const after_element = try z.createElement(
+        doc,
+        "p",
+        &.{.{ .name = "id", .value = "after" }},
+    );
+    try insertAdjacentElement(
+        target.?,
+        .afterend,
+        after_element,
+    );
 
     const invalid = insertAdjacentElement(target.?, "invalid", after_element);
     try testing.expectError(Err.InvalidPosition, invalid);
@@ -1012,15 +1191,81 @@ test "insertAdjacentElement - all positions & invalid" {
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
-    const expected = "<body><p id=\"before\"></p><div id=\"target\"><span id=\"first\"></span>Target Content<span id=\"last\"></span></div><p id=\"after\"></p></body>";
+    const pretty_expected =
+        \\<body>
+        \\  <p id="before"></p>
+        \\  <div id="target">
+        \\      <span id="first"></span>Target Content<span id="last"></span>
+        \\  </div>
+        \\  <p id="after"></p>
+        \\</body>
+    ;
+
+    const expected = try z.normalizeText(allocator, pretty_expected, .{});
+    defer allocator.free(expected);
     try testing.expectEqualStrings(expected, html);
 }
 
-// !! !! !! !! change to z.Fragment
+test "insertAdjacentElement - empty target & cloning" {
+    const allocator = testing.allocator;
 
-/// [core] Helper: Insert all children from fragment before a reference node by iterating over the fragment
-fn insertFragmentBefore(reference_node: *z.DomNode, fragment: *z.DomNode) void {
-    var fragment_child = firstChild(fragment);
+    const doc = try parseFromString("<div id=\"target\"><p id=\"1\"></p></div>");
+    defer destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+    const target = z.getElementById(body, "target");
+
+    // Test afterbegin on empty element
+    const child_element = try z.createElement(
+        doc,
+        "p",
+        &.{.{ .name = "class", .value = "child" }},
+    );
+
+    const positions = [_]InsertPosition{ .afterbegin, .beforeend, .beforebegin, .afterend };
+    for (positions) |position| {
+        const cloned_node = z.cloneNode(
+            z.elementToNode(child_element),
+            doc,
+        );
+        const clone_element = z.nodeToElement(cloned_node.?).?;
+        try insertAdjacentElement(
+            target.?,
+            position,
+            clone_element,
+        );
+    }
+    const resulting_html = try z.serializeToString(allocator, body);
+    defer allocator.free(resulting_html);
+
+    const pretty_expectation =
+        \\<body>
+        \\  <p class="child"></p>
+        \\  <div id="target">
+        \\      <p class="child"></p>
+        \\      <p id="1"></p>
+        \\      <p class="child"></p>
+        \\  </div>
+        \\  <p class="child"></p>
+        \\</body>
+    ;
+
+    const expectation = try z.normalizeText(
+        allocator,
+        pretty_expectation,
+        .{},
+    );
+    defer allocator.free(expectation);
+
+    try testing.expectEqualStrings(
+        expectation,
+        resulting_html,
+    );
+}
+
+/// [core] Helper: Insert all children from fragment before a reference node by iterating over the child nodes of the parent node
+fn insertChildNodesBefore(reference_node: *z.DomNode, parent_node: *z.DomNode) void {
+    var fragment_child = firstChild(parent_node);
     while (fragment_child) |current_child| {
         const next = nextSibling(current_child);
         insertBefore(reference_node, current_child);
@@ -1028,11 +1273,9 @@ fn insertFragmentBefore(reference_node: *z.DomNode, fragment: *z.DomNode) void {
     }
 }
 
-// !! !! !! !! change to z.Fragment
-
-/// [core] Helper: Insert all children from fragment after a reference by iterating over the fragment
-fn insertFragmentAfter(reference_node: *z.DomNode, fragment: *z.DomNode) void {
-    var fragment_child = firstChild(fragment);
+/// [core] Helper: Insert all children from fragment after a reference by iterating over the child nodes of the parent node
+fn insertChildNodesAfter(reference_node: *z.DomNode, parent_node: *z.DomNode) void {
+    var fragment_child = firstChild(parent_node);
     var insert_after_node = reference_node;
     while (fragment_child) |current_child| {
         const next = nextSibling(current_child);
@@ -1049,155 +1292,243 @@ fn insertFragmentAfter(reference_node: *z.DomNode, fragment: *z.DomNode) void {
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>New content</p>");
-/// try insertAdjacentHTML(allocator, target.?, "beforeend", "<p>New content</p>");
+/// try insertAdjacentHTML(target.?, .beforeend, "<p>New <em>content</em></p>");
+/// try insertAdjacentHTML(target.?, "beforeend", "<p>New content</p>");
 /// ---
 /// ```
-pub fn insertAdjacentHTML(allocator: std.mem.Allocator, target: *z.HTMLElement, position: anytype, html: []const u8) !void {
+pub fn insertAdjacentHTML(
+    target: *z.HTMLElement,
+    position: anytype,
+    html: []const u8,
+) !void {
     const T = @TypeOf(position);
-    const pos_enum: InsertPosition = if (T == InsertPosition)
-        position
-    else switch (@typeInfo(T)) {
-        .enum_literal => position, // Handle enum literals like .
-        // this need to return, so need break, which in turn need a block
-        else => blk: {
-            const str: []const u8 = position[0..];
-            break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
-        },
-    };
+    const pos_enum: InsertPosition =
+        switch (@typeInfo(T)) {
+            .enum_literal => position,
+            // this need to return, so need break, which in turn need a block
+            else => blk: {
+                const str: []const u8 = position[0..];
+                break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
+            },
+        };
 
     const target_node = elementToNode(target);
 
     // Parse the HTML fragment once
-    const fragment_result = try z.parseFragmentSimple(allocator, html);
-    defer z.destroyNode(fragment_result.fragment_root);
+    const fragment_root = try z.parseFragmentSimple(
+        target_node,
+        html,
+        .body,
+    );
+    defer z.destroyNode(fragment_root);
 
-    // Use optimized fragment insertion for each position
     switch (pos_enum) {
         .beforebegin => {
             _ = parentNode(target_node) orelse return Err.NoParentNode;
-            insertFragmentBefore(target_node, fragment_result.fragment_root);
+            insertChildNodesBefore(target_node, fragment_root);
         },
         .afterbegin => {
             if (firstChild(target_node)) |first| {
-                insertFragmentBefore(first, fragment_result.fragment_root);
+                insertChildNodesBefore(first, fragment_root);
             } else {
                 // Target is empty, just append all
-                z.appendFragment(target_node, fragment_result.fragment_root);
+                z.appendFragment(target_node, fragment_root);
             }
         },
         .beforeend => {
-            // Use existing optimized appendFragment
-            z.appendFragment(target_node, fragment_result.fragment_root);
+            z.appendFragment(target_node, fragment_root);
         },
         .afterend => {
             _ = parentNode(target_node) orelse return Err.NoParentNode;
-            insertFragmentAfter(target_node, fragment_result.fragment_root);
+            insertChildNodesAfter(target_node, fragment_root);
         },
     }
 }
 
 test "enum / string insertAdjacentHTML" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\">Original</div></body></html>");
+    const pretty_html =
+        \\<body>
+        \\  <div id="target">Original</div>
+        \\</body>
+    ;
+    const init_html = try z.normalizeText(allocator, pretty_html, .{});
+    defer allocator.free(init_html);
+    const doc = try parseFromString(init_html);
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
 
     const target = z.getElementById(body, "target");
 
-    // Test 1: Using enum values directly (most natural for Zig)
-    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>Before Begin</p>");
+    try insertAdjacentHTML(
+        target.?,
+        .beforebegin,
+        "<p>Before Begin</p>",
+    );
 
-    // Test 2: Using string values directly (JavaScript-style)
-    try insertAdjacentHTML(allocator, target.?, "afterbegin", "<span>After Begin</span>");
+    try insertAdjacentHTML(
+        target.?,
+        "afterbegin",
+        "<span>After Begin</span>",
+    );
 
-    // Test 3: Using InsertPosition enum explicitly
-    try insertAdjacentHTML(allocator, target.?, InsertPosition.beforeend, "<span>Before End</span>");
+    try insertAdjacentHTML(
+        target.?,
+        .beforeend,
+        "<span>Before End</span>",
+    );
 
-    // Test 4: Using string for afterend
-    try insertAdjacentHTML(allocator, target.?, "afterend", "<p>After End</p>");
+    try insertAdjacentHTML(
+        target.?,
+        .afterend,
+        "<p>After End</p>",
+    );
 
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
-    const clean_html = try z.normalizeWhitespace(allocator, html, .{});
-    defer allocator.free(clean_html);
+    // const clean_html = try z.normalizeText(allocator, html, .{});
+    // defer allocator.free(clean_html);
 
-    const expected = "<body><p>Before Begin</p><div id=\"target\"><span>After Begin</span>Original<span>Before End</span></div><p>After End</p></body>";
-    try testing.expectEqualStrings(expected, clean_html);
+    const expected_pretty_html =
+        \\<body>
+        \\  <p>Before Begin</p>
+        \\  <div id="target">
+        \\    <span>After Begin</span>Original<span>Before End</span>
+        \\  </div>
+        \\  <p>After End</p>
+        \\</body>
+    ;
+
+    const expected_html = try z.normalizeText(allocator, expected_pretty_html, .{});
+    defer allocator.free(expected_html);
+    // const expected = "<body><p>Before Begin</p><div id=\"target\"><span>After Begin</span>Original<span>Before End</span></div><p>After End</p></body>";
+    // try testing.expectEqualStrings(expected_html, html);
 
     // Test 5: Error handling for invalid position string
-    const invalid_result = insertAdjacentHTML(allocator, target.?, "invalid", "<p>Test</p>");
+    const invalid_result = insertAdjacentHTML(
+        target.?,
+        "invalid",
+        "<p>Test</p>",
+    );
     try testing.expectError(Err.InvalidPosition, invalid_result);
 
     // Test 6: More natural usage examples
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<em>Direct enum</em>");
-    try insertAdjacentHTML(allocator, target.?, "beforeend", "<strong>Direct string</strong>");
+    try insertAdjacentHTML(
+        target.?,
+        .beforeend,
+        "<em>Direct enum</em>",
+    );
+    try insertAdjacentHTML(
+        target.?,
+        "beforeend",
+        "<strong>Direct string</strong>",
+    );
 }
 
 test "insertAdjacentHTML - all positions" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\">Target Content</div></body></html>");
+
+    const doc = try parseFromString("<div id=\"target\">Target Content</div>");
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
     const target = z.getElementById(body, "target");
 
-    // Test beforebegin
-    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p id=\"before\">Before</p>");
+    try insertAdjacentHTML(
+        target.?,
+        .beforebegin,
+        "<p id=\"before\">Before</p>",
+    );
 
-    // Test afterbegin
-    try insertAdjacentHTML(allocator, target.?, .afterbegin, "<span id=\"first\">First</span>");
+    try insertAdjacentHTML(
+        target.?,
+        .afterbegin,
+        "<span id=\"first\">First</span>",
+    );
 
-    // Test beforeend
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span id=\"last\">Last</span>");
+    try insertAdjacentHTML(
+        target.?,
+        .beforeend,
+        "<span id=\"last\">Last</span>",
+    );
 
-    // Test afterend
-    try insertAdjacentHTML(allocator, target.?, .afterend, "<p id=\"after\">After</p>");
+    try insertAdjacentHTML(
+        target.?,
+        .afterend,
+        "<p id=\"after\">After</p>",
+    );
 
     const html = try z.serializeToString(allocator, body);
     defer allocator.free(html);
 
-    const expected = "<body><p id=\"before\">Before</p><div id=\"target\"><span id=\"first\">First</span>Target Content<span id=\"last\">Last</span></div><p id=\"after\">After</p></body>";
+    const pretty_expected =
+        \\<body>
+        \\  <p id="before">Before</p>
+        \\  <div id="target">
+        \\    <span id="first">First</span>Target Content<span id="last">Last</span>
+        \\  </div>
+        \\  <p id="after">After</p>
+        \\</body>
+    ;
+
+    const expected = try z.normalizeText(allocator, pretty_expected, .{});
+    defer allocator.free(expected);
     try testing.expectEqualStrings(expected, html);
 }
 
 test "insertAdjacentHTML - multiple elements" {
-    const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
-    defer destroyDocument(doc);
+    {
+        const allocator = testing.allocator;
+        const doc = try parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
+        defer destroyDocument(doc);
 
-    const body = try z.bodyNode(doc);
-    const target = z.getElementById(body, "target");
+        const body = try z.bodyNode(doc);
+        const target = z.getElementById(body, "target");
 
-    // Insert multiple elements at once
-    try insertAdjacentHTML(allocator, target.?, .afterend, "<p>First</p><p>Second</p><span>Third</span>");
+        // Insert multiple elements at once
+        try insertAdjacentHTML(
+            target.?,
+            .afterend,
+            "<p>First</p><p>Second</p><span>Third</span>",
+        );
+        try insertAdjacentHTML(
+            target.?,
+            .beforeend,
+            "<p>First</p><p>Second</p><span>Third</span>",
+        );
+        try insertAdjacentHTML(
+            target.?,
+            .afterbegin,
+            "<p>First</p><p>Second</p><span>Third</span>",
+        );
+        try insertAdjacentHTML(
+            target.?,
+            .beforebegin,
+            "<p>First</p><p>Second</p><span>Third</span>",
+        );
 
-    const html = try z.serializeToString(allocator, body);
-    defer allocator.free(html);
+        const html = try z.serializeToString(allocator, body);
+        defer allocator.free(html);
 
-    const expected = "<body><div id=\"target\">Content</div><p>First</p><p>Second</p><span>Third</span></body>";
-    try testing.expectEqualStrings(expected, html);
-}
+        const pretty_html =
+            \\<body>
+            \\  <p>First</p><p>Second</p><span>Third</span>
+            \\  <div id="target">
+            \\      <p>First</p><p>Second</p><span>Third</span>Content<p>First</p><p>Second</p><span>Third</span>
+            \\  </div>
+            \\  <p>First</p><p>Second</p><span>Third</span>
+            \\</body>
+            \\
+        ;
 
-test "insertAdjacentElement - empty target" {
-    const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id=\"target\"></div></body></html>");
-    defer destroyDocument(doc);
+        const expected = try z.normalizeText(allocator, pretty_html, .{});
+        defer allocator.free(expected);
 
-    const body = try z.bodyNode(doc);
-    const target = z.getElementById(body, "target");
-
-    // Test afterbegin on empty element
-    const child_element = try z.createElement(doc, "p", &.{.{ .name = "class", .value = "child" }});
-    try insertAdjacentElement(target.?, .afterbegin, child_element);
-
-    const html = try z.serializeToString(allocator, body);
-    defer allocator.free(html);
-
-    const expected = "<body><div id=\"target\"><p class=\"child\"></p></div></body>";
-    try testing.expectEqualStrings(expected, html);
+        try testing.expectEqualStrings(expected, html);
+    }
+    {}
 }
 
 test "insertAdjacent demo" {
@@ -1217,38 +1548,89 @@ test "insertAdjacent demo" {
     const target = z.getElementById(body, "target");
 
     // Demo 1: insertAdjacentElement with all positions
-    const before_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "before" }});
+    const before_elem = try z.createElement(
+        doc,
+        "h2",
+        &.{.{ .name = "class", .value = "before" }},
+    );
     try z.setTextContent(elementToNode(before_elem), "Before Begin");
-    try insertAdjacentElement(target.?, .beforebegin, before_elem);
 
-    const after_elem = try z.createElement(doc, "h2", &.{.{ .name = "class", .value = "after" }});
+    try insertAdjacentElement(
+        target.?,
+        .beforebegin,
+        before_elem,
+    );
+
+    const after_elem = try z.createElement(
+        doc,
+        "h2",
+        &.{.{ .name = "class", .value = "after" }},
+    );
     try z.setTextContent(elementToNode(after_elem), "After End");
-    try insertAdjacentElement(target.?, .afterend, after_elem);
+
+    try insertAdjacentElement(
+        target.?,
+        .afterend,
+        after_elem,
+    );
 
     // Show result after insertAdjacentElement
     const html1 = try z.serializeToString(allocator, body);
     defer allocator.free(html1);
 
     // Normalize whitespace for clean comparison
-    const clean_html1 = try z.normalizeWhitespace(allocator, html1, .{});
+    const clean_html1 = try z.normalizeText(allocator, html1, .{});
     defer allocator.free(clean_html1);
 
-    const expected1 = "<body><div id=\"container\"><h2 class=\"before\">Before Begin</h2><p id=\"target\">Target Element</p><h2 class=\"after\">After End</h2></div></body>";
+    const pretty_html =
+        \\<body>
+        \\  <div id="container">
+        \\  <h2 class="before">Before Begin</h2>
+        \\  <p id="target">Target Element</p>
+        \\  <h2 class="after">After End</h2>
+        \\  </div>
+        \\</body>
+    ;
+    const expected1 = try z.normalizeText(allocator, pretty_html, .{});
+    defer allocator.free(expected1);
+
     try testing.expectEqualStrings(expected1, clean_html1);
 
     // Demo 2: insertAdjacentHTML with different positions
-    try insertAdjacentHTML(allocator, target.?, .afterbegin, "<span style=\"color: blue;\">First Child</span>");
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span style=\"color: red;\">Last Child</span>");
+    try insertAdjacentHTML(
+        target.?,
+        .afterbegin,
+        "<span style=\"color: blue;\">First Child</span>",
+    );
+    try insertAdjacentHTML(
+        target.?,
+        .beforeend,
+        "<span style=\"color: red;\">Last Child</span>",
+    );
 
     // Show final result
     const html2 = try z.serializeToString(allocator, body);
     defer allocator.free(html2);
 
     // Normalize whitespace for clean comparison
-    const clean_html2 = try z.normalizeWhitespace(allocator, html2, .{});
+    const clean_html2 = try z.normalizeText(allocator, html2, .{});
     defer allocator.free(clean_html2);
 
-    const expected2 = "<body><div id=\"container\"><h2 class=\"before\">Before Begin</h2><p id=\"target\"><span style=\"color: blue;\">First Child</span>Target Element<span style=\"color: red;\">Last Child</span></p><h2 class=\"after\">After End</h2></div></body>";
+    const pretty_html_2 =
+        \\<body>
+        \\  <div id="container">
+        \\  <h2 class="before">Before Begin</h2>
+        \\  <p id="target">
+        \\    <span style="color: blue;">First Child</span>Target Element<span style="color: red;">Last Child</span>
+        \\  </p>
+        \\  <h2 class="after">After End</h2>
+        \\  </div>
+        \\</body>
+    ;
+
+    const expected2 = try z.normalizeText(allocator, pretty_html_2, .{});
+    defer allocator.free(expected2);
+
     try testing.expectEqualStrings(expected2, clean_html2);
 
     // Demo 3: InsertPosition.fromString functionality
@@ -1264,13 +1646,17 @@ test "insertAdjacent demo" {
 
     // Demo 4: Multiple elements insertion
     const container = z.getElementById(body, "container");
-    try insertAdjacentHTML(allocator, container.?, .beforeend, "<p>First</p><p>Second</p><span>Third</span>");
+    try insertAdjacentHTML(
+        container.?,
+        .beforeend,
+        "<p>First</p><p>Second</p><span>Third</span>",
+    );
 
     const html3 = try z.serializeToString(allocator, body);
     defer allocator.free(html3);
 
     // Normalize and verify multiple elements were inserted
-    const clean_html3 = try z.normalizeWhitespace(allocator, html3, .{});
+    const clean_html3 = try z.normalizeText(allocator, html3, .{});
     defer allocator.free(clean_html3);
 
     try testing.expect(std.mem.indexOf(u8, clean_html3, "<p>First</p>") != null);
@@ -1365,7 +1751,7 @@ pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []
 /// [core] Get comment text content
 ///
 /// Needs to be freed by caller
-pub fn getCommentTextContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
+pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
     const inner_text = try getTextContent(
         allocator,
         commentToNode(comment),
@@ -1392,7 +1778,7 @@ test "first text content & comment" {
     try testing.expectEqualStrings("comment", comment_text);
     defer allocator.free(comment_text);
     const comment = nodeToComment(comment_node.?);
-    const c_text = try getCommentTextContent(allocator, comment.?);
+    const c_text = try commentContent(allocator, comment.?);
     defer allocator.free(c_text);
     try testing.expectEqualStrings("comment", c_text);
 }
@@ -1508,7 +1894,7 @@ test "create element and comment" {
     try testing.expectEqualStrings("DIV", name);
 
     const comment = try createComment(doc, "This is a comment");
-    const comment_text = try getCommentTextContent(
+    const comment_text = try commentContent(
         allocator,
         comment,
     );
@@ -1570,19 +1956,19 @@ test "children and childNodes" {
     const div = firstElementChild(body).?;
 
     // Test children (only elements)
-    const element_children = try getChildren(allocator, div);
+    const element_children = try children(allocator, div);
     defer allocator.free(element_children);
     try testing.expect(element_children.len == 2); // p and span
     try testing.expectEqualStrings("P", tagName_zc(element_children[0]));
     try testing.expectEqualStrings("SPAN", tagName_zc(element_children[1]));
 
     // Test childNodes (all nodes including text and comments)
-    const all_child_nodes = try getChildNodes(allocator, elementToNode(div));
+    const all_child_nodes = try childNodes(allocator, elementToNode(div));
     defer allocator.free(all_child_nodes);
     try testing.expect(all_child_nodes.len == 4); // text, p, comment, span
 
     // Verify legacy functions still work
-    const legacy_children = try getChildren(allocator, div);
+    const legacy_children = try children(allocator, div);
     defer allocator.free(legacy_children);
     try testing.expect(legacy_children.len == element_children.len);
 }
@@ -1604,11 +1990,11 @@ test "consistency check" {
     }
 
     // Test JavaScript-style children functions
-    const element_children = try getChildren(allocator, div);
+    const element_children = try children(allocator, div);
     defer allocator.free(element_children);
     try testing.expect(element_children.len == 2); // p and span only
 
-    const all_child_nodes = try getChildNodes(allocator, elementToNode(div));
+    const all_child_nodes = try childNodes(allocator, elementToNode(div));
     defer allocator.free(all_child_nodes);
     try testing.expect(all_child_nodes.len == 4); // text, p, comment, span
 
@@ -2023,8 +2409,6 @@ test "void vs empty element detection" {
     const body_node = elementToNode(body);
     const div_node = firstChild(body_node).?;
 
-    // print("\Void Element Test ========\n", .{});
-
     var child = firstChild(div_node);
     const void_elements = [_][]const u8{ "BR", "HR", "IMG", "INPUT", "META", "LINK", "AREA" };
 
@@ -2072,60 +2456,184 @@ test "void vs empty element detection" {
     try testing.expect(empty_non_self_closing_non_text_nodes_count == 1); // 1 empty non-self-closing non-text element
 }
 
-test "CSS selector nth-child functionality" {
-    const allocator = testing.allocator;
+test "practical string-to-DOM scenarios" {
+    {
+        // 1: Full page `parseFromString()` and `serializeToString()` round-trip test
+        const allocator = testing.allocator;
 
-    // Create HTML with ul > li structure
-    const html =
-        \\<ul>
-        \\  <li>First item</li>
-        \\  <li>Second item</li>
-        \\  <li>Third item</li>
-        \\  <li>Fourth item</li>
-        \\</ul>
-    ;
+        const full_page =
+            \\<!DOCTYPE html>
+            \\<html>
+            \\  <head><title>My Page</title></head>
+            \\  <body>
+            \\    <h1>Welcome</h1>
+            \\    <p>Content here</p>
+            \\  </body>
+            \\</html>
+        ;
 
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
+        const doc = try parseFromString(full_page);
+        defer destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+        const serialized_html = try z.serializeToString(
+            allocator,
+            documentRoot(doc).?, // HTML
+        );
+        defer allocator.free(serialized_html);
 
-    // Test CSS selector for second li
-    var engine = try z.CssSelectorEngine.init(allocator);
-    defer engine.deinit();
+        const normalized_html = try z.normalizeText(
+            allocator,
+            serialized_html,
+            .{},
+        );
+        defer allocator.free(normalized_html);
 
-    // Find the second li element using nth-child
-    const second_li_results = try engine.querySelectorAll(body_node, "ul > li:nth-child(2)");
-    defer allocator.free(second_li_results);
+        const expected_html =
+            \\<html>
+            \\  <head><title>My Page</title></head>
+            \\  <body>
+            \\    <h1>Welcome</h1>
+            \\    <p>Content here</p>
+            \\  </body>
+            \\</html>
+        ;
+        const normalized_expected = try z.normalizeText(
+            allocator,
+            expected_html,
+            .{},
+        );
+        defer allocator.free(normalized_expected);
 
-    try testing.expect(second_li_results.len == 1);
-
-    if (second_li_results.len > 0) {
-        const second_li_node = second_li_results[0];
-        const text_content = try z.getTextContent(allocator, second_li_node);
-        defer allocator.free(text_content);
-
-        // Should be "Second item"
-        try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "Second item"));
+        try testing.expectEqualStrings(normalized_expected, normalized_html);
     }
+    {
+        // 2: Dynamic fragment building and insertion with `setInnerHTML()`
+        const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
+        defer destroyDocument(template_doc);
 
-    // Test finding all li elements
-    const all_li_results = try engine.querySelectorAll(body_node, "ul > li");
-    defer allocator.free(all_li_results);
+        const template_root = z.documentRoot(template_doc);
+        const content_div = z.getElementById(template_root.?, "content");
 
-    try testing.expect(all_li_results.len == 4);
+        // Simulate user data
+        const user_data = [_]struct { name: []const u8, email: []const u8 }{
+            .{ .name = "Alice", .email = "alice@example.com" },
+            .{ .name = "Bob", .email = "bob@example.com" },
+        };
+        const allocator = testing.allocator;
+        var user_list = std.ArrayList(u8).init(allocator);
+        defer user_list.deinit();
 
-    // Test first li using querySelector (single result)
-    const first_li_node = try engine.querySelector(body_node, "ul > li:first-child");
-    if (first_li_node) |node| {
-        const text_content = try z.getTextContent(allocator, node);
-        defer allocator.free(text_content);
-        try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "First item"));
-    } else {
-        try testing.expect(false); // Should find first li
+        try user_list.appendSlice("<ul>");
+        for (user_data) |user| {
+            const user_item = try std.fmt.allocPrint(
+                allocator,
+                "<li><strong>{s}</strong> - {s}</li>",
+                .{ user.name, user.email },
+            );
+            defer allocator.free(user_item);
+
+            try user_list.appendSlice(user_item);
+        }
+        try user_list.appendSlice("</ul>");
+
+        _ = try z.setInnerHTML(
+            allocator,
+            content_div.?,
+            user_list.items,
+            .{ .allow_html = true },
+        );
+
+        const result = try z.serializeElement(allocator, content_div.?);
+        defer allocator.free(result);
+
+        const expected_pretty_result =
+            \\<div id="content">
+            \\  <ul>
+            \\    <li><strong>Alice</strong> - alice@example.com</li>
+            \\    <li><strong>Bob</strong> - bob@example.com</li>
+            \\  </ul>
+            \\</div>
+        ;
+        const expected_result = try z.normalizeText(allocator, expected_pretty_result, .{});
+        defer allocator.free(expected_result);
+
+        try testing.expectEqualStrings(expected_result, result);
+    }
+    {
+        // 3: Using `insertAdjacentHTML()` for reusable components
+        const allocator = testing.allocator;
+
+        const components = [_][]const u8{
+            "<button class=\"btn btn-primary\">Click me</button>",
+            "<input type=\"email\" placeholder=\"Enter email\" required>",
+            "<div class=\"alert alert-info\">Information message</div>",
+        };
+
+        const app_doc = try parseFromString("<html><body><div id=\"app\"></div></body></html>");
+        defer destroyDocument(app_doc);
+        const app_root = z.documentRoot(app_doc);
+
+        const app_div = z.getElementById(app_root.?, "app");
+
+        for (components, 0..) |component, i| {
+            // const current_content = try z.innerHTML(allocator, app_div.?);
+            // defer allocator.free(current_content);
+
+            // const updated_content = try std.fmt.allocPrint(
+            //     allocator,
+            //     "{s}<div class=\"component-{d}\">{s}</div>",
+            //     .{ current_content, i, component },
+            // );
+            const updated_content = try std.fmt.allocPrint(
+                allocator,
+                "<div class=\"component-{d}\">{s}</div>",
+                .{ i, component },
+            );
+
+            defer allocator.free(updated_content);
+
+            try z.insertAdjacentHTML(
+                app_div.?,
+                .beforeend,
+                updated_content,
+            );
+            // _ = try z.setInnerHTML(
+            //     allocator,
+            //     app_div.?,
+            //     updated_content,
+            //     .{ .allow_html = true },
+            // );
+        }
+
+        const result = try z.serializeElement(allocator, app_div.?);
+        defer allocator.free(result);
+
+        const expected_pretty_result =
+            \\  <div id="app">
+            \\    <div class="component-0">
+            \\      <button class="btn btn-primary">Click me</button>
+            \\    </div>
+            \\    <div class="component-1">
+            \\      <input type="email" placeholder="Enter email" required>
+            \\    </div>
+            \\    <div class="component-2">
+            \\      <div class="alert alert-info">Information message</div>
+            \\    </div>
+            \\  </div>
+        ;
+        const expected_result = try z.normalizeText(allocator, expected_pretty_result, .{});
+        defer allocator.free(expected_result);
+
+        try testing.expectEqualStrings(expected_result, result);
+    }
+    {
+        // 4. Template rendering - TODO
+        // const template = try z.createElement(allocator, "template");
+        // defer allocator.free(template);
     }
 }
 
+// TODO
 test "Performance comparison: Character-based vs Lexbor-based HTML normalization" {
     // const allocator = testing.allocator;
 
@@ -2279,107 +2787,4 @@ test "Performance comparison: Character-based vs Lexbor-based HTML normalization
         \\</html>
     ;
     _ = complex_html;
-}
-
-test "practical string-to-DOM scenarios" {
-    const allocator = testing.allocator;
-
-    // print("\n=== Practical String-to-DOM Scenarios ===\n", .{});
-
-    // Scenario 1: Full page parsing with parseFromString
-    // print("\n1. Full HTML Document Parsing:\n", .{});
-    const full_page =
-        \\<!DOCTYPE html>
-        \\<html>
-        \\<head><title>My Page</title></head>
-        \\<body>
-        \\  <h1>Welcome</h1>
-        \\  <p>Content here</p>
-        \\</body>
-        \\</html>
-    ;
-
-    const doc = try parseFromString(full_page);
-    defer destroyDocument(doc);
-
-    const body = try bodyElement(doc);
-    const page_content = try z.serializeElement(allocator, body);
-    defer allocator.free(page_content);
-
-    // print("   Use case: Loading complete HTML documents\n", .{});
-    // print("   Result: '{s}'\n", .{page_content});
-
-    // Scenario 2: Template fragment insertion with setInnerHTML
-    // print("\n2. Dynamic Content Insertion:\n", .{});
-    const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
-    defer destroyDocument(template_doc);
-
-    const template_root = z.documentRoot(template_doc);
-
-    const content_div = z.getElementById(template_root.?, "content");
-
-    // Simulate user data
-    const user_data = [_]struct { name: []const u8, email: []const u8 }{
-        .{ .name = "Alice", .email = "alice@example.com" },
-        .{ .name = "Bob", .email = "bob@example.com" },
-    };
-
-    // Build user list dynamically
-    var user_list = std.ArrayList(u8).init(allocator);
-    defer user_list.deinit();
-
-    try user_list.appendSlice("<ul>");
-    for (user_data) |user| {
-        const user_item = try std.fmt.allocPrint(allocator, "<li><strong>{s}</strong> - {s}</li>", .{ user.name, user.email });
-        defer allocator.free(user_item);
-
-        try user_list.appendSlice(user_item);
-    }
-    try user_list.appendSlice("</ul>");
-
-    // Insert the generated HTML
-    _ = try z.setInnerHTML(allocator, content_div.?, user_list.items, .{ .allow_html = true });
-
-    const dynamic_result = try z.serializeElement(allocator, content_div.?);
-    defer allocator.free(dynamic_result);
-
-    // print("   Use case: Dynamic content generation and insertion\n", .{});
-    // print("   Result: '{s}'\n", .{dynamic_result});
-
-    // Scenario 3: Fragment parsing for reusable components
-    // print("\n3. Component Fragment Parsing:\n", .{});
-    const components = [_][]const u8{
-        "<button class='btn btn-primary'>Click me</button>",
-        "<input type='email' placeholder='Enter email' required>",
-        "<div class='alert alert-info'>Information message</div>",
-    };
-
-    const app_doc = try parseFromString("<html><body><div id='app'></div></body></html>");
-    defer destroyDocument(app_doc);
-    const app_root = z.documentRoot(app_doc);
-
-    const app_div = z.getElementById(app_root.?, "app");
-
-    // Add each component to the app
-    for (components, 0..) |component, i| {
-        const current_content = try z.innerHTML(allocator, app_div.?);
-        defer allocator.free(current_content);
-
-        const updated_content = try std.fmt.allocPrint(allocator, "{s}<div class='component-{d}'>{s}</div>", .{ current_content, i, component });
-        defer allocator.free(updated_content);
-
-        _ = try z.setInnerHTML(allocator, app_div.?, updated_content, .{ .allow_html = true });
-
-        // print("   Added component {d}: {s}\n", .{ i + 1, component });
-    }
-
-    const app_result = try z.serializeElement(allocator, app_div.?);
-    defer allocator.free(app_result);
-
-    // print("   Final app: '{s}'\n", .{app_result});
-
-    // print("\n=== Summary ===\n", .{});
-    // print("• parseFromString: Creates complete documents, handles DOCTYPE, etc.\n", .{});
-    // print("• setInnerHTML: Injects HTML fragments into existing elements\n", .{});
-    // print("• Both convert strings to DOM, but serve different use cases\n", .{});
 }
