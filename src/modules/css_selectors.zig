@@ -712,7 +712,7 @@ test "CSS selector nth-child functionality" {
 
     if (second_li_results.len > 0) {
         const second_li_node = second_li_results[0];
-        const text_content = try z.getTextContent(allocator, second_li_node);
+        const text_content = try z.textContent(allocator, second_li_node);
         defer allocator.free(text_content);
 
         // Should be "Second item"
@@ -728,7 +728,7 @@ test "CSS selector nth-child functionality" {
     // Test first li using querySelector (single result)
     const first_li_node = try engine.querySelector(body_node, "ul > li:first-child");
     if (first_li_node) |node| {
-        const text_content = try z.getTextContent(allocator, node);
+        const text_content = try z.textContent(allocator, node);
         defer allocator.free(text_content);
         try testing.expect(std.mem.eql(u8, std.mem.trim(u8, text_content, " \t\n\r"), "First item"));
     } else {

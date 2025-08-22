@@ -369,7 +369,7 @@ test "class search functionality" {
         if (z.nodeToElement(child.?)) |element| {
             const element_name = z.tagName_zc(element);
             if (std.mem.eql(u8, element_name, "div")) {
-                const text_content = try z.getTextContent(allocator, child.?);
+                const text_content = try z.textContent(allocator, child.?);
                 defer allocator.free(text_content);
                 if (std.mem.eql(u8, text_content, "First div")) {
                     // First div should have all three classes

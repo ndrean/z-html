@@ -1601,7 +1601,7 @@ test "single element search" {
     );
     try testing.expect(element_by_id != null);
 
-    const id_text = try z.getTextContent(
+    const id_text = try z.textContent(
         allocator,
         z.elementToNode(element_by_id.?),
     );

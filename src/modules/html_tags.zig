@@ -704,7 +704,7 @@ test "custom element with script content - security behavior" {
     try testing.expect(isNoEscapeElementFastZeroCopy(script_element) == true); // Script content should NOT be escaped
 
     // Get the actual text content
-    const script_content = try z.getTextContent(allocator, script_node);
+    const script_content = try z.textContent(allocator, script_node);
     defer allocator.free(script_content);
     try testing.expectEqualStrings("alert('xss')", script_content);
 
@@ -722,7 +722,7 @@ test "custom element with script content - security behavior" {
     // This is where your enum system provides security guidance:
 
     // SAFE SERIALIZATION: Custom element content should be escaped
-    const my_widget_content = try z.getTextContent(allocator, z.elementToNode(my_widget));
+    const my_widget_content = try z.textContent(allocator, z.elementToNode(my_widget));
     defer allocator.free(my_widget_content);
 
     // Simulate how a serializer would use your enum system for security:
@@ -784,7 +784,7 @@ test "complete security flow - user input to browser output" {
     try testing.expect(should_escape_widget == true); // Custom elements should be escaped
 
     // Phase 3: Simulate safe serialization for browser output
-    const widget_content = try z.getTextContent(allocator, widget);
+    const widget_content = try z.textContent(allocator, widget);
     defer allocator.free(widget_content);
 
     // This content contains dangerous JavaScript

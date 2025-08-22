@@ -36,7 +36,7 @@ pub fn main() !void {
         for (0..z.collectionLength(paragraphs)) |i| {
             if (z.getCollectionElementAt(paragraphs, i)) |p| {
                 const p_node = z.elementToNode(p);
-                const text = try z.getTextContentOpts(allocator, p_node, .{});
+                const text = try z.textContentOpts(allocator, p_node, .{});
                 defer allocator.free(text);
 
                 print("  - Paragraph {}: '{}'\n", .{ i + 1, text });

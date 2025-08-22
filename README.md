@@ -44,7 +44,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
 
 > [!IMPORTANT]
 > Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
-> We opted for the following convention: add `_zc` (for _zero_copy_) to the allocated version. For example, `getTextContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
+> We opted for the following convention: add `_zc` (for _zero_copy_) to the allocated version. For example, `textContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
 > With allocated versions, the data can outlive the current function: you can pass the data freely.
 
 ## Examples
