@@ -34,7 +34,7 @@ fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z.HTM
                     text_content,
                     &std.ascii.whitespace,
                 );
-                z.setOrReplaceText(ctx_ptr.allocator, node, trimmed, .{}) catch {
+                z.replaceText(ctx_ptr.allocator, node, trimmed, .{}) catch {
                     return z.Action.CONTINUE.toU32();
                 };
             }
@@ -482,7 +482,7 @@ fn mergeAdjacentTextNodes(allocator: std.mem.Allocator, root_elt: *z.HTMLElement
     );
 
     for (context.text_merges.items) |merge| {
-        try z.setOrReplaceText(
+        try z.replaceText(
             allocator,
             merge.target_node,
             merge.new_content,

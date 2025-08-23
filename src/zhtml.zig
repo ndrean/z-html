@@ -144,7 +144,7 @@ pub const commentContent_zc = lxb.commentContent_zc;
 //=====================================
 pub const textContent = lxb.textContent;
 pub const textContent_zc = lxb.textContent_zc;
-pub const setOrReplaceText = lxb.setOrReplaceText;
+pub const replaceText = lxb.replaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
 

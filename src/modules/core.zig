@@ -1736,16 +1736,14 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
     return text_ptr[0..len];
 }
 
-/// [core] Set text content on a node
-///
-/// This function sets the text content of a DOM node, replacing any existing content.
+/// [core] Set text content on a node, _replacing_ any existing content.
 /// ## Example
 /// ```
 /// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
 /// defer z.destroyDocument(doc);
 /// const p = firstChild(try bodyNode(doc));
 /// try setTextContent(p.?, "Hi");
-/// try std.testing.expectEqualStrings("Hi", z.textContent_zc(p.?));
+///
 /// const text = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
 /// defer allocator.free(text);
 /// try testing.expectEqualStrings("<p>Hi</p>", text);
@@ -1777,7 +1775,7 @@ test "setTextContent" {
     try testing.expectEqualStrings("<p>New text</p>", txt);
 }
 
-/// [core] set or replace text data of a text node with escape option.
+/// [core] replace the text data of a _text node_ with escape option.
 ///
 /// If `options.escape = true`, the text will be HTML-escaped before insertion.
 /// ## Example
@@ -1785,100 +1783,44 @@ test "setTextContent" {
 /// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
 /// defer z.destroyDocument(doc);
 /// const p = firstChild(try bodyNode(doc));
+/// const inner_text = firstChild(p.?);
 ///
-/// try setOrReplaceText(allocator, p.?, "Hi ", .{});
+/// try replaceText(allocator, inner_text.?, "Hi ", .{});
 /// try testing.expectEqualStrings("Hi world", z.textContent_zc(p.?));
+///
 /// const html = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
 /// defer allocator.free(html);
 /// try testing.expectEqualStrings("<p>Hi <strong>world</strong></p>", html);
 /// ---
 /// ```
-// pub fn setOrReplaceText1(allocator: std.mem.Allocator, node: *z.DomNode, text: []const u8, options: z.TextOptions) !void {
-//     // Apply HTML escaping if requested (for new user input)
-//     const final_text = if (options.escape)
-//         try escapeHtml(allocator, text)
-//     else
-//         text;
-//     defer if (options.escape) allocator.free(final_text);
-
-//     switch (z.nodeType(node)) {
-//         .text => {
-//             const status = lxb_dom_character_data_replace(
-//                 node,
-//                 final_text.ptr,
-//                 final_text.len,
-//                 0, // Start at beginning
-//                 z.textContent_zc(node).len,
-//             );
-//             if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
-//         },
-//         .element,
-//         {
-//             const inner_text_node = firstChild(node);
-//             if (inner_text_node) |text| {
-//                 const status = lxb_dom_character_data_replace(
-//                     inner_text_node.?,
-//                     final_text.ptr,
-//                     final_text.len,
-//                     0, // Start at beginning
-//                     z.textContent_zc(node).len,
-//                 );
-//                 if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
-//             }
-//         },
-//         .comment,
-//         .fragment,
-//         => {},
-//     }
-
-//     const inner_text_node = firstChild(node) orelse null;
-//     if (inner_text_node == null) {
-//         print("SET NULL----\n", .{});
-//         return try setTextContent(node, final_text);
-//     }
-//     const status = lxb_dom_character_data_replace(
-//         inner_text_node.?,
-//         final_text.ptr,
-//         final_text.len,
-//         0, // Start at beginning
-//         z.textContent_zc(node).len,
-//     );
-//     if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
-// }
-
-pub fn setOrReplaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []const u8, options: z.TextOptions) !void {
+pub fn replaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []const u8, options: z.TextOptions) !void {
     // std.debug.assert(z.nodeType(node) == .text); // Only text nodes
 
-    if (node) |n| {
-        if (z.nodeType(n) != .text) {
-            return Err.NotTextNode;
-        }
-        const final_text = if (options.escape)
-            try escapeHtml(allocator, text) // You'd need to pass allocator
-        else
-            text;
-        defer if (options.escape) allocator.free(final_text);
+    const n = node orelse return Err.NoNode;
 
-        if (z.textContent_zc(n).len == 0) {
-            try z.setTextContent(n, final_text);
-        }
+    if (z.nodeType(n) != .text) return Err.NotTextNode;
 
-        const current_len = z.textContent_zc(n).len;
-        const status = lxb_dom_character_data_replace(
-            n,
-            final_text.ptr,
-            final_text.len,
-            0, // Start position
-            current_len, // Replace entire content
-        );
+    const final_text = if (options.escape)
+        try escapeHtml(allocator, text)
+    else
+        text;
 
-        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
-    } else {
-        return Err.NoNode;
-    }
+    defer if (options.escape) allocator.free(final_text);
+
+    const current_len = z.textContent_zc(n).len;
+
+    const status = lxb_dom_character_data_replace(
+        n,
+        final_text.ptr,
+        final_text.len,
+        0, // Start position
+        current_len, // Replace entire content
+    );
+
+    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
 }
 
-test "setOrReplaceTextContent" {
+test "replaceTextContent" {
     const allocator = testing.allocator;
     const doc = try parseFromString("<p>Hello <strong>world</strong></p>");
     defer destroyDocument(doc);
@@ -1888,7 +1830,7 @@ test "setOrReplaceTextContent" {
     try testing.expectEqualStrings(z.textContent_zc(inner_text.?), "Hello ");
     try testing.expectEqualStrings(z.textContent_zc(p.?), "Hello world");
 
-    try setOrReplaceText(allocator, inner_text.?, "New text", .{});
+    try replaceText(allocator, inner_text.?, "New text", .{});
 
     const p_text = z.textContent_zc(p.?);
     try testing.expectEqualStrings("New textworld", p_text);
@@ -1896,6 +1838,76 @@ test "setOrReplaceTextContent" {
     const txt = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
     defer allocator.free(txt);
     try testing.expectEqualStrings("<p>New text<strong>world</strong></p>", txt);
+}
+test "set and replace text content" {
+    const allocator = testing.allocator;
+
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const element = try createElement(doc, "div");
+    defer destroyNode(elementToNode(element));
+    const node = elementToNode(element);
+    var inner_text = firstChild(node);
+
+    try testing.expect(inner_text == null);
+
+    try testing.expectError(
+        Err.NoNode,
+        replaceText(allocator, inner_text, "text", .{}),
+    );
+
+    const text_node = try z.createTextNode(doc, "");
+    z.appendChild(node, text_node);
+    inner_text = firstChild(node);
+
+    try replaceText(allocator, inner_text, "Initial text", .{});
+    try testing.expectEqualStrings("Initial text", z.textContent_zc(inner_text.?));
+}
+
+/// [core] HTML escape text content for safe output
+///
+/// Caller must free the returned slice.
+pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    for (text) |ch| {
+        switch (ch) {
+            '<' => try result.appendSlice("&lt;"),
+            '>' => try result.appendSlice("&gt;"),
+            '&' => try result.appendSlice("&amp;"),
+            '"' => try result.appendSlice("&quot;"),
+            '\'' => try result.appendSlice("&#39;"),
+            else => try result.append(ch),
+        }
+    }
+
+    return result.toOwnedSlice();
+}
+
+test "get & set NodeTextContent and escape option" {
+    const allocator = testing.allocator;
+    const doc = try createDocument();
+    const element = try createElement(doc, "div");
+    defer destroyDocument(doc);
+    const node = elementToNode(element);
+
+    try setTextContent(node, "Hello, world!");
+
+    const text_content = textContent_zc(node);
+
+    try testing.expectEqualStrings("Hello, world!", text_content);
+
+    const options = z.TextOptions{ .escape = true };
+    const inner_text = z.firstChild(z.elementToNode(element));
+    try replaceText(allocator, inner_text.?, "<script>alert('xss')</script> & \"quotes\"", options);
+
+    const new_escaped_text = try textContent(
+        allocator,
+        node,
+    );
+    defer allocator.free(new_escaped_text);
+    try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
 }
 
 /// [core] Get comment text content
@@ -1969,27 +1981,6 @@ test "first set text content" {
 
 /// Free lexbor-allocated memory ????
 extern "c" fn lexbor_free(ptr: *anyopaque) void;
-
-/// [core] HTML escape text content for safe output
-///
-/// Caller must free the returned slice.
-pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
-
-    for (text) |ch| {
-        switch (ch) {
-            '<' => try result.appendSlice("&lt;"),
-            '>' => try result.appendSlice("&gt;"),
-            '&' => try result.appendSlice("&amp;"),
-            '"' => try result.appendSlice("&quot;"),
-            '\'' => try result.appendSlice("&#39;"),
-            else => try result.append(ch),
-        }
-    }
-
-    return result.toOwnedSlice();
-}
 
 //=================================================================
 // Whitespace and Empty Nodes
@@ -2338,31 +2329,6 @@ test "isWhitespaceOnlyElement" {
     try testing.expect(isWhitespaceOnlyText(txt));
 }
 
-test "setTextNodeData" {
-    const allocator = testing.allocator;
-
-    const doc = try createDocument();
-    defer destroyDocument(doc);
-    const element = try createElement(doc, "div");
-    defer destroyNode(elementToNode(element));
-    const node = elementToNode(element);
-    var inner_text = firstChild(node);
-
-    try testing.expect(inner_text == null);
-
-    try testing.expectError(
-        Err.NoNode,
-        setOrReplaceText(allocator, inner_text, "text", .{}),
-    );
-
-    const text_node = try z.createTextNode(doc, "");
-    z.appendChild(node, text_node);
-    inner_text = firstChild(node);
-
-    try setOrReplaceText(allocator, inner_text, "Initial text", .{});
-    try testing.expectEqualStrings("Initial text", z.textContent_zc(inner_text.?));
-}
-
 test "create Html element, parseTag, custom element" {
     const doc = try z.parseFromString("<p></p>");
     const body_node = try bodyNode(doc);
@@ -2447,31 +2413,6 @@ test "HTML escaping" {
 
     const expected = "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;";
     try testing.expectEqualStrings(expected, escaped);
-}
-
-test "get & set NodeTextContent and escape option" {
-    const allocator = testing.allocator;
-    const doc = try createDocument();
-    const element = try createElement(doc, "div");
-    defer destroyDocument(doc);
-    const node = elementToNode(element);
-
-    try setTextContent(node, "Hello, world!");
-
-    const text_content = textContent_zc(node);
-
-    try testing.expectEqualStrings("Hello, world!", text_content);
-
-    const options = z.TextOptions{ .escape = true };
-    const inner_text = z.firstChild(z.elementToNode(element));
-    try setOrReplaceText(allocator, inner_text.?, "<script>alert('xss')</script> & \"quotes\"", options);
-
-    const new_escaped_text = try textContent(
-        allocator,
-        node,
-    );
-    defer allocator.free(new_escaped_text);
-    try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
 }
 
 test "gets all text elements from Fragment" {

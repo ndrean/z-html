@@ -147,7 +147,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
     // Only update if content actually changed
     if (!std.mem.eql(u8, text, cleaned)) {
         // try setTextContent(node, cleaned);
-        try z.setOrReplaceText(allocator, node, cleaned, options);
+        try z.replaceText(allocator, node, cleaned, options);
     }
     return false;
 }
@@ -191,9 +191,9 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
                 );
 
                 // Set the text content (this function handles memory management)
-                try z.setOrReplaceText(allocator, prev, result, .{});
+                try z.replaceText(allocator, prev, result, .{});
 
-                // Free our temporary string since setOrReplaceText copies it
+                // Free our temporary string since replaceText copies it
                 allocator.free(result);
             }
         }
@@ -1029,7 +1029,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
     const user_input = "<script>alert('xss')</script> & \"dangerous\" > content";
 
     // Test 1: Insert without escaping
-    try z.setOrReplaceText(
+    try z.replaceText(
         allocator,
         inner_text,
         user_input,
@@ -1046,7 +1046,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
     }
 
     // Test 2: Insert with escaping (double-escaping)
-    try z.setOrReplaceText(
+    try z.replaceText(
         allocator,
         inner_text,
         user_input,
