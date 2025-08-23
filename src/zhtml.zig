@@ -16,9 +16,11 @@ const smart_text = @import("modules/smart_text.zig");
 const walker = @import("modules/search_attributes.zig");
 const classes = @import("modules/class_list.zig");
 const template = @import("modules/template.zig");
+const norm = @import("modules/normalize.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
+pub const Action = walker.Action;
 
 pub const LXB_STATUS_OK: usize = 0;
 pub var default_collection_capacity: u8 = 10;
@@ -50,6 +52,7 @@ pub const parseFromString = lxb.parseFromString;
 // Create / Destroy Node / Element
 //=====================================
 pub const createElement = lxb.createElement;
+pub const createElementAttr = lxb.createElementAttr;
 pub const createTextNode = lxb.createTextNode;
 
 pub const removeNode = lxb.removeNode;
@@ -108,6 +111,9 @@ pub const isTypeFragment = Type.isTypeFragment;
 // HTML tags
 //=====================================
 pub const HtmlTag = tag.HtmlTag;
+pub const WhitespacePreserveTagSet = tag.WhitespacePreserveTagSet;
+pub const VoidTagSet = tag.VoidTagSet;
+pub const NoEscapeTagSet = tag.NoEscapeTagSet;
 
 // from lexbor source: /tag/const.h
 pub const LXB_TAG_TEMPLATE: u32 = tag.LXB_TAG_TEMPLATE;
@@ -131,6 +137,7 @@ pub const nodeToComment = lxb.nodeToComment;
 pub const createComment = lxb.createComment;
 pub const destroyComment = lxb.destroyComment;
 pub const commentContent = lxb.commentContent;
+pub const commentContent_zc = lxb.commentContent_zc;
 
 //=====================================
 // Text content
@@ -140,6 +147,12 @@ pub const textContent_zc = lxb.textContent_zc;
 pub const setOrReplaceText = lxb.setOrReplaceText;
 pub const setTextContent = lxb.setTextContent;
 pub const escapeHtml = lxb.escapeHtml;
+
+// ====================================
+// Normalize
+// ====================================
+pub const normalize = norm.normalize;
+pub const normalizeWithOptions = norm.normalizeWithOptions;
 
 //=====================================
 // DOM navigation

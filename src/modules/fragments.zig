@@ -111,7 +111,7 @@ pub fn parseFragment(
 
     // Create context element that determines parsing rules
     const tag_name = context.toTagName();
-    const context_element = z.createElement(doc, tag_name, &.{}) catch {
+    const context_element = z.createElementAttr(doc, tag_name, &.{}) catch {
         z.destroyDocument(doc);
         return Err.CreateElementFailed;
     };
@@ -149,7 +149,7 @@ pub fn parseFragmentSimple(
     const target_doc = z.ownerDocument(target);
     const context_html_tag = context.toTagName();
 
-    const context_element = try z.createElement(
+    const context_element = try z.createElementAttr(
         target_doc,
         context_html_tag,
         &.{},
@@ -754,7 +754,7 @@ test "append createDocumentFragment" {
     const fragment = try z.createDocumentFragment(doc);
 
     for (browsers) |browser| {
-        const li = try z.createElement(doc, "li", &.{});
+        const li = try z.createElementAttr(doc, "li", &.{});
         const text = try z.createTextNode(doc, browser);
         z.appendChild(z.elementToNode(li), text);
         z.appendChild(z.fragmentToNode(fragment), z.elementToNode(li));
@@ -796,12 +796,12 @@ test "show" {
     const doc = try z.parseFromString("");
     defer z.destroyDocument(doc);
 
-    const main_elt = try z.createElement(
+    const main_elt = try z.createElementAttr(
         doc,
         "main",
         &.{},
     );
-    const div_elt = try z.createElement(
+    const div_elt = try z.createElementAttr(
         doc,
         "div",
         &.{.{ .name = "class", .value = "container-list" }},
@@ -813,7 +813,7 @@ test "show" {
     const comment_node = try z.createComment(doc, "a comment");
     z.appendChild(div, z.commentToNode(comment_node));
 
-    const ul_elt = try z.createElement(doc, "ul", &.{});
+    const ul_elt = try z.createElementAttr(doc, "ul", &.{});
     const ul = z.elementToNode(ul_elt);
 
     for (1..4) |i| {
@@ -824,7 +824,7 @@ test "show" {
         );
         defer allocator.free(inner_content);
 
-        const temp_div_elt = try z.createElement(doc, "div", &.{});
+        const temp_div_elt = try z.createElementAttr(doc, "div", &.{});
         const temp_div = z.elementToNode(temp_div_elt);
 
         _ = try z.setInnerHTML(

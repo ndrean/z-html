@@ -417,7 +417,7 @@ pub const FragmentContext = enum {
 };
 
 /// [HtmlTag] Set of void elements
-const VoidTagSet = struct {
+pub const VoidTagSet = struct {
     /// Fast inline check if a tag is void
     pub inline fn contains(tag: HtmlTag) bool {
         return switch (tag) {
@@ -427,8 +427,48 @@ const VoidTagSet = struct {
     }
 };
 
+/// [HtmlTag] Set of whitespace preserved elements
+pub const WhitespacePreserveTagSet = struct {
+    /// Fast inline check if a tag is whitespace preserved
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .pre, .textarea, .script, .style => true,
+            .code => true,
+            else => false,
+        };
+    }
+};
+
+test "whitespacepreservedTagSet" {
+    const allocator = testing.allocator;
+
+    const doc = try z.parseFromString("<div></div><pre></pre><code></code><textarea></textarea><script></script><style></style><p></p>");
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.bodyElement(doc);
+
+    const expected = [_]struct { tag: z.HtmlTag, preserved: bool }{
+        .{ .tag = .div, .preserved = false },
+        .{ .tag = .pre, .preserved = true },
+        .{ .tag = .code, .preserved = true },
+        .{ .tag = .textarea, .preserved = true },
+        .{ .tag = .script, .preserved = true },
+        .{ .tag = .style, .preserved = true },
+        .{ .tag = .p, .preserved = false },
+    };
+
+    const children_elts = try z.children(allocator, body_elt);
+    defer allocator.free(children_elts);
+
+    for (children_elts, 0..) |elt, i| {
+        const tag = z.parseTag(z.qualifiedName_zc(elt)).?;
+        try testing.expect(expected[i].tag == tag);
+        try testing.expect(expected[i].preserved == WhitespacePreserveTagSet.contains(tag));
+    }
+}
+
 /// [HtmlTag] Set of tags that should not be escaped (modern approach)
-const NoEscapeTagSet = struct {
+pub const NoEscapeTagSet = struct {
     /// Fast inline check if a tag should not be escaped
     pub inline fn contains(tag: HtmlTag) bool {
         return switch (tag) {
@@ -601,10 +641,10 @@ test "ZERO-COPY element functions" {
     defer z.destroyDocument(doc);
 
     // Create test elements
-    const br_elem = try z.createElement(doc, "br", &.{});
-    const script_elem = try z.createElement(doc, "script", &.{});
-    const div_elem = try z.createElement(doc, "div", &.{});
-    const custom_elem = try z.createElement(doc, "my-widget", &.{});
+    const br_elem = try z.createElementAttr(doc, "br", &.{});
+    const script_elem = try z.createElementAttr(doc, "script", &.{});
+    const div_elem = try z.createElementAttr(doc, "div", &.{});
+    const custom_elem = try z.createElementAttr(doc, "my-widget", &.{});
 
     // Test zero-copy void element checks
     try testing.expect(isVoidElementFastZeroCopy(br_elem) == true);
@@ -660,7 +700,7 @@ test "lexbor NODENAME and self.toString and parseTag and qualifiedName" {
     const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br };
 
     for (tags) |tag| {
-        const element = try z.createElement(doc, tag.toString(), &.{});
+        const element = try z.createElementAttr(doc, tag.toString(), &.{});
         const node_name = z.nodeName_zc(z.elementToNode(element));
         const expected_name = tag.toString();
 
@@ -813,18 +853,18 @@ test "mixing enum and string creation" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
-    const div = try z.createElement(
+    const div = try z.createElementAttr(
         doc,
         "div",
         &.{},
     );
 
-    const custom = try z.createElement(
+    const custom = try z.createElementAttr(
         doc,
         "my-custom-element",
         &.{},
     );
-    const web_component = try z.createElement(
+    const web_component = try z.createElementAttr(
         doc,
         "x-widget",
         &.{},

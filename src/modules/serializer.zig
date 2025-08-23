@@ -170,7 +170,7 @@ test "innerHTML" {
     defer z.destroyDocument(doc);
 
     // Create a container element
-    var div = try z.createElement(doc, "div", &.{});
+    var div = try z.createElementAttr(doc, "div", &.{});
 
     // test 1 --------------
     div = setInnerHTMLUnsafe(div, "<p id=\"1\">Hello <strong>World</strong></p>");
@@ -411,7 +411,7 @@ test "setInnerHTML security model" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
-    const div = try z.createElement(doc, "div", &.{});
+    const div = try z.createElementAttr(doc, "div", &.{});
 
     // Test 1: Malicious content treated as safe text (default behavior)
     const malicious_content = "<script>alert('XSS')</script><p>Safe text</p>";

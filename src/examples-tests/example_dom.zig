@@ -58,9 +58,9 @@ pub fn main() !void {
     const fragment = try z.createDocumentFragment(doc);
 
     // Create some new elements to add to the fragment
-    const new_div1 = try z.createElement(doc, "div", &.{});
-    const new_div2 = try z.createElement(doc, "div", &.{});
-    const new_div3 = try z.createElement(doc, "div", &.{});
+    const new_div1 = try z.createElementAttr(doc, "div", &.{});
+    const new_div2 = try z.createElementAttr(doc, "div", &.{});
+    const new_div3 = try z.createElementAttr(doc, "div", &.{});
 
     // Add text content to the divs
     const text1 = try z.createTextNode(doc, "Fragment child 1");
@@ -106,6 +106,6 @@ pub fn main() !void {
     print("Available DOM functions:\n", .{});
     print("  Search: getElementsByTagName, getElementsByClassName, getElementsById\n", .{});
     print("  Manipulation: createDocumentFragment, appendFragment, appendChild\n", .{});
-    print("  Creation: createElement, createTextNode\n", .{});
+    print("  Creation: createElementAttr, createTextNode\n", .{});
     print("  Note: insertNodeBefore/After fallback to appendChild (Lexbor limitation)\n", .{});
 }

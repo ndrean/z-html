@@ -86,12 +86,13 @@ pub fn destroyDocument(doc: *z.HTMLDocument) void {
 /// [core] Parse HTML string into document and creates a new document.
 /// Returns a new document.
 ///
-/// Caller must free with `destroyDocument`.
+/// Tihs creates a new document. Caller must free with `destroyDocument()`.
 ///
 /// ## Example
 /// ```
 /// const doc = try parseFromString("<!DOCTYPE html><html><body></body></html>");
 /// defer destroyDocument(doc);
+/// ---
 /// ```
 pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
     const doc = createDocument() catch {
@@ -107,6 +108,11 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 // =============================================================================
 
 /// [core] Element creation
+pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
+    return z.createElementAttr(doc, name, &.{});
+}
+
+/// [core] Element creation with attributes options
 ///
 /// Can create HTMLElements or custom elements.
 ///
@@ -114,8 +120,8 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 /// ## Example
 ///
 /// ```
-/// const span: *z.HTMLElement = try createElement(doc, "span", &.{});
-/// const button: *z.HTMLElement = try createElement(doc, "button",
+/// const span: *z.HTMLElement = try createElementAttr(doc, "span", &.{});
+/// const button: *z.HTMLElement = try createElementAttr(doc, "button",
 ///     &.{
 ///         .{.name = "phx-click", .value = "submit"},
 ///         .{.name = "disabled", .value= ""}
@@ -123,7 +129,7 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 ///
 /// ```
 /// ## Signature
-pub fn createElement(
+pub fn createElementAttr(
     doc: *z.HTMLDocument,
     name: []const u8,
     attrs: []const z.AttributePair,
@@ -153,7 +159,7 @@ test "create elt" {
     defer z.destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
-    const button = try z.createElement(
+    const button = try z.createElementAttr(
         doc,
         "button",
         &.{
@@ -307,7 +313,7 @@ pub fn nodeToElement(node: *z.DomNode) ?*z.HTMLElement {
 
 test "element/node/element" {
     const doc = try createDocument();
-    const div_elt = try createElement(doc, "div", &.{});
+    const div_elt = try createElementAttr(doc, "div", &.{});
     const div_node = elementToNode(div_elt);
     const element = nodeToElement(div_node);
     try testing.expect(element == div_elt);
@@ -334,7 +340,7 @@ test "creation & convertions" {
     const first_comment = nodeToComment(first_comment_node.?);
     try testing.expect(first_comment != null);
 
-    const div_elt = try createElement(doc, "div", &.{});
+    const div_elt = try createElementAttr(doc, "div", &.{});
     const comment = try createComment(doc, "Hello, comment!");
     const text = try createTextNode(doc, "Hello, text!");
 
@@ -370,7 +376,7 @@ test "creation & convertions" {
 /// ```
 /// test "nodeType/tagname" {
 ///     const doc = try createDocument();
-///     const div_elt = try createElement(doc, "div", &.{});
+///     const div_elt = try createElementAttr(doc, "div", &.{});
 ///     const div_name = z.nodeName_zc(elementToNode(div_elt));
 ///     try testing.expectEqualStrings(div_name, "DIV");
 /// }
@@ -395,7 +401,7 @@ pub fn nodeName_zc(node: *z.DomNode) []const u8 {
 /// defer allocator.free(text_name);
 /// try testing.expectEqualStrings(text_name, "#text");
 ///
-/// const div = try createElement(doc, "div", &.{}); // an element
+/// const div = try createElementAttr(doc, "div", &.{}); // an element
 /// const name = try nodeName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
@@ -410,7 +416,7 @@ test "nodeName/_zc" {
     const allocator = testing.allocator;
     const doc = try createDocument();
 
-    const div_elt = try createElement(doc, "div", &.{});
+    const div_elt = try createElementAttr(doc, "div", &.{});
     const div_name = z.nodeName_zc(elementToNode(div_elt));
     try testing.expectEqualStrings(div_name, "DIV");
     const node_type = z.nodeType(elementToNode(div_elt));
@@ -436,7 +442,7 @@ test "nodeName/_zc" {
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try createElement(doc, "div", &.{});
+/// const div = try createElementAttr(doc, "div", &.{});
 /// const name = tagName_zc(elementToNode(div));
 /// try testing.expectEqualStrings(name, "DIV");
 /// ---
@@ -455,7 +461,7 @@ pub fn tagName_zc(element: *z.HTMLElement) []const u8 {
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try createElement(doc, "div", &.{});
+/// const div = try createElementAttr(doc, "div", &.{});
 /// const name = try tagName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
@@ -475,7 +481,7 @@ pub fn tagName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try z.createElement(doc, "div", &.{});
+/// const div = try z.createElementAttr(doc, "div", &.{});
 /// const name = try qualifiedName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "div");
@@ -493,7 +499,7 @@ pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u
 test "qualified name" {
     const allocator = testing.allocator;
     const doc = try createDocument();
-    const div = try createElement(doc, "div", &.{});
+    const div = try createElementAttr(doc, "div", &.{});
     const owned_name = try qualifiedName(allocator, div);
     defer allocator.free(owned_name);
     try testing.expectEqualStrings(owned_name, "div");
@@ -507,7 +513,7 @@ test "qualified name" {
 /// ## Example
 /// ```zig
 /// const doc = try createDocument();
-/// const div_elt = try createElement(doc, "div", &.{});
+/// const div_elt = try createElementAttr(doc, "div", &.{});
 /// const name = qualifiedName_zc(div_elt);
 /// try testing.expectEqualStrings(name, "div");
 /// ---
@@ -559,6 +565,8 @@ pub fn cloneNode(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode {
 //=============================================================================
 
 /// [core] Check if element is _void_ (like `<img>` or `<input>`, aka "self-closing")
+///
+/// #text nodes are not void
 /// ## Example
 /// ```
 /// test "isVoid" {
@@ -573,8 +581,8 @@ pub fn cloneNode(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode {
 ///     try testing.expect(!z.isVoid(p.?));
 ///     try testing.expect(!z.isVoid(t.?));
 /// }
+/// ---
 ///```
-/// ## Signature
 pub fn isVoid(node: *z.DomNode) bool {
     return lxb_html_node_is_void_noi(node);
 }
@@ -598,7 +606,7 @@ test "isVoid" {
 /// ## Examples
 /// ```
 /// test "isNodeEmpty" {
-///     const img_elt = try z.createElement(doc, "img", &.{.name = "src", .value = "image.png"});
+///     const img_elt = try z.createElementAttr(doc, "img", &.{.name = "src", .value = "image.png"});
 ///     const img = z.elementToNode(img_elt);
 ///     try testing.expect(z.isVoid(img);
 ///     try testing.expect(z.isNodeEmpty(img));
@@ -606,7 +614,7 @@ test "isVoid" {
 ///     const text = try z.createTextNode(doc, "some text");
 ///     try testing.expect(z.isNodeEmpty(text));
 ///
-///     const p_elt = try z.createElement(doc, "p", &.{});
+///     const p_elt = try z.createElementAttr(doc, "p", &.{});
 ///     const p = z.elementToNode(p_elt);
 ///     z.appendChild((p, text);
 ///     try testing.expect(!z.isNodeEmpty(p));
@@ -628,7 +636,10 @@ pub fn isNodeEmpty(node: *z.DomNode) bool {
 test "isNodeEmpty" {
     const doc = try z.parseFromString("<html><body></body></html>");
     defer z.destroyDocument(doc);
-    const img_elt = try z.createElement(doc, "img", &.{.{ .name = "src", .value = "image.png" }});
+    const body = try z.bodyNode(doc);
+    try testing.expect(z.isNodeEmpty(body));
+
+    const img_elt = try z.createElementAttr(doc, "img", &.{.{ .name = "src", .value = "image.png" }});
     const img = z.elementToNode(img_elt);
     try testing.expect(z.isVoid(img));
     try testing.expect(z.isNodeEmpty(img));
@@ -640,7 +651,7 @@ test "isNodeEmpty" {
     const comment = try z.createComment(doc, "some comment");
     try testing.expect(z.isNodeEmpty(z.commentToNode(comment)));
 
-    const p_elt = try z.createElement(doc, "p", &.{});
+    const p_elt = try z.createElementAttr(doc, "p", &.{});
     const p = z.elementToNode(p_elt);
 
     z.appendChild(p, text);
@@ -965,9 +976,9 @@ pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
 /// ## Example
 /// ```
 /// const parentNode: *z.DomNode = try bodyNode(doc);
-/// const child1: *z.HTMLElement = try createElement(doc, "div", &.{});
+/// const child1: *z.HTMLElement = try createElementAttr(doc, "div", &.{});
 /// const div = elementToNode(child1);
-/// const child2: *z.HTMLElement = try createElement(doc, "p", &.{});
+/// const child2: *z.HTMLElement = try createElementAttr(doc, "p", &.{});
 /// const p = elementToNode(child2);
 /// const childNodes: []const *z.DomNode = &.{div, p};
 /// appendChildren(parentNode, childNodes);
@@ -985,9 +996,9 @@ test "appendChild/dren" {
     defer destroyDocument(doc);
 
     const body = try bodyNode(doc);
-    const child1 = try createElement(doc, "div", &.{});
+    const child1 = try createElementAttr(doc, "div", &.{});
     const div = elementToNode(child1);
-    const child2 = try createElement(doc, "p", &.{});
+    const child2 = try createElementAttr(doc, "p", &.{});
     const p = elementToNode(child2);
     const child_nodes: []const *z.DomNode = &.{ div, p };
     appendChildren(body, child_nodes);
@@ -1017,12 +1028,12 @@ test "insertBefore / insertAfter" {
 
     const body = try bodyNode(doc);
     const first_li = z.getElementById(body, "1");
-    const new_li = try z.createElement(
+    const new_li = try z.createElementAttr(
         doc,
         "li",
         &.{.{ .name = "id", .value = "0" }},
     );
-    const last_li = try z.createElement(
+    const last_li = try z.createElementAttr(
         doc,
         "li",
         &.{.{ .name = "id", .value = "2" }},
@@ -1081,7 +1092,7 @@ test "InsertPosition.fromString" {
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// const new_div = try z.createElement(doc, "div", &.{});
+/// const new_div = try z.createElementAttr(doc, "div", &.{});
 /// try insertAdjacentElement(target.?, .beforebegin, new_div);
 /// try insertAdjacentElement(target.?, "beforeend", new_div);
 /// ---
@@ -1138,7 +1149,7 @@ test "insertAdjacentElement - all positions & invalid" {
     const target = z.getElementById(body, "target");
 
     // Test beforebegin - insert before the target element
-    const before_element = try z.createElement(
+    const before_element = try z.createElementAttr(
         doc,
         "p",
         &.{.{ .name = "id", .value = "before" }},
@@ -1150,7 +1161,7 @@ test "insertAdjacentElement - all positions & invalid" {
     );
 
     // Test afterbegin - insert as first child
-    const afterbegin_element = try z.createElement(
+    const afterbegin_element = try z.createElementAttr(
         doc,
         "span",
         &.{.{ .name = "id", .value = "first" }},
@@ -1162,7 +1173,7 @@ test "insertAdjacentElement - all positions & invalid" {
     );
 
     // Test beforeend - insert as last child
-    const beforeend_element = try z.createElement(
+    const beforeend_element = try z.createElementAttr(
         doc,
         "span",
         &.{.{ .name = "id", .value = "last" }},
@@ -1174,7 +1185,7 @@ test "insertAdjacentElement - all positions & invalid" {
     );
 
     // Test afterend - insert after the target element
-    const after_element = try z.createElement(
+    const after_element = try z.createElementAttr(
         doc,
         "p",
         &.{.{ .name = "id", .value = "after" }},
@@ -1216,7 +1227,7 @@ test "insertAdjacentElement - empty target & cloning" {
     const target = z.getElementById(body, "target");
 
     // Test afterbegin on empty element
-    const child_element = try z.createElement(
+    const child_element = try z.createElementAttr(
         doc,
         "p",
         &.{.{ .name = "class", .value = "child" }},
@@ -1395,7 +1406,9 @@ test "enum / string insertAdjacentHTML" {
         \\<body>
         \\  <p>Before Begin</p>
         \\  <div id="target">
-        \\    <span>After Begin</span>Original<span>Before End</span>
+        \\    <span>After Begin</span>
+        \\      Original
+        \\    <span>Before End</span>
         \\  </div>
         \\  <p>After End</p>
         \\</body>
@@ -1548,7 +1561,7 @@ test "insertAdjacent demo" {
     const target = z.getElementById(body, "target");
 
     // Demo 1: insertAdjacentElement with all positions
-    const before_elem = try z.createElement(
+    const before_elem = try z.createElementAttr(
         doc,
         "h2",
         &.{.{ .name = "class", .value = "before" }},
@@ -1561,7 +1574,7 @@ test "insertAdjacent demo" {
         before_elem,
     );
 
-    const after_elem = try z.createElement(
+    const after_elem = try z.createElementAttr(
         doc,
         "h2",
         &.{.{ .name = "class", .value = "after" }},
@@ -1673,12 +1686,20 @@ extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const 
 extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
 
-/// [core] Get text content with empty string fallback
+/// [core] Get the concatenated text content with empty string fallback of a node
 ///
 /// Returns the text content or an empty string if none exists.
-/// This matches JavaScript's element.textContent behavior.
 ///
-/// Caller needs to free the returned string.
+/// Caller owns the slice
+/// ## Example
+/// ```
+/// const doc = try z.parseFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
+/// const div = z.firstChild(try z.bodyNode(doc));
+/// const text = try textContent(allocator, div.?);
+/// defer allocator.free(text);
+/// try testing.expectEqualStrings("I am boldand I am italic", text);
+/// ---
+/// ```
 pub fn textContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return allocator.dupe(u8, "");
@@ -1692,10 +1713,20 @@ pub fn textContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return result;
 }
 
-/// [core] Get text content as _zero-copy slice_
+test "textContent" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
+    const div = z.firstChild(try z.bodyNode(doc));
+    const p = firstChild(div.?);
+    const text = try textContent(allocator, p.?);
+    defer allocator.free(text);
+    try testing.expectEqualStrings("I am bold", text);
+    try testing.expectEqualStrings("I am boldand I am italic", z.textContent_zc(div.?));
+}
+
+/// [core] Get text content as _zero-copy slice_ (UNSAFE)
 ///
 /// Returns a slice directly into lexbor's internal memory - no allocation!
-/// ---
 pub fn textContent_zc(node: *z.DomNode) []const u8 {
     var len: usize = 0;
     const text_ptr = lxb_dom_node_text_content(node, &len) orelse return "";
@@ -1706,6 +1737,20 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
 }
 
 /// [core] Set text content on a node
+///
+/// This function sets the text content of a DOM node, replacing any existing content.
+/// ## Example
+/// ```
+/// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+/// defer z.destroyDocument(doc);
+/// const p = firstChild(try bodyNode(doc));
+/// try setTextContent(p.?, "Hi");
+/// try std.testing.expectEqualStrings("Hi", z.textContent_zc(p.?));
+/// const text = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+/// defer allocator.free(text);
+/// try testing.expectEqualStrings("<p>Hi</p>", text);
+/// ---
+/// ```
 pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
@@ -1715,42 +1760,147 @@ pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
     if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
 }
 
-/// [core] set or replace text data on a text node with escape option.
-///
-/// If the inner text node is void, it will be created.
+test "setTextContent" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<p>Hello <strong>world</strong></p>");
+    defer destroyDocument(doc);
+
+    const p = firstChild(try bodyNode(doc));
+    try setTextContent(p.?, "New text");
+
+    const p_text = try textContent(allocator, p.?);
+    defer allocator.free(p_text);
+    try testing.expectEqualStrings("New text", p_text);
+    try testing.expectEqualStrings("New text", z.textContent_zc(p.?));
+    const txt = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+    defer allocator.free(txt);
+    try testing.expectEqualStrings("<p>New text</p>", txt);
+}
+
+/// [core] set or replace text data of a text node with escape option.
 ///
 /// If `options.escape = true`, the text will be HTML-escaped before insertion.
-pub fn setOrReplaceText(allocator: std.mem.Allocator, node: *z.DomNode, text: []const u8, options: z.TextOptions) !void {
-    // Apply HTML escaping if requested (for new user input)
-    const final_text = if (options.escape)
-        try escapeHtml(allocator, text)
-    else
-        text;
-    defer if (options.escape) allocator.free(final_text);
+/// ## Example
+/// ```
+/// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+/// defer z.destroyDocument(doc);
+/// const p = firstChild(try bodyNode(doc));
+///
+/// try setOrReplaceText(allocator, p.?, "Hi ", .{});
+/// try testing.expectEqualStrings("Hi world", z.textContent_zc(p.?));
+/// const html = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+/// defer allocator.free(html);
+/// try testing.expectEqualStrings("<p>Hi <strong>world</strong></p>", html);
+/// ---
+/// ```
+// pub fn setOrReplaceText1(allocator: std.mem.Allocator, node: *z.DomNode, text: []const u8, options: z.TextOptions) !void {
+//     // Apply HTML escaping if requested (for new user input)
+//     const final_text = if (options.escape)
+//         try escapeHtml(allocator, text)
+//     else
+//         text;
+//     defer if (options.escape) allocator.free(final_text);
 
-    const inner_text_node = firstChild(node) orelse null;
-    if (inner_text_node == null) {
-        return try setTextContent(node, final_text);
+//     switch (z.nodeType(node)) {
+//         .text => {
+//             const status = lxb_dom_character_data_replace(
+//                 node,
+//                 final_text.ptr,
+//                 final_text.len,
+//                 0, // Start at beginning
+//                 z.textContent_zc(node).len,
+//             );
+//             if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+//         },
+//         .element,
+//         {
+//             const inner_text_node = firstChild(node);
+//             if (inner_text_node) |text| {
+//                 const status = lxb_dom_character_data_replace(
+//                     inner_text_node.?,
+//                     final_text.ptr,
+//                     final_text.len,
+//                     0, // Start at beginning
+//                     z.textContent_zc(node).len,
+//                 );
+//                 if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+//             }
+//         },
+//         .comment,
+//         .fragment,
+//         => {},
+//     }
+
+//     const inner_text_node = firstChild(node) orelse null;
+//     if (inner_text_node == null) {
+//         print("SET NULL----\n", .{});
+//         return try setTextContent(node, final_text);
+//     }
+//     const status = lxb_dom_character_data_replace(
+//         inner_text_node.?,
+//         final_text.ptr,
+//         final_text.len,
+//         0, // Start at beginning
+//         z.textContent_zc(node).len,
+//     );
+//     if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+// }
+
+pub fn setOrReplaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []const u8, options: z.TextOptions) !void {
+    // std.debug.assert(z.nodeType(node) == .text); // Only text nodes
+
+    if (node) |n| {
+        if (z.nodeType(n) != .text) {
+            return Err.NotTextNode;
+        }
+        const final_text = if (options.escape)
+            try escapeHtml(allocator, text) // You'd need to pass allocator
+        else
+            text;
+        defer if (options.escape) allocator.free(final_text);
+
+        if (z.textContent_zc(n).len == 0) {
+            try z.setTextContent(n, final_text);
+        }
+
+        const current_len = z.textContent_zc(n).len;
+        const status = lxb_dom_character_data_replace(
+            n,
+            final_text.ptr,
+            final_text.len,
+            0, // Start position
+            current_len, // Replace entire content
+        );
+
+        if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+    } else {
+        return Err.NoNode;
     }
+}
 
-    const current_text = try textContent(
-        allocator,
-        node,
-    );
-    defer allocator.free(current_text);
-    const status = lxb_dom_character_data_replace(
-        inner_text_node.?,
-        final_text.ptr,
-        final_text.len,
-        0, // Start at beginning
-        current_text.len,
-    );
-    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+test "setOrReplaceTextContent" {
+    const allocator = testing.allocator;
+    const doc = try parseFromString("<p>Hello <strong>world</strong></p>");
+    defer destroyDocument(doc);
+
+    const p = firstChild(try bodyNode(doc));
+    const inner_text = firstChild(p.?);
+    try testing.expectEqualStrings(z.textContent_zc(inner_text.?), "Hello ");
+    try testing.expectEqualStrings(z.textContent_zc(p.?), "Hello world");
+
+    try setOrReplaceText(allocator, inner_text.?, "New text", .{});
+
+    const p_text = z.textContent_zc(p.?);
+    try testing.expectEqualStrings("New textworld", p_text);
+    try testing.expectEqualStrings("New text", z.textContent_zc(inner_text.?));
+    const txt = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+    defer allocator.free(txt);
+    try testing.expectEqualStrings("<p>New text<strong>world</strong></p>", txt);
 }
 
 /// [core] Get comment text content
 ///
-/// Needs to be freed by caller
+/// Caller owns the slice
 pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
     const inner_text = try textContent(
         allocator,
@@ -1759,43 +1909,61 @@ pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
     return inner_text;
 }
 
+/// [core] Get comment text content as _zero-copy slice_ (UNSAFE)
+pub fn commentContent_zc(comment: *z.Comment) []const u8 {
+    return textContent_zc(commentToNode(comment));
+}
+
 test "first text content & comment" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<p>hello</p><br/><!--comment-->");
+    const doc = try parseFromString("<p>hello <em>italic</em></p><br/><!-- \tcomment -->");
+
+    // text content of the P element
     const p = firstChild(try bodyNode(doc));
-    const text = try textContent(allocator, p.?);
-    defer allocator.free(text);
-    try testing.expectEqualStrings("hello", text);
+    const p_text = try textContent(allocator, p.?);
+    defer allocator.free(p_text);
+    try testing.expectEqualStrings("hello italic", p_text);
+    try testing.expectEqualStrings("hello italic", z.textContent_zc(p.?));
+
+    // text content of the TEXT node
     const inner = z.firstChild(p.?);
     const inner_text = try textContent(allocator, inner.?);
     defer allocator.free(inner_text);
-    try testing.expectEqualStrings("hello", inner_text);
+    try testing.expectEqualStrings("hello ", inner_text);
+    try testing.expectEqualStrings("hello ", z.textContent_zc(inner.?));
+
+    // text content of the BR element
     const br = elementToNode(nextElementSibling(nodeToElement(p.?).?).?);
-    const br_text = try textContent(allocator, br);
+    const br_text = textContent_zc(br);
     try testing.expectEqualStrings("", br_text);
+
+    // text content of the comment node
     const comment_node = nextSibling(br);
-    const comment_text = try textContent(allocator, comment_node.?);
-    try testing.expectEqualStrings("comment", comment_text);
+    const comment_node_text = try textContent(allocator, comment_node.?);
+    defer allocator.free(comment_node_text);
+    try testing.expectEqualStrings(" \tcomment ", comment_node_text);
+
+    const comment = z.nodeToComment(comment_node.?);
+    const comment_text = try commentContent(allocator, comment.?);
     defer allocator.free(comment_text);
-    const comment = nodeToComment(comment_node.?);
-    const c_text = try commentContent(allocator, comment.?);
-    defer allocator.free(c_text);
-    try testing.expectEqualStrings("comment", c_text);
+    try testing.expectEqualStrings(" \tcomment ", comment_text);
+    try testing.expectEqualStrings(" \tcomment ", z.commentContent_zc(comment.?));
 }
 
 test "first set text content" {
-    const allocator = testing.allocator;
     const doc = try parseFromString("<p></p><span>first</span>");
-    const p = firstChild(try bodyNode(doc));
-    const span = nextSibling(p.?).?;
-    try setTextContent(p.?, "new text");
+    defer destroyDocument(doc);
+
+    const body = try bodyNode(doc);
+
+    const p = firstChild(body).?;
+    const span = nextSibling(p).?;
+    try setTextContent(p, "new text");
     try setTextContent(span, "second");
 
-    const p_text = try textContent(allocator, p.?);
-    defer allocator.free(p_text);
+    const p_text = textContent_zc(p);
     try testing.expectEqualStrings("new text", p_text);
-    const span_text = try textContent(allocator, span);
-    defer allocator.free(span_text);
+    const span_text = textContent_zc(span);
     try testing.expectEqualStrings("second", span_text);
 }
 
@@ -1832,15 +2000,15 @@ pub fn isWhitespaceOnlyText(text: []const u8) bool {
     if (text.len == 0) return true;
     for (text) |c| {
         if (!std.ascii.isWhitespace(c)) {
-            return false; // Found non-whitespace character
+            return false;
         }
     }
     return true;
 }
 
 pub fn isWhitespaceOnlyNode(node: *z.DomNode) bool {
-    if (isVoid(node)) return false; // Self-closing nodes are not considered whitespace-only
     if (isNodeEmpty(node)) return true;
+    // if (isVoid(node)) return false;
     return false;
 }
 
@@ -1861,7 +2029,7 @@ test "memory safety: nodeName vs nodeNameOwned" {
     const doc = try createDocument();
     defer destroyDocument(doc);
 
-    const element = try createElement(doc, "div", &.{});
+    const element = try createElementAttr(doc, "div", &.{});
     defer destroyNode(elementToNode(element));
 
     // Test immediate use (safe with both versions)
@@ -1877,7 +2045,7 @@ test "memory safety: nodeName vs nodeNameOwned" {
     try testing.expectEqualStrings(unsafe_name, owned_name);
 
     // The owned version can be safely used after modifications
-    const another_element = try createElement(doc, "span", &.{});
+    const another_element = try createElementAttr(doc, "span", &.{});
     defer destroyNode(elementToNode(another_element));
 
     // owned_name is still valid and safe to use
@@ -1888,7 +2056,7 @@ test "create element and comment" {
     const allocator = std.testing.allocator;
     const doc = try createDocument();
     defer destroyDocument(doc);
-    const element = try createElement(doc, "div", &.{});
+    const element = try createElementAttr(doc, "div", &.{});
     defer destroyNode(elementToNode(element));
     const name = tagName_zc(element);
     try testing.expectEqualStrings("DIV", name);
@@ -1913,10 +2081,10 @@ test "create element and comment" {
 test "insertChild" {
     const doc = try createDocument();
     defer destroyDocument(doc);
-    const parent = try createElement(doc, "div", &.{});
+    const parent = try createElementAttr(doc, "div", &.{});
     defer destroyNode(elementToNode(parent));
 
-    const child = try createElement(doc, "span", &.{});
+    const child = try createElementAttr(doc, "span", &.{});
     defer destroyNode(elementToNode(child));
     appendChild(elementToNode(parent), elementToNode(child));
 
@@ -2007,7 +2175,7 @@ test "createTextNode and appendChild" {
     const doc = try parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const div = try createElement(doc, "div", &.{});
+    const div = try createElementAttr(doc, "div", &.{});
     const text_node = try createTextNode(doc, "Hello, World!");
     appendChild(elementToNode(div), text_node);
     const body = try bodyElement(doc);
@@ -2030,9 +2198,9 @@ test "insertNodeBefore and insertNodeAfter" {
 
     const body_node = try bodyNode(doc);
 
-    const div1 = try createElement(doc, "div", &.{});
-    const div2 = try createElement(doc, "div", &.{});
-    const div3 = try createElement(doc, "div", &.{});
+    const div1 = try createElementAttr(doc, "div", &.{});
+    const div2 = try createElementAttr(doc, "div", &.{});
+    const div3 = try createElementAttr(doc, "div", &.{});
 
     appendChild(body_node, elementToNode(div1));
     appendChild(body_node, elementToNode(div2));
@@ -2064,9 +2232,9 @@ test "appendChildren helper" {
 
     const body_node = try bodyNode(doc);
 
-    const div1 = try createElement(doc, "div", &.{});
-    const div2 = try createElement(doc, "p", &.{});
-    const div3 = try createElement(doc, "span", &.{});
+    const div1 = try createElementAttr(doc, "div", &.{});
+    const div2 = try createElementAttr(doc, "p", &.{});
+    const div3 = try createElementAttr(doc, "span", &.{});
 
     const child_nodes = [_]*z.DomNode{ elementToNode(div1), elementToNode(div2), elementToNode(div3) };
 
@@ -2103,11 +2271,9 @@ test "isWhitespaceOnlyText" {
 }
 
 test "isWhitespaceOnlyNode" {
-    // one way to create some nodes
     const doc = try parseFromString("<p>   </p>");
     defer destroyDocument(doc);
-    const body = try bodyElement(doc);
-    const body_node = elementToNode(body);
+    const body_node = try z.bodyNode(doc);
     const p = firstChild(body_node);
 
     try testing.expect(
@@ -2126,15 +2292,15 @@ test "isWhitespaceOnlyNode" {
 
     // other way to create some nodes
     destroyNode(p.?);
-    const div = try createElement(doc, "div", &.{});
+    const div = try createElementAttr(doc, "div", &.{});
     // defer destroyNode(elementToNode(div));
     const node_div = elementToNode(div);
 
     try setTextContent(node_div, "\n \r  \t");
     // should be true
-    try testing.expect(
-        isWhitespaceOnlyNode(firstChild(node_div).?),
-    );
+    const text = z.firstChild(node_div).?;
+    try testing.expect(z.isTypeText(text));
+    try testing.expect(isWhitespaceOnlyNode(text));
 }
 test "isWhitespaceOnlyElement" {
     const doc = try parseFromString("<div>   </div>");
@@ -2159,7 +2325,7 @@ test "isWhitespaceOnlyElement" {
     );
 
     // insert a P node and check it is not empty
-    const p = try createElement(doc, "p", &.{});
+    const p = try createElementAttr(doc, "p", &.{});
     appendChild(div, elementToNode(p));
     try testing.expect(
         !isWhitespaceOnlyElement(nodeToElement(div).?),
@@ -2177,32 +2343,31 @@ test "setTextNodeData" {
 
     const doc = try createDocument();
     defer destroyDocument(doc);
-    const element = try createElement(doc, "div", &.{});
+    const element = try createElement(doc, "div");
     defer destroyNode(elementToNode(element));
     const node = elementToNode(element);
-    const first_inner_text_node = firstChild(node) orelse null;
+    var inner_text = firstChild(node);
 
-    try testing.expect(first_inner_text_node == null);
+    try testing.expect(inner_text == null);
 
-    // try setTextContent(node, "Initial text");
-    try setOrReplaceText(allocator, node, "Initial text", .{});
+    try testing.expectError(
+        Err.NoNode,
+        setOrReplaceText(allocator, inner_text, "text", .{}),
+    );
 
-    const initial_text = try textContent(allocator, node);
-    defer allocator.free(initial_text);
-    try testing.expectEqualStrings("Initial text", initial_text);
+    const text_node = try z.createTextNode(doc, "");
+    z.appendChild(node, text_node);
+    inner_text = firstChild(node);
 
-    try setOrReplaceText(allocator, node, "Updated text", .{});
-
-    const updated_text = try textContent(allocator, node);
-    defer allocator.free(updated_text);
-    try testing.expectEqualStrings("Updated text", updated_text);
+    try setOrReplaceText(allocator, inner_text, "Initial text", .{});
+    try testing.expectEqualStrings("Initial text", z.textContent_zc(inner_text.?));
 }
 
 test "create Html element, parseTag, custom element" {
     const doc = try z.parseFromString("<p></p>");
     const body_node = try bodyNode(doc);
 
-    const span_element = try createElement(doc, "span", &.{});
+    const span_element = try createElementAttr(doc, "span", &.{});
     const tag = tagName_zc(span_element);
     const span_tag = z.parseTag("span");
     try testing.expectEqualStrings(tag, "SPAN");
@@ -2210,7 +2375,7 @@ test "create Html element, parseTag, custom element" {
     try testing.expect(z.parseTag("span") == .span);
 
     // Test custom element creation
-    const custom_elt = try createElement(
+    const custom_elt = try createElementAttr(
         doc,
         "custom-element",
         &.{.{ .name = "data-id", .value = "123" }},
@@ -2287,26 +2452,19 @@ test "HTML escaping" {
 test "get & set NodeTextContent and escape option" {
     const allocator = testing.allocator;
     const doc = try createDocument();
-    const element = try createElement(
-        doc,
-        "div",
-        &.{},
-    );
+    const element = try createElement(doc, "div");
     defer destroyDocument(doc);
     const node = elementToNode(element);
 
     try setTextContent(node, "Hello, world!");
 
-    const text_content = try textContent(
-        allocator,
-        node,
-    );
-    defer allocator.free(text_content);
+    const text_content = textContent_zc(node);
 
     try testing.expectEqualStrings("Hello, world!", text_content);
 
     const options = z.TextOptions{ .escape = true };
-    try setOrReplaceText(allocator, node, "<script>alert('xss')</script> & \"quotes\"", options);
+    const inner_text = z.firstChild(z.elementToNode(element));
+    try setOrReplaceText(allocator, inner_text.?, "<script>alert('xss')</script> & \"quotes\"", options);
 
     const new_escaped_text = try textContent(
         allocator,
@@ -2628,7 +2786,7 @@ test "practical string-to-DOM scenarios" {
     }
     {
         // 4. Template rendering - TODO
-        // const template = try z.createElement(allocator, "template");
+        // const template = try z.createElementAttr(allocator, "template");
         // defer allocator.free(template);
     }
 }

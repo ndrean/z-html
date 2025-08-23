@@ -37,12 +37,12 @@ extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8
 /// Caller needs to free the slice if not null
 /// ## Example
 /// ```
-///  const element = try z.createElement(doc, "div", &.{.{.name = "class", .value = "card"}});
+///  const element = try z.createElementAttr(doc, "div", &.{.{.name = "class", .value = "card"}});
 /// const class = try getAttribute(allocator, element, "class");
 /// defer if (class != null) |c| {
 ///     allocator.free(c);
 /// };
-/// try testing.expectEqualStrings("card", c.?);
+/// try testing.expectEqualStrings("card", class.?);
 /// ----
 /// ```
 pub fn getAttribute(allocator: std.mem.Allocator, element: *z.HTMLElement, name: []const u8) !?[]u8 {
@@ -81,6 +81,13 @@ pub fn getAttribute_zc(element: *z.HTMLElement, name: []const u8) ?[]const u8 {
 // ----------------------------------------------------------
 
 /// [attributes] Check if element has a given attribute
+///
+/// ## Example
+/// ```
+/// const element = try z.createElementAttr(doc, "div", &.{.{.name = "class", .value = "card"}});
+/// try testing.expect(z.hasAttribute(element, "class"));
+/// ---
+/// ```
 pub fn hasAttribute(element: *z.HTMLElement, name: []const u8) bool {
     return lxb_dom_element_has_attribute(
         element,
@@ -111,7 +118,7 @@ pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8
 ///
 /// ## Example
 /// ```
-/// const element = try z.createElement(doc, "div", &.{});
+/// const element = try z.createElementAttr(doc, "div", &.{});
 /// try z.setAttributes(element, &.{
 ///     .{.name = "id", .value = "main"},
 ///     ?{.name = "id", .value = "main"}
@@ -215,7 +222,7 @@ pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 ///   defer z.destroyDocument(doc);
 ///
 ///   const body = try z.bodyNode(doc);
-///   const button = try z.createElement(
+///   const button = try z.createElementAttr(
 ///       doc,
 ///        "button",
 ///        &.{

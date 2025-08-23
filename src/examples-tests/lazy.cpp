@@ -508,7 +508,7 @@ namespace lazy_html
     if (strncmp("svg", reinterpret_cast<char *>(name.data), name.size) == 0)
     {
       // For SVG we explicitly set the namespace, similar to
-      // `document.createElementNS`. It is important because attribute
+      // `document.createElementAttrNS`. It is important because attribute
       // names are lowercased for HTML elements, but should not be
       // lowercased inside SVG.
       return LXB_NS_SVG;

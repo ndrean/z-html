@@ -11,17 +11,28 @@ const Err = z.Err;
 const print = std.debug.print;
 const testing = std.testing;
 
-// Fast DOM traversal for optimized ID search
-extern "c" fn lxb_dom_node_simple_walk(root: *z.DomNode, walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32, ctx: ?*anyopaque) void;
+// Fast DOM traversal for optimized search
+extern "c" fn lxb_dom_node_simple_walk(
+    root: *z.DomNode,
+    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32,
+    ctx: ?*anyopaque,
+) void;
 
-/// convert from "aligned" `anyopaque` to the target pointer type `T`
+/// Helper to convert "aligned" `anyopaque` to the target pointer type `T`
 /// because of the callback signature:
+///
+/// Equivalent writings:
+/// ```
+/// const my_idCtx: *IdCtx = castContext(IdContext, ctx);
+/// const my_ctx: *IdCtx = @ptrCast(@alignCast(ctx.?));
+/// ---
+/// ```
 fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
     return @as(*T, @ptrCast(@alignCast(ctx.?)));
 }
 
 /// [walker] action types
-const Action = enum(u32) {
+pub const Action = enum(u32) {
     /// Continue traversing the DOM tree
     CONTINUE = 0,
     /// Stop traversal immediately (single element searches)
@@ -73,7 +84,11 @@ pub fn getElementById(root_node: *z.DomNode, id: []const u8) ?*z.HTMLElement {
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root_node, callback, &context);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &context, // we pass the pointer as modify the context during the walk
+    );
     return context.found_element;
 }
 
@@ -103,7 +118,11 @@ pub fn getElementByClass(root_node: *z.DomNode, class_name: []const u8) ?*z.HTML
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root_node, callback, &context);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &context, // pointer!
+    );
     return context.found_element;
 }
 
@@ -132,7 +151,11 @@ pub fn getElementByTag(root_node: *z.DomNode, tag: z.HtmlTag) ?*z.HTMLElement {
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root_node, callback, &context);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &context, // pointer!
+    );
     return context.found_element;
 }
 
@@ -170,10 +193,23 @@ pub fn getElementByAttribute(
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root_node, callback, &context);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &context,
+    );
     return context.found_element;
 }
 
+/// [walker] Fast search by data-attributes
+///
+/// ```
+/// const doc = try z.parseFromString("<form><input phx-click=\"increment\" disabled></form>");
+/// defer z.destroyDocument(doc);
+/// try z.getElementByDataAttribute(root_node, "phx", "click", "increment");
+///
+/// ---
+/// ```
 pub fn getElementByDataAttribute(
     root_node: *z.DomNode,
     prefix: []const u8,
@@ -188,6 +224,68 @@ pub fn getElementByDataAttribute(
     );
 
     return getElementByAttribute(root_node, attr_name, value);
+}
+
+test "getElementByDataAttribute" {
+    // const allocator = testing.allocator;
+
+    const html =
+        \\<div id="user" data-id="1234567890" data-user="carinaanand" data-date-of-birth>
+        \\Carina Anand
+        \\</div>
+    ;
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
+    const div = z.nodeToElement(z.firstChild(body).?).?;
+
+    const elt = getElementByTag(
+        body,
+        .div,
+    ) orelse {
+        try testing.expect(false);
+        return;
+    };
+
+    try testing.expect(div == elt);
+
+    const date_of_birth = try getElementByDataAttribute(
+        body,
+        "data",
+        "date-of-birth",
+        null,
+    );
+    try testing.expect(div == date_of_birth);
+
+    const user = try getElementByDataAttribute(
+        body,
+        "data",
+        "user",
+        "carinaanand",
+    );
+    try testing.expect(user == div);
+    try testing.expect(z.hasAttribute(user.?, "data-id"));
+
+    const maybe_user = try getElementByDataAttribute(
+        body,
+        "data",
+        "user",
+        "johndoe",
+    );
+
+    try testing.expect(maybe_user != div);
+
+    const allocator = testing.allocator;
+    const data_user = try z.getAttribute(
+        allocator,
+        user.?,
+        "data-user",
+    );
+    defer if (data_user) |u| {
+        allocator.free(u);
+    };
+
+    try testing.expectEqualStrings("carinaanand", data_user.?);
 }
 
 // === Multiple ===
@@ -207,7 +305,14 @@ const MultipleClassContext = struct {
     }
 };
 
-pub fn getElementsByClass(root_node: *z.DomNode, class_name: []const u8, allocator: std.mem.Allocator) ![]const *z.HTMLElement {
+/// [walker] Get elements by class name
+///
+/// Caller owns the slice
+pub fn getElementsByClass(
+    root_node: *z.DomNode,
+    class_name: []const u8,
+    allocator: std.mem.Allocator,
+) ![]const *z.HTMLElement {
     var context = MultipleClassContext.init(allocator, class_name);
     defer context.deinit();
 
@@ -248,6 +353,7 @@ const MultipleTagContext = struct {
     }
 };
 
+/// [walker] Get elements by tag name
 pub fn getElementsByTag(root_node: *z.DomNode, tag: z.HtmlTag, allocator: std.mem.Allocator) ![]const *z.HTMLElement {
     var context = MultipleTagContext.init(allocator, tag);
     defer context.deinit();
@@ -268,7 +374,11 @@ pub fn getElementsByTag(root_node: *z.DomNode, tag: z.HtmlTag, allocator: std.me
         }
     }.cb;
 
-    lxb_dom_node_simple_walk(root_node, callback, &context);
+    lxb_dom_node_simple_walk(
+        root_node,
+        callback,
+        &context,
+    );
     return context.results.toOwnedSlice();
 }
 

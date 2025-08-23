@@ -19,7 +19,7 @@ pub fn tagName(element: *HTMLElement) []const u8 {
 ## Potential Failure Scenario
 
 ```zig
-const element = try createElement(doc, "div", &.{});
+const element = try createElementAttr(doc, "div", &.{});
 const tag_name = tagName(element);  // Points to lexbor's memory
 destroyNode(elementToNode(element));       // lexbor frees its memory
 // tag_name is now a dangling pointer! 💥
