@@ -6,23 +6,9 @@ const z = @import("../zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
-// from lexbor source: /tag/const.h
-pub const LXB_TAG_TEMPLATE: u32 = 179; // From lexbor source
-pub const LXB_TAG_STYLE: u32 = 171;
-pub const LXB_TAG_SCRIPT: u32 = 162;
-
-/// [HtmlTag] Optional: Parse string to HtmlTag (inline)
-pub fn parseTag(name: []const u8) ?HtmlTag {
-    return stringToEnum(HtmlTag, name);
-    // inline for (std.meta.fields(HtmlTag)) |field| {
-    //     if (std.mem.eql(u8, field.name, name)) {
-    //         return @enumFromInt(field.value);
-    //     }
-    // }
-    // return null;
-}
-
-/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements (`Zig` code: std.meta.stringToCode` with a higher limit).
+/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements
+///
+/// (`Zig` code: std.meta.stringToCode` with a higher limit).
 pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
     if (@typeInfo(T).@"enum".fields.len <= 112) {
         const kvs = comptime build_kvs: {
@@ -45,10 +31,17 @@ pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
     }
 }
 
+test "parseTag" {
+    try testing.expect(parseTag("div") == .div);
+    try testing.expect(parseTag("span") == .span);
+    try testing.expect(parseTag("SPAN") == .span);
+    try testing.expect(parseTag("unknown") == null);
+}
+
 /// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
-pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
+pub inline fn parseTag(qualified_name: []const u8) ?HtmlTag {
     // Fast path: try direct enum lookup (most common case - lowercase)
-    if (parseTag(qualified_name)) |tag| {
+    if (stringToEnum(HtmlTag, qualified_name)) |tag| {
         return tag;
     }
 
@@ -57,7 +50,7 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
 
     const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
-    if (parseTag(lowercase_name)) |tag| {
+    if (stringToEnum(HtmlTag, lowercase_name)) |tag| {
         return tag;
     }
 
@@ -72,27 +65,13 @@ pub inline fn fromQualifiedName(qualified_name: []const u8) ?HtmlTag {
 /// [HtmlTag] Convert element to HtmlTag enum (inline)
 pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
     const qualified_name = z.qualifiedName_zc(element);
-    return stringToEnum(HtmlTag, qualified_name);
+    return parseTag(qualified_name);
 }
 
 /// [HtmlTag] Tag name matcher function
 pub fn matchesTagName(element: *z.HTMLElement, tag_name: []const u8) bool {
     const tag = z.parseTag(z.qualifiedName_zc(element));
-    const target_tag = parseTag(tag_name); // Safe for immediate use
-    return tag == target_tag;
-}
-
-/// Helper to parse HTML tag with case conversion
-pub fn parseTagInsensitive(allocator: std.mem.Allocator, tag_name: []const u8) !?z.HtmlTag {
-    // Convert to lowercase for parsing
-    var lowercase_name = try allocator.alloc(u8, tag_name.len);
-    defer allocator.free(lowercase_name);
-
-    for (tag_name, 0..) |c, i| {
-        lowercase_name[i] = std.ascii.toLower(c);
-    }
-
-    return z.parseTag(lowercase_name);
+    return tag == parseTag(tag_name);
 }
 
 /// [HtmlTag] Enum that represents the various HTML tags.
@@ -416,6 +395,16 @@ pub const FragmentContext = enum {
     }
 };
 
+test "FragmentContext" {
+    // const doc = try z.createDocument();
+    // defer z.destroyDocument(doc);
+    // const fragment = try z.createDocumentFragment(doc);
+
+    try testing.expectEqualStrings(FragmentContext.toTagName(.body), "body");
+    try testing.expectEqualStrings(FragmentContext.toTagName(.table), "table");
+    try testing.expect(FragmentContext.toTag("div").? == .div);
+}
+
 /// [HtmlTag] Set of void elements
 pub const VoidTagSet = struct {
     /// Fast inline check if a tag is void
@@ -426,6 +415,13 @@ pub const VoidTagSet = struct {
         };
     }
 };
+
+test "VoidTagSet" {
+    try testing.expect(VoidTagSet.contains(.br));
+    try testing.expect(VoidTagSet.contains(.img));
+    try testing.expect(VoidTagSet.contains(.input));
+    try testing.expect(!VoidTagSet.contains(.div));
+}
 
 /// [HtmlTag] Set of whitespace preserved elements
 pub const WhitespacePreserveTagSet = struct {
@@ -498,7 +494,7 @@ pub const NoEscapeTagSet = struct {
 ///---
 pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
     const qualified_name = z.qualifiedName_zc(element);
-    const tag = fromQualifiedName(qualified_name) orelse return false;
+    const tag = parseTag(qualified_name) orelse return false;
     return NoEscapeTagSet.contains(tag);
 }
 
@@ -510,7 +506,7 @@ pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
 /// **Use when:** You already have the qualified name string
 /// **Performance:** Fast (enum lookup), requires qualified name parameter
 pub fn isVoidElement(qualified_name: []const u8) bool {
-    const tag = fromQualifiedName(qualified_name) orelse return false;
+    const tag = parseTag(qualified_name) orelse return false;
     return VoidTagSet.contains(tag);
 }
 
@@ -561,19 +557,19 @@ pub fn isNoEscapeElementExtended(element: *z.HTMLElement, custom_no_escape_tags:
 // =================================================================
 // === Tests ===
 
-test "fromQualifiedName enum conversion" {
+test "parseTag enum conversion" {
     // Test standard HTML tags
-    try testing.expect(fromQualifiedName("div").? == HtmlTag.div);
-    try testing.expect(fromQualifiedName("p").? == HtmlTag.p);
-    try testing.expect(fromQualifiedName("script").? == HtmlTag.script);
+    try testing.expect(parseTag("div").? == HtmlTag.div);
+    try testing.expect(parseTag("p").? == HtmlTag.p);
+    try testing.expect(parseTag("script").? == HtmlTag.script);
 
     // Test custom elements
-    try testing.expect(fromQualifiedName("custom-element") == null);
-    try testing.expect(fromQualifiedName("my-widget") == null);
+    try testing.expect(parseTag("custom-element") == null);
+    try testing.expect(parseTag("my-widget") == null);
 
     // Test namespaced elements
-    try testing.expect(fromQualifiedName("svg:circle") == null);
-    try testing.expect(fromQualifiedName("math:equation") == null);
+    try testing.expect(parseTag("svg:circle") == null);
+    try testing.expect(parseTag("math:equation") == null);
 }
 
 // test "custom elements and web components" {

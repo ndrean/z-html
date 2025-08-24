@@ -25,7 +25,20 @@ pub const Err = @import("errors.zig").LexborError;
 // ==========================================================
 pub const Action = walker.Action;
 
+// =========================================================
+// Status codes & constants
+
 pub const LXB_STATUS_OK: usize = 0;
+// from lexbor source: /tag/const.h
+pub const LXB_TAG_TEMPLATE: u32 = 179; // From lexbor source
+pub const LXB_TAG_STYLE: u32 = 171;
+pub const LXB_TAG_SCRIPT: u32 = 162;
+
+pub const LXB_DOM_NODE_TYPE_ELEMENT: u32 = 1;
+pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
+pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
+
+// Collection constant
 pub var default_collection_capacity: u8 = 10;
 
 pub const TextOptions = struct {
@@ -35,7 +48,6 @@ pub const TextOptions = struct {
     keep_new_lines: bool = false,
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
-// ===========================================================
 
 //=====================================
 // Core
@@ -119,13 +131,8 @@ pub const VoidTagSet = tag.VoidTagSet;
 pub const NoEscapeTagSet = tag.NoEscapeTagSet;
 
 // from lexbor source: /tag/const.h
-pub const LXB_TAG_TEMPLATE: u32 = tag.LXB_TAG_TEMPLATE;
-pub const LXB_TAG_STYLE: u32 = tag.LXB_TAG_STYLE;
-pub const LXB_TAG_SCRIPT: u32 = tag.LXB_TAG_SCRIPT;
 
 pub const parseTag = tag.parseTag;
-pub const parseTagInsensitive = tag.parseTagInsensitive;
-pub const fromQualifiedName = tag.fromQualifiedName;
 pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
 pub const isVoidTag = tag.isVoidTag;

@@ -107,7 +107,7 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 // CREATION
 // =============================================================================
 
-/// [core] Element creation
+/// [core] Element creation with a lowercased HTML tag name
 pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
     return z.createElementAttr(doc, name, &.{});
 }
@@ -221,6 +221,8 @@ pub fn documentRoot(doc: *z.HTMLDocument) ?*z.DomNode {
 }
 
 /// [core] Returns the document
+///
+/// Useful with fragments/templates
 pub fn ownerDocument(node: *z.DomNode) *z.HTMLDocument {
     return lexbor_node_owner_document(node);
 }
@@ -1759,6 +1761,7 @@ test "trim action on whitespace containing text" {
     }
 }
 
+/// [core] Check if a text node is empty (contains only whitespace)
 pub fn isTextNodeEmpty(node: *z.DomNode) !bool {
     if (z.nodeType(node) != .text) return error.NotTextNode;
     const text = z.textContent_zc(node);

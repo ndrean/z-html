@@ -426,3 +426,31 @@ test "template normalize" {
         try testing.expect(child_nodes_after.len == 3);
     }
 }
+
+test "escape" {
+    const allocator = testing.allocator;
+
+    const html = "<script> console.log(\"hello\"); </script><div>Some <b>bold</b> text</div>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    const root = z.documentRoot(doc).?;
+
+    try z.normalizeWithOptions(
+        allocator,
+        z.nodeToElement(root).?,
+        .{
+            .trim_text = true,
+            .remove_whitespace_text_nodes = true,
+            .remove_comments = true,
+        },
+    );
+
+    const serialized = try z.serializeToString(allocator, root);
+    defer allocator.free(serialized);
+
+    print("{s}\n", .{serialized});
+    // const expected = "<html><head></head><body><div>Some <b>bold</b> text</div></body></html>";
+
+    // try testing.expectEqualStrings(expected, serialized);
+}
