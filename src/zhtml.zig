@@ -12,14 +12,17 @@ const collection = @import("modules/collection.zig");
 const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
-const smart_text = @import("modules/smart_text.zig");
+// const smart_text = @import("modules/smart_text.zig");
 const walker = @import("modules/search_attributes.zig");
 const classes = @import("modules/class_list.zig");
 const template = @import("modules/template.zig");
 const norm = @import("modules/normalize.zig");
+const text = @import("modules/text_content.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
+
+// ==========================================================
 pub const Action = walker.Action;
 
 pub const LXB_STATUS_OK: usize = 0;
@@ -32,6 +35,7 @@ pub const TextOptions = struct {
     keep_new_lines: bool = false,
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
+// ===========================================================
 
 //=====================================
 // Core
@@ -90,9 +94,8 @@ pub const qualifiedName_zc = lxb.qualifiedName_zc; // Zero-copy
 // ==================================
 pub const isNodeEmpty = lxb.isNodeEmpty;
 pub const isVoid = lxb.isVoid;
+pub const isNodeTextEmpty = lxb.isTextNodeEmpty;
 pub const isWhitespaceOnlyText = lxb.isWhitespaceOnlyText;
-pub const isWhitespaceOnlyNode = lxb.isWhitespaceOnlyNode;
-pub const isWhitespaceOnlyElement = lxb.isWhitespaceOnlyElement;
 
 //===================
 // NodeTypes
@@ -125,8 +128,9 @@ pub const parseTagInsensitive = tag.parseTagInsensitive;
 pub const fromQualifiedName = tag.fromQualifiedName;
 pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
-pub const isVoidElementFast = tag.isVoidElementFast; // Change name
-pub const isNoEscapeElementFast = tag.isNoEscapeElementFast; // change name
+pub const isVoidTag = tag.isVoidTag;
+pub const isVoidElement = tag.isVoidElement; // Change name
+pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
 
 // ===================================
@@ -136,17 +140,18 @@ pub const commentToNode = lxb.commentToNode;
 pub const nodeToComment = lxb.nodeToComment;
 pub const createComment = lxb.createComment;
 pub const destroyComment = lxb.destroyComment;
-pub const commentContent = lxb.commentContent;
-pub const commentContent_zc = lxb.commentContent_zc;
 
 //=====================================
-// Text content
+// Text  / comment content
 //=====================================
-pub const textContent = lxb.textContent;
-pub const textContent_zc = lxb.textContent_zc;
-pub const replaceText = lxb.replaceText;
-pub const setTextContent = lxb.setTextContent;
-pub const escapeHtml = lxb.escapeHtml;
+pub const commentContent = text.commentContent;
+pub const commentContent_zc = text.commentContent_zc;
+
+pub const textContent = text.textContent;
+pub const textContent_zc = text.textContent_zc;
+pub const replaceText = text.replaceText;
+pub const setTextContent = text.setTextContent;
+pub const escapeHtml = text.escapeHtml;
 
 // ====================================
 // Normalize
@@ -400,10 +405,10 @@ pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *D
 // Smart Text Processing (LazyHTML-level improvements)
 // ----------------------------------------------------------------------------
 
-pub const leadingWhitespaceSize = smart_text.leadingWhitespaceSize;
-pub const isNoEscapeTextNode = smart_text.isNoEscapeTextNode;
-pub const escapeHtmlSmart = smart_text.escapeHtmlSmart;
-pub const processTextContentSmart = smart_text.processTextContentSmart;
+// pub const leadingWhitespaceSize = smart_text.leadingWhitespaceSize;
+// pub const isNoEscapeTextNode = smart_text.isNoEscapeTextNode;
+// pub const escapeHtmlSmart = smart_text.escapeHtmlSmart;
+// pub const processTextContentSmart = smart_text.processTextContentSmart;
 
 // ***************************************************************************
 // Test all imported modules

@@ -594,8 +594,8 @@ fn nodeToHtmlWriter(node: HtmlNode, html_writer: anytype) !void {
                 try html_writer.print(" {s}=\"{s}\"", .{ attr.name, attr.value });
             }
 
-            // Check if it's a void element (self-closing) - OPTIMIZED: Use enum-based lookup
-            const is_void = z.isVoidElementFast(elem.tag);
+            // Check if it's a void element - OPTIMIZED: Use enum-based lookup
+            const is_void = z.isVoidElement(elem.tag);
 
             if (is_void and elem.children.len == 0) {
                 try html_writer.print(" />", .{});

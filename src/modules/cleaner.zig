@@ -64,7 +64,7 @@ fn cleanElementNode(allocator: std.mem.Allocator, node: *z.DomNode, options: z.T
 
     // Optional: remove empty elements with no attributes
     if (options.remove_empty_elements) {
-        if (z.isWhitespaceOnlyNode(node) and size == 0) {
+        if (z.isNodeEmpty(node) and size == 0) {
             z.destroyNode(node);
             return true;
         }
@@ -155,10 +155,10 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 fn shouldPreserveWhitespace(node: *z.DomNode) bool {
     const parent = z.parentNode(node) orelse return false;
     if (z.nodeToElement(parent)) |parent_element| {
-        const qualified_name = z.qualifiedName_zc(parent_element);
 
         // Use NoEscapeTagSet for script/style + additional whitespace-sensitive tags
-        const is_no_escape = z.isNoEscapeElementFast(qualified_name);
+        const is_no_escape = z.isNoEscapeElement(parent_element);
+        const qualified_name = z.qualifiedName_zc(parent_element);
 
         // Also preserve whitespace in <pre>, <code>, <textarea>
         const is_whitespace_sensitive = std.mem.eql(u8, qualified_name, "pre") or
