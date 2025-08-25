@@ -31,13 +31,6 @@ pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
     }
 }
 
-test "parseTag" {
-    try testing.expect(parseTag("div") == .div);
-    try testing.expect(parseTag("span") == .span);
-    try testing.expect(parseTag("SPAN") == .span);
-    try testing.expect(parseTag("unknown") == null);
-}
-
 /// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
 pub inline fn parseTag(qualified_name: []const u8) ?HtmlTag {
     // Fast path: try direct enum lookup (most common case - lowercase)
@@ -60,6 +53,13 @@ pub inline fn parseTag(qualified_name: []const u8) ?HtmlTag {
     }
 
     return null; // Unknown/custom element
+}
+
+test "parseTag" {
+    try testing.expect(parseTag("div") == .div);
+    try testing.expect(parseTag("span") == .span);
+    try testing.expect(parseTag("SPAN") == .span);
+    try testing.expect(parseTag("unknown") == null);
 }
 
 /// [HtmlTag] Convert element to HtmlTag enum (inline)
@@ -493,8 +493,7 @@ pub const NoEscapeTagSet = struct {
 /// <iframe src="..."></iframe>             ← Must NOT escape
 ///---
 pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
-    const qualified_name = z.qualifiedName_zc(element);
-    const tag = parseTag(qualified_name) orelse return false;
+    const tag = tagFromElement(element) orelse return false;
     return NoEscapeTagSet.contains(tag);
 }
 
