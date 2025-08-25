@@ -99,7 +99,7 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
         return Err.DocCreateFailed;
     };
     const status = lxb_html_document_parse(doc, html.ptr, html.len);
-    if (status != z.LXB_STATUS_OK) return Err.ParseFailed;
+    if (status != z._OK) return Err.ParseFailed;
     return doc;
 }
 
@@ -108,6 +108,12 @@ pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
 // =============================================================================
 
 /// [core] Element creation with a lowercased HTML tag name
+///
+/// ## Example
+/// ```
+/// const element = try createElement(doc, "div");
+/// ---
+/// ```
 pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
     return z.createElementAttr(doc, name, &.{});
 }
@@ -126,9 +132,8 @@ pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
 ///         .{.name = "phx-click", .value = "submit"},
 ///         .{.name = "disabled", .value= ""}
 ///     });
-///
+/// ---
 /// ```
-/// ## Signature
 pub fn createElementAttr(
     doc: *z.HTMLDocument,
     name: []const u8,
@@ -715,7 +720,7 @@ test "nextElementSibling" {
 
     var index: usize = 0;
     while (current_elt != null and index < elements.len) {
-        if (z.parseTag(z.tagName_zc(current_elt.?)) == .div) {
+        if (z.tagFromQualifiedName(z.tagName_zc(current_elt.?)) == .div) {
             const first_child = z.firstChild(elementToNode(current_elt.?));
             try testing.expectEqualStrings(
                 "#text",
@@ -2062,16 +2067,16 @@ test "isWhitespaceOnlyNode" {
     try testing.expect(!my_test);
 }
 
-test "create Html element, parseTag, custom element" {
+test "create Html element, tagFromQualifiedName, custom element" {
     const doc = try z.parseFromString("<p></p>");
     const body_node = try bodyNode(doc);
 
     const span_element = try createElementAttr(doc, "span", &.{});
     const tag = tagName_zc(span_element);
-    const span_tag = z.parseTag("span");
+    const span_tag = z.tagFromQualifiedName("span");
     try testing.expectEqualStrings(tag, "SPAN");
     try testing.expect(span_tag.? == .span);
-    try testing.expect(z.parseTag("span") == .span);
+    try testing.expect(z.tagFromQualifiedName("span") == .span);
 
     // Test custom element creation
     const custom_elt = try createElementAttr(
@@ -2082,7 +2087,7 @@ test "create Html element, parseTag, custom element" {
     const custom_tag = (tagName_zc(custom_elt));
     try testing.expectEqualStrings(custom_tag, "CUSTOM-ELEMENT");
     // not an "official" HTML tag
-    try testing.expect(z.parseTag("custom-element") == null);
+    try testing.expect(z.tagFromQualifiedName("custom-element") == null);
 
     // Add custom element to DOM and verify it exists
 

@@ -1,5 +1,6 @@
 //! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
+const log = @import("global_writer.zig");
 const lxb = @import("modules/core.zig");
 const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
@@ -18,17 +19,31 @@ const classes = @import("modules/class_list.zig");
 const template = @import("modules/template.zig");
 const norm = @import("modules/normalize.zig");
 const text = @import("modules/text_content.zig");
+const sanitize = @import("modules/sanitizer.zig");
+const parser = @import("modules/parser.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
-
-// ==========================================================
-pub const Action = walker.Action;
+pub const Writer = log.GlobalWriter;
 
 // =========================================================
-// Status codes & constants
+// General Status codes & constants & definitions
+// =========================================================
 
-pub const LXB_STATUS_OK: usize = 0;
+pub const Action = enum(c_int) {
+    /// Continue traversing the DOM tree
+    CONTINUE = 0,
+    /// Stop traversal immediately (single element searches)
+    STOP = 1,
+
+    // Convert to u32 for C callback compatibility
+    pub fn toInt(self: Action) c_int {
+        return @intFromEnum(self);
+    }
+};
+
+pub const _OK: usize = 0;
+
 // from lexbor source: /tag/const.h
 pub const LXB_TAG_TEMPLATE: u32 = 179; // From lexbor source
 pub const LXB_TAG_STYLE: u32 = 171;
@@ -37,6 +52,10 @@ pub const LXB_TAG_SCRIPT: u32 = 162;
 pub const LXB_DOM_NODE_TYPE_ELEMENT: u32 = 1;
 pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
 pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
+
+pub const LXB_DOM_NODE_TYPE_DOCUMENT = 9;
+pub const LXB_DOM_NODE_TYPE_FRAGMENT = 11;
+pub const LXB_DOM_NODE_TYPE_UNKNOWN = 0;
 
 // Collection constant
 pub var default_collection_capacity: u8 = 10;
@@ -49,20 +68,28 @@ pub const TextOptions = struct {
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
 
+pub const do_sanitize = sanitize.sanitize;
+pub const Parser = parser.Parser;
+
 //=====================================
-// Core
+// Main structs
 //=====================================
 pub const HTMLDocument = opaque {};
 pub const DomNode = opaque {};
 pub const HTMLElement = opaque {};
 pub const Comment: type = opaque {};
+pub const DocumentFragment = opaque {};
 
+//=====================================
+// Core
+//=====================================
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
 
 //=====================================
-pub const parseFromString = lxb.parseFromString;
+// Parser
 //=====================================
+pub const parseFromString = lxb.parseFromString;
 
 //=====================================
 // Create / Destroy Node / Element
@@ -81,12 +108,13 @@ pub const ownerDocument = lxb.ownerDocument;
 pub const bodyElement = lxb.bodyElement;
 pub const bodyNode = lxb.bodyNode;
 
+//=====================================
 pub const cloneNode = lxb.cloneNode;
 pub const importNode = lxb.importNode;
 
-//====================================
-// Node / Element conversions
-//====================================
+//=====================================
+// Node / Element conversions=
+//=====================================
 pub const elementToNode = lxb.elementToNode;
 pub const nodeToElement = lxb.nodeToElement;
 pub const objectToNode = lxb.objectToNode;
@@ -132,10 +160,10 @@ pub const NoEscapeTagSet = tag.NoEscapeTagSet;
 
 // from lexbor source: /tag/const.h
 
-pub const parseTag = tag.parseTag;
+pub const tagFromQualifiedName = tag.tagFromQualifiedName;
 pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
-pub const isVoidTag = tag.isVoidTag;
+pub const isVoidName = tag.isVoidName;
 pub const isVoidElement = tag.isVoidElement; // Change name
 pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
 pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
@@ -199,7 +227,6 @@ pub const HtmlParser = chunks.HtmlParser;
 // =============================================================
 // Fragment & fragment parsing
 // =============================================================
-pub const DocumentFragment = opaque {};
 pub const FragmentContext = tag.FragmentContext;
 
 pub const FragmentResult = fragments.FragmentResult;

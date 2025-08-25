@@ -33,11 +33,10 @@ pub fn fragmentToNode(fragment: *z.DocumentFragment) *z.DomNode {
 
 /// [fragment] Create a document fragment and returns a !Fragment
 ///
-/// !! lexbor behaviour does not match the browser's specs on insertion. Use `appendFragment` for this.
-///
-/// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations
-///
+/// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations.
 /// Official browser spec: when you append a fragment to the DOM, only its children are added, not the fragment itself which is destroyed.
+///
+/// Use `appendFragment()` at insert the fragment into the DOM.
 pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
     return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentParseFailed;
 }
@@ -266,7 +265,7 @@ test "simple fragment parsing" {
     }
 }
 
-test "parseFragment: template component parsing" {
+test "parseFragment: template component parsing: TO BE REVIEWED WITH APPENDFRAGMENT" {
     const allocator = testing.allocator;
 
     const component_template =
@@ -299,6 +298,21 @@ test "parseFragment: template component parsing" {
     try testing.expect(std.mem.indexOf(u8, serialized, "{{id}}") != null);
     try testing.expect(std.mem.indexOf(u8, serialized, "{{name}}") != null);
     try testing.expect(std.mem.indexOf(u8, serialized, "user-card") != null);
+    try testing.expect(!z.isNodeEmpty(result.fragment_root));
+
+    // const doc = try z.createDocument();
+    // const body_elt = try z.createElement(doc, "body");
+    // const txt = try result.serializeFlat(allocator);
+    // defer allocator.free(txt);
+
+    // z.appendFragment(z.elementToNode(body_elt), result.fragment_root);
+    // try testing.expect(!z.isNodeEmpty(result.fragment_root));
+    // const chn = try result.getNodes(allocator);
+    // defer allocator.free(chn);
+    // try testing.expect(chn.len == 1);
+    // const gch = try z.childNodes(allocator, chn[0]);
+    // defer allocator.free(gch);
+    // try testing.expect(gch.len == 3);
 }
 
 test "parseFragmentInto: multiple fragment composition" {

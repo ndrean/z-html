@@ -65,7 +65,7 @@ pub fn collectChildItems(
 
 /// [traverse] Callback to collect elements with a given HTML tag
 pub fn elementMatchCollector(element: *z.HTMLElement, tag: z.HtmlTag) ?*z.HTMLElement {
-    if (z.parseTag(z.qualifiedName_zc(element))) |element_tag| {
+    if (z.tagFromQualifiedName(z.qualifiedName_zc(element))) |element_tag| {
         if (element_tag == tag) return element;
     }
     return null;
@@ -169,11 +169,11 @@ test "DOM traversal utilities" {
 
 // returns true if element is a `P`
 fn areAllPs(element: *z.HTMLElement) bool {
-    return z.parseTag(z.qualifiedName_zc(element)).? == .p;
+    return z.tagFromQualifiedName(z.qualifiedName_zc(element)).? == .p;
 }
 
 fn areAllOfType(element: *z.HTMLElement, tag: z.HtmlTag) bool {
-    return z.parseTag(z.qualifiedName_zc(element)).? == tag;
+    return z.tagFromQualifiedName(z.qualifiedName_zc(element)).? == tag;
 }
 
 fn forEachChildNode(

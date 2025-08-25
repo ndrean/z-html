@@ -104,7 +104,7 @@ namespace lazy_html
                    { lxb_html_document_destroy(document); });
 
     auto status = lxb_html_document_parse(document, html.data, html.size);
-    if (status != LXB_STATUS_OK)
+    if (status != _OK)
     {
       throw std::runtime_error("failed to parse html document");
     }
@@ -649,7 +649,7 @@ namespace lazy_html
           std::string(reinterpret_cast<char *>(css_selector.data),
                       css_selector.size));
     }
-    if (parser->status != LXB_STATUS_OK)
+    if (parser->status != _OK)
     {
       throw std::runtime_error("failed to parse css selector");
     }
@@ -662,7 +662,7 @@ namespace lazy_html
   {
     auto parser = lxb_css_parser_create();
     auto status = lxb_css_parser_init(parser, NULL);
-    if (status != LXB_STATUS_OK)
+    if (status != _OK)
     {
       throw std::runtime_error("failed to create css parser");
     }
@@ -677,7 +677,7 @@ namespace lazy_html
 
     auto selectors = lxb_selectors_create();
     status = lxb_selectors_init(selectors);
-    if (status != LXB_STATUS_OK)
+    if (status != _OK)
     {
       throw std::runtime_error("failed to create selectors");
     }
@@ -703,10 +703,10 @@ namespace lazy_html
           {
             auto nodes_ptr = static_cast<std::vector<lxb_dom_node_t *> *>(ctx);
             nodes_ptr->push_back(node);
-            return LXB_STATUS_OK;
+            return _OK;
           },
           &nodes);
-      if (status != LXB_STATUS_OK)
+      if (status != _OK)
       {
         throw std::runtime_error("failed to run find");
       }
@@ -723,7 +723,7 @@ namespace lazy_html
   {
     auto parser = lxb_css_parser_create();
     auto status = lxb_css_parser_init(parser, NULL);
-    if (status != LXB_STATUS_OK)
+    if (status != _OK)
     {
       throw std::runtime_error("failed to create css parser");
     }
@@ -738,7 +738,7 @@ namespace lazy_html
 
     auto selectors = lxb_selectors_create();
     status = lxb_selectors_init(selectors);
-    if (status != LXB_STATUS_OK)
+    if (status != _OK)
     {
       throw std::runtime_error("failed to create selectors");
     }
@@ -762,10 +762,10 @@ namespace lazy_html
           {
             auto nodes_ptr = static_cast<std::vector<lxb_dom_node_t *> *>(ctx);
             nodes_ptr->push_back(node);
-            return LXB_STATUS_OK;
+            return _OK;
           },
           &nodes);
-      if (status != LXB_STATUS_OK)
+      if (status != _OK)
       {
         throw std::runtime_error("failed to run match");
       }

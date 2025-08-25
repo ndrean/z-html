@@ -6,9 +6,9 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
+const print = std.debug.print;
 
 const testing = std.testing;
-const print = std.debug.print;
 
 const lxbString = extern struct {
     data: ?[*]u8, // Pointer to string data
@@ -32,7 +32,7 @@ pub fn serializeToString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     };
 
     const status = lxb_html_serialize_tree_str(node, &str);
-    if (status != z.LXB_STATUS_OK) {
+    if (status != z._OK) {
         return Err.SerializeFailed;
     }
 
@@ -57,7 +57,7 @@ pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     };
 
     const status = lxb_html_serialize_str(node, &str);
-    if (status != z.LXB_STATUS_OK) {
+    if (status != z._OK) {
         return Err.SerializeFailed;
     }
 

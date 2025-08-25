@@ -57,7 +57,7 @@ pub const ChunkParser = struct {
             return Err.ChunkBeginFailed;
         }
         self.parsing_active = true;
-        if (lxb_html_parser_init(self.parser) != z.LXB_STATUS_OK) {
+        if (lxb_html_parser_init(self.parser) != z._OK) {
             return Err.ParserInitFailed;
         }
         self.parsing_active = true;
@@ -94,10 +94,6 @@ pub const ChunkParser = struct {
     pub fn getDocument(self: *ChunkParser) *z.HTMLDocument {
         return self.doc;
     }
-
-    // pub fn getHtmlDocument(self: *ChunkParser) z.Document {
-    //     return .{ .doc = self.doc };
-    // }
 };
 
 test "chunks1" {

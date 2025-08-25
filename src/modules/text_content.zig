@@ -1,11 +1,10 @@
 //! Text content manipulation functions
 const std = @import("std");
 const z = @import("../zhtml.zig");
-
+const print = std.debug.print;
 const Err = z.Err;
 
 const testing = std.testing;
-const print = std.debug.print;
 
 extern "c" fn lxb_dom_node_text_content(node: *z.DomNode, len: ?*usize) ?[*:0]u8;
 extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const u8, len: usize) u8;
@@ -81,7 +80,7 @@ pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
         content.ptr,
         content.len,
     );
-    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+    if (status != z._OK) return Err.SetTextContentFailed;
 }
 
 test "setTextContent" {
@@ -143,7 +142,7 @@ pub fn replaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []cons
         current_len, // Replace entire content
     );
 
-    if (status != z.LXB_STATUS_OK) return Err.SetTextContentFailed;
+    if (status != z._OK) return Err.SetTextContentFailed;
 }
 
 test "replaceTextContent" {

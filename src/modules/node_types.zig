@@ -6,12 +6,12 @@ const print = std.debug.print;
 
 /// Node types enum for easy comparison
 pub const NodeType = enum(u8) {
-    element = 1,
-    text = 3,
-    comment = 8,
-    document = 9,
-    fragment = 11,
-    unknown = 0,
+    element = z.LXB_DOM_NODE_TYPE_ELEMENT,
+    text = z.LXB_DOM_NODE_TYPE_TEXT,
+    comment = z.LXB_DOM_NODE_TYPE_COMMENT,
+    document = z.LXB_DOM_NODE_TYPE_DOCUMENT,
+    fragment = z.LXB_DOM_NODE_TYPE_FRAGMENT,
+    unknown = z.LXB_DOM_NODE_TYPE_UNKNOWN,
 };
 
 /// [node_types] Get node type for enum comparison (Inlined)

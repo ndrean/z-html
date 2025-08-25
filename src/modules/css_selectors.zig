@@ -75,7 +75,7 @@ pub const CssSelectorEngine = struct {
     pub fn init(allocator: std.mem.Allocator) !Self {
         const parser = lxb_css_parser_create() orelse return Err.CssParserCreateFailed;
 
-        if (lxb_css_parser_init(parser, null) != z.LXB_STATUS_OK) {
+        if (lxb_css_parser_init(parser, null) != z._OK) {
             _ = lxb_css_parser_destroy(parser, true);
             return Err.CssParserInitFailed;
         }
@@ -85,7 +85,7 @@ pub const CssSelectorEngine = struct {
             return Err.CssSelectorsCreateFailed;
         };
 
-        if (lxb_selectors_init(selectors) != z.LXB_STATUS_OK) {
+        if (lxb_selectors_init(selectors) != z._OK) {
             _ = lxb_selectors_destroy(selectors, true);
             _ = lxb_css_parser_destroy(parser, true);
             return Err.CssSelectorsInitFailed;
@@ -172,7 +172,7 @@ pub const CssSelectorEngine = struct {
         );
 
         // Accept both success and our early stopping code
-        if (status != z.LXB_STATUS_OK and status != 0x7FFFFFFF) {
+        if (status != z._OK and status != 0x7FFFFFFF) {
             return Err.CssSelectorFindFailed;
         }
 
@@ -198,7 +198,7 @@ pub const CssSelectorEngine = struct {
             &context,
         );
 
-        if (status != z.LXB_STATUS_OK) {
+        if (status != z._OK) {
             return Err.CssSelectorFindFailed;
         }
 
@@ -253,7 +253,7 @@ pub const CssSelectorEngine = struct {
             &context,
         );
 
-        if (status != z.LXB_STATUS_OK) {
+        if (status != z._OK) {
             return Err.CssSelectorMatchFailed;
         }
 
@@ -297,7 +297,7 @@ pub const CssSelectorEngine = struct {
                 findCallback,
                 &context,
             );
-            if (status != z.LXB_STATUS_OK) {
+            if (status != z._OK) {
                 return Err.CssSelectorFindFailed;
             }
         }
@@ -330,7 +330,7 @@ pub const CssSelectorEngine = struct {
                     findCallback,
                     &context,
                 );
-                if (status != z.LXB_STATUS_OK) {
+                if (status != z._OK) {
                     return Err.CssSelectorMatchFailed;
                 }
             }
@@ -367,7 +367,7 @@ fn findCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopa
     const context: *FindContext = @ptrCast(@alignCast(ctx.?));
     context.results.append(node) catch return 1; // Return error status on allocation failure
 
-    return z.LXB_STATUS_OK;
+    return z._OK;
 }
 
 // Special context for early stopping (nodes)
@@ -411,7 +411,7 @@ fn findFirstElementCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, c
         return 0x7FFFFFFF; // Large positive number to indicate early stop
     }
 
-    return z.LXB_STATUS_OK; // Continue searching
+    return z._OK; // Continue searching
 }
 
 //=============================================================================

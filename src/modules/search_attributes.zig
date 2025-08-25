@@ -7,8 +7,8 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
-
 const print = std.debug.print;
+
 const testing = std.testing;
 
 // Fast DOM traversal for optimized search
@@ -39,14 +39,14 @@ pub const Action = enum(u32) {
     STOP = 1,
 
     // Convert to u32 for C callback compatibility
-    pub fn toU32(self: Action) u32 {
+    pub fn toInt(self: Action) u32 {
         return @intFromEnum(self);
     }
 };
 
 test "walker action enum clarity" {
-    try testing.expect(Action.CONTINUE.toU32() == 0);
-    try testing.expect(Action.STOP.toU32() == 1);
+    try testing.expect(Action.CONTINUE.toInt() == 0);
+    try testing.expect(Action.STOP.toInt() == 1);
 }
 
 // === single ===
@@ -67,20 +67,20 @@ pub fn getElementById(root_node: *z.DomNode, id: []const u8) ?*z.HTMLElement {
     // callback expects a u32 return type
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(IdContext, ctx);
 
-            if (!z.hasAttribute(element, "id")) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, "id")) return Action.CONTINUE.toInt();
             const id_value = z.getElementId_zc(element);
 
             if (std.mem.eql(u8, id_value, search_ctx.target_id)) {
                 search_ctx.found_element = element;
-                return Action.STOP.toU32();
+                return Action.STOP.toInt();
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -102,19 +102,19 @@ pub fn getElementByClass(root_node: *z.DomNode, class_name: []const u8) ?*z.HTML
     // callback expects a u32 return type
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(ClassContext, ctx);
 
-            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toInt();
 
             if (z.hasClass(element, search_ctx.target_class)) {
                 search_ctx.found_element = element;
-                return Action.STOP.toU32();
+                return Action.STOP.toInt();
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -136,18 +136,18 @@ pub fn getElementByTag(root_node: *z.DomNode, tag: z.HtmlTag) ?*z.HTMLElement {
     // callback expects a u32 return type
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(TagContext, ctx);
             const element_tag = z.tagFromElement(element);
 
             if (element_tag == search_ctx.target_tag) {
                 search_ctx.found_element = element;
-                return Action.STOP.toU32();
+                return Action.STOP.toInt();
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -176,20 +176,20 @@ pub fn getElementByAttribute(
 
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(AttrContext, ctx);
 
-            if (!z.hasAttribute(element, search_ctx.attr_name)) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, search_ctx.attr_name)) return Action.CONTINUE.toInt();
 
             if (search_ctx.attr_value) |expected| {
-                const actual = z.getAttribute_zc(element, search_ctx.attr_name) orelse return Action.CONTINUE.toU32();
-                if (!std.mem.eql(u8, actual, expected)) return Action.CONTINUE.toU32();
+                const actual = z.getAttribute_zc(element, search_ctx.attr_name) orelse return Action.CONTINUE.toInt();
+                if (!std.mem.eql(u8, actual, expected)) return Action.CONTINUE.toInt();
             }
 
             search_ctx.found_element = element;
-            return Action.STOP.toU32();
+            return Action.STOP.toInt();
         }
     }.cb;
 
@@ -318,18 +318,18 @@ pub fn getElementsByClass(
 
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(MultipleClassContext, ctx);
 
-            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toInt();
 
             if (z.hasClass(element, search_ctx.target_class)) {
                 search_ctx.results.append(element) catch {}; // Ignore allocation errors
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -360,8 +360,8 @@ pub fn getElementsByTag(root_node: *z.DomNode, tag: z.HtmlTag, allocator: std.me
 
     const callback = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const search_ctx = castContext(MultipleTagContext, ctx);
             const element_tag = z.tagFromElement(element);
@@ -370,7 +370,7 @@ pub fn getElementsByTag(root_node: *z.DomNode, tag: z.HtmlTag, allocator: std.me
                 search_ctx.results.append(element) catch {}; // Ignore allocation errors
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -410,7 +410,7 @@ fn AllChildren(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) ![]const 
                 context.elements.append(z.nodeToElement(node).?) catch {};
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -430,7 +430,7 @@ fn AllChildNodes(allocator: std.mem.Allocator, root_node: *z.DomNode) ![]const *
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
             const context = castContext(ChildContext, ctx);
             context.nodes.append(node) catch {};
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -490,13 +490,13 @@ pub fn processAllElements(root_node: *z.DomNode, processor: *const fn (*z.HTMLEl
 
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const proc_ctx = castContext(ProcessAllContext, context);
             proc_ctx.processor(element);
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -539,13 +539,13 @@ pub fn removeAttributeFromAll(root_node: *z.DomNode, attr_name: []const u8) void
 
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const remove_ctx = castContext(RemoveAttrContext, context);
             z.removeAttribute(element, remove_ctx.attr_name) catch {};
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -601,26 +601,26 @@ const IdSearchContext = struct {
 ///
 /// Returns STOP when ID is found, CONTINUE to keep searching
 fn idWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return Action.CONTINUE.toU32();
+    if (ctx == null) return Action.CONTINUE.toInt();
 
     const search_ctx = castContext(IdSearchContext, ctx);
 
-    if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+    if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
 
-    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
-    if (!z.hasAttribute(element, "id")) return Action.CONTINUE.toU32();
+    if (!z.hasAttribute(element, "id")) return Action.CONTINUE.toInt();
 
     const id_value = z.getElementId_zc(element);
-    if (id_value.len == 0) return Action.CONTINUE.toU32();
+    if (id_value.len == 0) return Action.CONTINUE.toInt();
     const match = std.mem.eql(u8, id_value, search_ctx.target_id);
 
     if (match) {
         search_ctx.found_element = element;
-        return Action.STOP.toU32();
+        return Action.STOP.toInt();
     }
 
-    return Action.CONTINUE.toU32(); // Continue searching
+    return Action.CONTINUE.toInt(); // Continue searching
 }
 
 // -----------------------------------------------------------------------
@@ -635,24 +635,24 @@ const ClassSearchContext = struct {
 ///
 /// Returns STOP when class is found, CONTINUE to keep searching
 fn classWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return Action.CONTINUE.toU32();
+    if (ctx == null) return Action.CONTINUE.toInt();
 
     const search_ctx = castContext(ClassSearchContext, ctx);
 
-    if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+    if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
 
-    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
     // Check if this element has a class attribute
-    if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toU32();
+    if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toInt();
 
     const match = z.hasClass(element, search_ctx.target_class);
     if (match) {
         search_ctx.found_element = element;
-        return Action.STOP.toU32();
+        return Action.STOP.toInt();
     }
 
-    return Action.CONTINUE.toU32(); // Continue searching
+    return Action.CONTINUE.toInt(); // Continue searching
 }
 
 // -----------------------------------------------------------------------
@@ -670,34 +670,34 @@ const MultiElementSearchContext = struct {
 ///
 /// Always returns CONTINUE to search entire tree
 fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return Action.CONTINUE.toU32();
+    if (ctx == null) return Action.CONTINUE.toInt();
 
     const search_ctx = castContext(MultiElementSearchContext, ctx);
 
     // Only check element nodes
-    if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+    if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
 
-    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
     var matches = false;
 
     switch (search_ctx.search_type) {
         .attribute => {
             // Check if this element has the target attribute
-            if (!z.hasAttribute(element, search_ctx.target_attr_name)) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, search_ctx.target_attr_name)) return Action.CONTINUE.toInt();
 
             // If we only care about attribute existence (value is null), it matches
             if (search_ctx.target_attr_value == null) {
                 matches = true;
             } else {
                 // Otherwise, check the attribute value
-                const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return Action.CONTINUE.toU32();
+                const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return Action.CONTINUE.toInt();
                 matches = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
             }
         },
         .class => {
             // Check if this element has a class attribute
-            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toU32();
+            if (!z.hasAttribute(element, "class")) return Action.CONTINUE.toInt();
 
             matches = z.hasClass(element, search_ctx.target_class.?);
         },
@@ -708,7 +708,7 @@ fn multiElementAttributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callc
         search_ctx.results.append(element) catch {};
     }
 
-    return Action.CONTINUE.toU32(); // Always continue searching
+    return Action.CONTINUE.toInt(); // Always continue searching
 }
 
 // -----------------------------------------------------------------------
@@ -722,35 +722,35 @@ const AttributeSearchContext = struct {
 ///
 /// Returns STOP when attribute is found, CONTINUE to keep searching
 fn attributeWalkerCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    if (ctx == null) return Action.CONTINUE.toU32();
+    if (ctx == null) return Action.CONTINUE.toInt();
 
     const search_ctx = castContext(AttributeSearchContext, ctx);
 
     // Only check element nodes
-    if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
+    if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
 
-    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+    const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
     // Check if this element has the target attribute
-    if (!z.hasAttribute(element, search_ctx.target_attr_name)) return Action.CONTINUE.toU32();
+    if (!z.hasAttribute(element, search_ctx.target_attr_name)) return Action.CONTINUE.toInt();
 
     // If we only care about attribute existence (value is null), we found it
     if (search_ctx.target_attr_value == null) {
         search_ctx.found_element = element;
-        return Action.STOP.toU32();
+        return Action.STOP.toInt();
     }
 
     // Otherwise, check the attribute value
-    const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return Action.CONTINUE.toU32();
+    const attr_value = z.getAttribute_zc(element, search_ctx.target_attr_name) orelse return Action.CONTINUE.toInt();
 
     const match = std.mem.eql(u8, attr_value, search_ctx.target_attr_value.?);
 
     if (match) {
         search_ctx.found_element = element;
-        return Action.STOP.toU32(); // Found it! Stop traversal
+        return Action.STOP.toInt(); // Found it! Stop traversal
     }
 
-    return Action.CONTINUE.toU32(); // Continue searching
+    return Action.CONTINUE.toInt(); // Continue searching
 }
 
 // -------------------------------------------------------------------
@@ -1058,11 +1058,11 @@ fn compWalk(
     // follows the pattern needed by lexbor simple_walker callback with the context casted.
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (context == null) return Action.CONTINUE.toU32();
+            if (context == null) return Action.CONTINUE.toInt();
 
             const walker_context = castContext(WalkCtxType, context);
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const matches = walker_context.matcher(element, walker_context.spec);
 
@@ -1072,10 +1072,10 @@ fn compWalk(
                     walker_context.spec.data += 1;
                 }
                 walker_context.results.append(element) catch {};
-                return Action.CONTINUE.toU32();
+                return Action.CONTINUE.toInt();
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -1105,11 +1105,11 @@ fn runtimeWalk(
 
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (context == null) return Action.CONTINUE.toU32();
+            if (context == null) return Action.CONTINUE.toInt();
 
             const walker_context = castContext(WalkCtxType, context);
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const matches = walker_context.matcher(element, walker_context.spec);
 
@@ -1118,10 +1118,10 @@ fn runtimeWalk(
                     proc(element, walker_context.spec);
                 }
                 walker_context.results.append(element) catch {};
-                return Action.CONTINUE.toU32();
+                return Action.CONTINUE.toInt();
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -1348,11 +1348,11 @@ fn comptime_walker(
 
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (context == null) return Action.CONTINUE.toU32();
+            if (context == null) return Action.CONTINUE.toInt();
 
             const walker_context = castContext(WalkerContextType, context);
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             const matches = walker_context.predicate(element, walker_context.spec);
 
@@ -1364,19 +1364,19 @@ fn comptime_walker(
                 switch (walker_context.spec.mode) {
                     .single => {
                         walker_context.result = element;
-                        return Action.STOP.toU32();
+                        return Action.STOP.toInt();
                     },
                     .multiple => {
                         walker_context.results.append(element) catch {};
-                        return Action.CONTINUE.toU32();
+                        return Action.CONTINUE.toInt();
                     },
                     .process => {
-                        return Action.CONTINUE.toU32();
+                        return Action.CONTINUE.toInt();
                     },
                 }
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -1413,12 +1413,12 @@ fn runtime_walker(
 
     const callback = struct {
         fn cb(node: *z.DomNode, context: ?*anyopaque) callconv(.C) u32 {
-            if (context == null) return Action.CONTINUE.toU32();
+            if (context == null) return Action.CONTINUE.toInt();
 
             // Cast to the correct context type
             const walker_context = castContext(RTWalkCtxType, context);
-            if (!z.isTypeElement(node)) return Action.CONTINUE.toU32();
-            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toU32();
+            if (!z.isTypeElement(node)) return Action.CONTINUE.toInt();
+            const element = z.nodeToElement(node) orelse return Action.CONTINUE.toInt();
 
             // Call predicate with the spec
             const matches = walker_context.predicate(element, walker_context.spec);
@@ -1432,19 +1432,19 @@ fn runtime_walker(
                 switch (walker_context.spec.mode) {
                     .single => {
                         walker_context.results.append(element) catch {};
-                        return Action.STOP.toU32();
+                        return Action.STOP.toInt();
                     },
                     .multiple => {
                         walker_context.results.append(element) catch {};
-                        return Action.CONTINUE.toU32();
+                        return Action.CONTINUE.toInt();
                     },
                     .process => {
-                        return Action.CONTINUE.toU32();
+                        return Action.CONTINUE.toInt();
                     },
                 }
             }
 
-            return Action.CONTINUE.toU32();
+            return Action.CONTINUE.toInt();
         }
     }.cb;
 

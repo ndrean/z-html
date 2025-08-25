@@ -1,4 +1,8 @@
 //! Node.normalize utilities for DOM and HTML elements
+//!
+//! A two step process:
+//! - traverse the fragment DOM (`simple_walk`) to collect elements to normalize
+//! - apply normalization to the collected elements
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
@@ -10,7 +14,7 @@ const print = std.debug.print;
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(
     root: *z.DomNode,
-    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) u32,
+    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) c_int,
     ctx: ?*anyopaque,
 ) void;
 
@@ -28,7 +32,7 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
     var context = NormCtx{ .allocator = allocator };
 
     const callback = struct {
-        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
+        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
             const ctx_ptr: *NormCtx = castContext(NormCtx, ctx);
             if (z.isTypeText(node)) {
                 const text_content = z.textContent_zc(node);
@@ -38,11 +42,11 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
                     &std.ascii.whitespace,
                 );
                 z.replaceText(ctx_ptr.allocator, node, trimmed, .{}) catch {
-                    return z.Action.CONTINUE.toU32();
+                    return z.Action.CONTINUE.toInt();
                 };
             }
 
-            return z.Action.CONTINUE.toU32();
+            return z.Action.CONTINUE.toInt();
         }
     }.cb;
 
@@ -69,21 +73,13 @@ test "removeOuterWhitespaceTextNodes" {
 /// Trims text nodes only and removes empty text nodes for non-special elements (not `<script>` or `<style>`)
 ///
 /// Use `normalizeWithOptions` to customize behavior:
-pub fn normalize(
-    allocator: std.mem.Allocator,
-    root_elt: *z.HTMLElement,
-) (std.mem.Allocator.Error || z.Err)!void {
-    return normalizeWithOptions(
-        allocator,
-        root_elt,
-        .{},
-    );
+pub fn normalize(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) (std.mem.Allocator.Error || z.Err)!void {
+    return normalizeWithOptions(allocator, root_elt, .{});
 }
 
 pub const NormalizeOptions = struct {
-    remove_comments: bool = false,
+    skip_comments: bool = false,
     remove_whitespace_text_nodes: bool = true,
-    /// Trim whitespace from merged text nodes
     trim_text: bool = true,
     preserve_special_elements: bool = true,
 };
@@ -128,7 +124,7 @@ const Context = struct {
         var current = z.parentNode(node);
         while (current) |parent| {
             if (z.nodeToElement(parent)) |element| {
-                const tag = z.parseTag(z.qualifiedName_zc(element)) orelse return false;
+                const tag = z.tagFromQualifiedName(z.qualifiedName_zc(element)) orelse return false;
                 if (z.WhitespacePreserveTagSet.contains(tag)) {
                     return true;
                 }
@@ -139,82 +135,9 @@ const Context = struct {
     }
 };
 
-/// Callback function that runs on each node during the "simple_walk". Uses a "context" argument to access "external" data
-///
-/// Switch on the node type and handle accordingly for post-processing by populating the "context"
-///
-/// It is a two-step process (you can't modify the DOM during the walk):
-/// - traverse the DOM with "simple_walk" and collect nodes for post-processing
-/// - post-process the collected nodes
-fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) u32 {
-    const context_ptr: *Context = @ptrCast(@alignCast(ctx.?));
-
-    switch (z.nodeType(node)) {
-        .comment => {
-            if (context_ptr.options.remove_comments) {
-                // collect comments for post-processing
-                context_ptr.nodes_to_remove.append(node) catch {
-                    return z.Action.STOP.toU32();
-                };
-            }
-        },
-        .element => {
-            if (z.isTemplate(node)) {
-                // Collect template nodes for post-processing
-                context_ptr.template_nodes.append(node) catch {
-                    return z.Action.STOP.toU32();
-                };
-                return z.Action.CONTINUE.toU32();
-            }
-        },
-        .text => {
-            if (context_ptr.shouldPreserveWhitespace(node)) {
-                return z.Action.CONTINUE.toU32();
-            }
-
-            if (context_ptr.options.trim_text or context_ptr.options.remove_whitespace_text_nodes) {
-                const text_content = z.textContent_zc(node);
-                const trimmed = std.mem.trim(
-                    u8,
-                    text_content,
-                    &std.ascii.whitespace,
-                );
-
-                if (context_ptr.options.remove_whitespace_text_nodes) {
-                    if (trimmed.len == 0) {
-                        // collect for post-processing
-                        context_ptr.nodes_to_remove.append(node) catch {
-                            return z.Action.STOP.toU32();
-                        };
-                    }
-                }
-
-                if (std.mem.eql(u8, text_content, trimmed)) return z.Action.CONTINUE.toU32();
-
-                if (context_ptr.options.trim_text and trimmed.len > 0) {
-                    const trimmed_copy = context_ptr.allocator.dupe(u8, trimmed) catch {
-                        return z.Action.STOP.toU32();
-                    };
-                    // collect for post-processing
-                    context_ptr.text_merges.append(.{
-                        .target_node = node,
-                        .new_content = trimmed_copy,
-                    }) catch {
-                        return z.Action.STOP.toU32();
-                    };
-                }
-            }
-        },
-
-        else => {},
-    }
-
-    return z.Action.CONTINUE.toU32();
-}
-
 /// [normalize] Normalize the DOM with options `NormalizeOptions`.
 ///
-/// - To remove comments, `remove_comments=true`.
+/// - To remove comments, `skip_comments=true`.
 /// - Default to preserve whitespace in specific elements (`pre`, `textarea`, `script`, `style`). Use `preserve_special_elements=false` to disable this behavior.
 /// - Default to trim whitespace from merged text nodes.
 /// - Default to remove empty text nodes.
@@ -237,6 +160,79 @@ pub fn normalizeWithOptions(
         &context,
         options,
     );
+}
+
+/// Callback function in `lexbor` format that runs on each node during the "simple_walk". Uses a "context" argument to access "external" data
+///
+/// Switch on the node type and collects for post-processing by populating the "context"
+///
+/// It is a two-step process (you can't modify the DOM during the walk):
+/// - traverse the DOM with "simple_walk" and collect nodes for post-processing
+/// - post-process the collected nodes
+fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
+    const context_ptr: *Context = castContext(Context, ctx);
+
+    switch (z.nodeType(node)) {
+        .comment => {
+            if (context_ptr.options.skip_comments) {
+                // collect comments for post-processing
+                context_ptr.nodes_to_remove.append(node) catch {
+                    return z.Action.STOP.toInt();
+                };
+            }
+        },
+        .element => {
+            if (z.isTemplate(node)) {
+                // Collect template nodes for post-processing
+                context_ptr.template_nodes.append(node) catch {
+                    return z.Action.STOP.toInt();
+                };
+                return z.Action.CONTINUE.toInt();
+            }
+        },
+        .text => {
+            if (context_ptr.shouldPreserveWhitespace(node)) {
+                return z.Action.CONTINUE.toInt();
+            }
+
+            if (context_ptr.options.trim_text or context_ptr.options.remove_whitespace_text_nodes) {
+                const text_content = z.textContent_zc(node);
+                const trimmed = std.mem.trim(
+                    u8,
+                    text_content,
+                    &std.ascii.whitespace,
+                );
+
+                if (context_ptr.options.remove_whitespace_text_nodes) {
+                    if (trimmed.len == 0) {
+                        // collect for post-processing
+                        context_ptr.nodes_to_remove.append(node) catch {
+                            return z.Action.STOP.toInt();
+                        };
+                    }
+                }
+
+                if (std.mem.eql(u8, text_content, trimmed)) return z.Action.CONTINUE.toInt();
+
+                if (context_ptr.options.trim_text and trimmed.len > 0) {
+                    const trimmed_copy = context_ptr.allocator.dupe(u8, trimmed) catch {
+                        return z.Action.STOP.toInt();
+                    };
+                    // collect for post-processing
+                    context_ptr.text_merges.append(.{
+                        .target_node = node,
+                        .new_content = trimmed_copy,
+                    }) catch {
+                        return z.Action.STOP.toInt();
+                    };
+                }
+            }
+        },
+
+        else => {},
+    }
+
+    return z.Action.CONTINUE.toInt();
 }
 
 fn PostWalkOperations(
@@ -318,7 +314,7 @@ test "normalize, context preservation, comments removed" {
             NormalizeOptions{
                 .trim_text = true,
                 .remove_whitespace_text_nodes = true,
-                .remove_comments = true,
+                .skip_comments = true,
             },
         );
 
@@ -346,7 +342,7 @@ test "normalize, context preservation, comments removed" {
             NormalizeOptions{
                 .trim_text = true,
                 .remove_whitespace_text_nodes = true,
-                .remove_comments = false,
+                .skip_comments = false,
             },
         );
 
@@ -404,7 +400,7 @@ test "template normalize" {
             .{
                 .trim_text = true,
                 .remove_whitespace_text_nodes = true,
-                .remove_comments = true,
+                .skip_comments = true,
             },
         );
 
@@ -442,7 +438,7 @@ test "escape" {
         .{
             .trim_text = true,
             .remove_whitespace_text_nodes = true,
-            .remove_comments = true,
+            .skip_comments = true,
         },
     );
 

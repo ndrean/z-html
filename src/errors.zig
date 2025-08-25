@@ -5,6 +5,7 @@ pub const LexborError = error{
     CreateElementFailed,
     CreateTextNodeFailed,
     FragmentParseFailed,
+    FragmentEmpty,
     InsertChildFailed,
     CollectionFailed,
     SearchFailed,
@@ -40,4 +41,5 @@ pub const LexborError = error{
     InvalidPosition,
     InvalidClassName,
     ImportNodeFailed,
+    SerializationFailed,
 };
