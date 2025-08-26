@@ -175,6 +175,8 @@ From the HTML string:
 
 You can output a nice colourful log:
 
+<img width="305" height="395" alt="Screenshot 2025-08-26 at 19 48 34" src="https://github.com/user-attachments/assets/4081b736-0015-4a8e-997f-a886912c0e7b" />
+
 ### DOM tree: tuple and W3C JSON
 
 - the tuple version: `{tagName, attributes, children}`
