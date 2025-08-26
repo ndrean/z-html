@@ -1,5 +1,6 @@
 //! List of errors
 pub const LexborError = error{
+    AllocationFailed,
     DocCreateFailed,
     ParseFailed,
     CreateElementFailed,

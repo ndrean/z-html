@@ -6,31 +6,34 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
-const print = std.debug.print;
+const print = z.Writer.print;
 
 const testing = std.testing;
+
+const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
 
 const lxbString = extern struct {
     data: ?[*]u8, // Pointer to string data
     length: usize, // String length
-    size: usize, // Allocated size
+    size: usize, // lexbor Allocated size
 };
 
 extern "c" fn lxb_html_serialize_tree_str(node: *z.DomNode, str: *lxbString) usize;
-extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
-extern "c" fn lxb_html_element_inner_html_set(body: *z.HTMLElement, inner: [*]const u8, inner_len: usize) *z.HTMLElement;
 
-/// [Serialize] Serialize the node tree (most common use case).
-///
-///
-/// Caller needs to free the returned slice.
+extern "c" fn lxb_html_serialize_pretty_tree_cb(
+    node: *z.DomNode,
+    opt: usize,
+    indent: usize,
+    cb: *const fn ([*:0]const u8, len: usize, ctx: *anyopaque) callconv(.C) c_int,
+    ctx: ?*anyopaque,
+) c_int;
+
 pub fn serializeToString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-    var str: lxbString = .{
+    var str = lxbString{
         .data = null,
         .length = 0,
         .size = 0,
     };
-
     const status = lxb_html_serialize_tree_str(node, &str);
     if (status != z._OK) {
         return Err.SerializeFailed;
@@ -39,37 +42,181 @@ pub fn serializeToString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     if (str.data == null or str.length == 0) {
         return Err.NoBodyElement;
     }
-
     const result = try allocator.alloc(u8, str.length);
     @memcpy(result, str.data.?[0..str.length]);
 
     return result;
 }
 
-/// [Serialize] Serializes _only_ the current node
-///
-/// Caller needs to free the returned slice.
-pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-    var str: lxbString = .{
-        .data = null,
-        .length = 0,
-        .size = 0,
-    };
+// pub fn prettyPrintFirstTest(node: *z.DomNode, ctx: PrintCtx) c_int {
+//     var mut_ctx = ctx;
+//     const prettyPrintCB = struct {
+//         fn cb(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv(.C) c_int {
+//             _ = len;
+//             _ = context;
+//             const l = std.mem.len(data);
 
-    const status = lxb_html_serialize_str(node, &str);
-    if (status != z._OK) {
-        return Err.SerializeFailed;
-    }
+//             if (std.mem.eql(u8, data[0..l], "body")) {
+//                 print("{s}{s}{s}", .{ z.Colour.code(.GREEN), data, z.Colour.code(.RESET) });
+//             } else if (std.mem.eql(u8, data[0..l], "p")) {
+//                 print("{s}{s}{s}", .{ z.Colour.code(.YELLOW), data, z.Colour.code(.RESET) });
+//             } else if (std.mem.eql(u8, data[0..l], "<") or std.mem.eql(u8, data[0..l], "</") or std.mem.eql(u8, data[0..l], ">")) {
+//                 print("{s}{s}{s}", .{ z.Colour.code(.WHITE), data, z.Colour.code(.RESET) });
+//             } else {
+//                 print("{s}", .{data});
+//             }
+//             return 0;
+//         }
+//     }.cb;
 
-    if (str.data == null or str.length == 0) {
-        return Err.NoBodyElement;
-    }
+//     return lxb_html_serialize_pretty_tree_cb(
+//         node,
+//         ctx.opt,
+//         ctx.indent,
+//         prettyPrintCB,
+//         &mut_ctx,
+//     );
+// }
 
-    const result = try allocator.alloc(u8, str.length);
-    @memcpy(result, str.data.?[0..str.length]);
-
-    return result;
+fn prettyPrint(node: *z.DomNode) c_int {
+    return prettyPrintOpt(node, defaultStyler, PrintCtx.init(0));
 }
+
+fn prettyPrintOpt(
+    node: *z.DomNode,
+    styler: *const fn (data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv(.C) c_int,
+    ctx: PrintCtx,
+) c_int {
+    var mut_ctx = ctx;
+    return lxb_html_serialize_pretty_tree_cb(
+        node,
+        mut_ctx.opt,
+        mut_ctx.indent,
+        styler,
+        &mut_ctx,
+    );
+}
+
+fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv(.C) c_int {
+    const ctx_ptr: *PrintCtx = @ptrCast(@alignCast(context.?));
+    const text = data[0..len];
+
+    if (z.isWhitespaceOnlyText(text) or std.mem.eql(u8, text, "=\"")) {
+        print("{s}", .{text});
+        return 0;
+    }
+
+    if (std.mem.eql(u8, text, "<") or std.mem.eql(u8, text, ">") or std.mem.eql(u8, text, "</") or std.mem.eql(u8, text, "/>")) {
+        ctx_ptr.expect_attr_value = false; // Reset state
+        applyStyle(z.SyntaxStyle.brackets, text);
+        return 0;
+    }
+
+    const maybeTagStyle = z.getStyleForElement(text);
+
+    // 2. Handle HTML elements/tags
+    if (len > 0 and !z.isWhitespaceOnlyText(text) and maybeTagStyle != null) {
+        // print("\nis TAG ----: {s}\n", .{text});
+        ctx_ptr.expect_attr_value = false; // Reset state
+        applyStyle(maybeTagStyle.?, text);
+        return 0;
+    }
+
+    const isAttr = z.isKnownAttribute(text);
+
+    // 3. Handle known attributes
+    if (len > 0 and !z.isWhitespaceOnlyText(text) and isAttr) {
+        ctx_ptr.expect_attr_value = true; // Set flag for potential value
+        applyStyle(z.SyntaxStyle.attributes, text);
+        return 0;
+    }
+
+    //  Handle equals sign  (tricky =" !!)
+    if (ctx_ptr.expect_attr_value and len > 0 and !z.isWhitespaceOnlyText(text) and std.mem.eql(u8, text, "=\"")) {
+        applyStyle(z.SyntaxStyle.attr_equals, text);
+        return 0;
+    }
+
+    // 5. Handle attribute values
+    if (ctx_ptr.expect_attr_value and len > 0 and !z.isWhitespaceOnlyText(text)) {
+        ctx_ptr.expect_attr_value = false; // Reset after consuming value
+        applyStyle(z.SyntaxStyle.attr_values, text);
+        return 0;
+    }
+
+    // 6. Handle any other non-whitespace token (reset state)
+    if (len > 0 and !z.isWhitespaceOnlyText(text)) {
+        ctx_ptr.expect_attr_value = false; // Reset state
+        applyStyle(z.SyntaxStyle.text, text);
+        return 0;
+    }
+    return 0;
+}
+
+fn applyStyle(style: []const u8, text: []const u8) void {
+    print("{s}", .{style});
+    print("{s}", .{text});
+    print("{s}", .{z.Style.RESET});
+}
+
+const PrintCtx = struct {
+    indent: usize = 0,
+    opt: usize = 0,
+    expect_attr_value: bool,
+    pub fn init(
+        indent: usize,
+    ) @This() {
+        return .{
+            .indent = indent,
+            .opt = 0,
+            .expect_attr_value = false,
+        };
+    }
+};
+
+test "Serializer" {
+    const allocator = testing.allocator;
+
+    // Test serialization of a simple node
+    const doc = try z.parseFromString("<div><button phx-click=\"increment\">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div>");
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+
+    const result_1 = try serializeToString(allocator, body);
+    defer allocator.free(result_1);
+    print("1---: \n{s}\n", .{result_1});
+
+    print("\n\n\n", .{});
+    _ = prettyPrint(body);
+    print("\n\na", .{});
+}
+
+// extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
+// /// [Serialize] Serializes _only_ the current node
+// ///
+// /// Caller needs to free the returned slice.
+// pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
+//     var str: lxbString = .{
+//         .data = null,
+//         .length = 0,
+//         .size = 0,
+//     };
+
+//     const status = lxb_html_serialize_str(node, &str);
+//     if (status != z._OK) {
+//         return Err.SerializeFailed;
+//     }
+
+//     if (str.data == null or str.length == 0) {
+//         return Err.NoBodyElement;
+//     }
+
+//     const result = try allocator.alloc(u8, str.length);
+//     @memcpy(result, str.data.?[0..str.length]);
+
+//     return result;
+// }
 
 /// [Serialize] Serializes the HTMLElement tree
 ///
@@ -82,6 +229,12 @@ pub fn serializeElement(allocator: std.mem.Allocator, element: *z.HTMLElement) !
 // -------------------------------------------------------------------------------
 // Inner - Outer HTML
 // -------------------------------------------------------
+
+extern "c" fn lxb_html_element_inner_html_set(
+    body: *z.HTMLElement,
+    inner: [*]const u8,
+    inner_len: usize,
+) *z.HTMLElement;
 
 /// [Serialize] Get element's inner HTML
 ///
@@ -312,8 +465,8 @@ test "serialize Node vs tree functionality" {
     };
 
     // Test serializeNode vs serializeTree difference
-    const node_html = try serializeNode(allocator, div_node);
-    defer allocator.free(node_html);
+    // const node_html = try serializeNode(allocator, div_node);
+    // defer allocator.free(node_html);
 
     const tree_html = try serializeToString(
         allocator,
@@ -322,21 +475,21 @@ test "serialize Node vs tree functionality" {
     defer allocator.free(tree_html);
 
     // Both should contain the div tag
-    try testing.expect(
-        std.mem.indexOf(u8, node_html, "div") != null,
-    );
+    // try testing.expect(
+    //     std.mem.indexOf(u8, node_html, "div") != null,
+    // );
     try testing.expect(
         std.mem.indexOf(u8, tree_html, "div") != null,
     );
 
     // Node_html contains only "<div id='my-div'>"
-    try testing.expect(
-        std.mem.indexOf(u8, node_html, "<p>") == null,
-    );
-    try testing.expectEqualStrings(
-        "<div id=\"my-div\">",
-        node_html,
-    );
+    // try testing.expect(
+    //     std.mem.indexOf(u8, node_html, "<p>") == null,
+    // );
+    // try testing.expectEqualStrings(
+    //     "<div id=\"my-div\">",
+    //     node_html,
+    // );
     // Tree should definitely contain all content
     try testing.expect(
         std.mem.indexOf(u8, tree_html, "Hello") != null,
@@ -394,13 +547,13 @@ test "behaviour of serializeNode" {
         const body_node = z.elementToNode(body);
         const element_node = z.firstChild(body_node).?;
 
-        const serial_node = try serializeNode(allocator, element_node);
-        defer allocator.free(serial_node);
+        // const serial_node = try serializeNode(allocator, element_node);
+        // defer allocator.free(serial_node);
 
         const serialized_tree = try serializeToString(allocator, element_node);
         defer allocator.free(serialized_tree);
 
-        try testing.expectEqualStrings(serial_node, case.serialized_node);
+        // try testing.expectEqualStrings(serial_node, case.serialized_node);
         try testing.expectEqualStrings(serialized_tree, case.serialized_tree);
     }
 }
@@ -481,20 +634,20 @@ test "serializeNode vs serializeTree comparison" {
     const article_node = z.firstChild(body_node).?;
 
     // Serialize the article element
-    const node_result = try serializeNode(allocator, article_node);
-    defer allocator.free(node_result);
+    // const node_result = try serializeNode(allocator, article_node);
+    // defer allocator.free(node_result);
 
     const tree_result = try serializeToString(allocator, article_node);
     defer allocator.free(tree_result);
 
-    try testing.expect(node_result.len == 9);
+    // try testing.expect(node_result.len == 9);
     try testing.expect(tree_result.len == 87);
 
-    try testing.expectEqualStrings(node_result, "<article>");
+    // try testing.expectEqualStrings(node_result, "<article>");
     try testing.expectEqualStrings(tree_result, fragment);
 
     // Both should contain the article tag
-    try testing.expect(std.mem.indexOf(u8, node_result, "article") != null);
+    // try testing.expect(std.mem.indexOf(u8, node_result, "article") != null);
     try testing.expect(std.mem.indexOf(u8, tree_result, "article") != null);
 
     // Tree should definitely contain all nested content

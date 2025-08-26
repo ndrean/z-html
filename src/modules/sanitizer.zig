@@ -12,14 +12,13 @@ const print = z.Writer.print;
 
 const testing = std.testing;
 
-// Your existing simple_walk extern
 extern "c" fn lxb_dom_node_simple_walk(
     root: *z.DomNode,
     walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) c_int,
     ctx: ?*anyopaque,
 ) void;
 
-/// Your existing castContext helper
+/// Cast the context back to the defined type
 fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
     return @as(*T, @ptrCast(@alignCast(ctx.?)));
 }
@@ -71,7 +70,7 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "blockquote", &allowed_common },
 });
 
-/// [sanitize] Can be improved with lexbor URL module
+/// [sanitize] Can be improved with lexbor URL module ??
 pub fn isSafeUri(value: []const u8) bool {
     return std.mem.startsWith(u8, value, "http://") or
         std.mem.startsWith(u8, value, "https://") or

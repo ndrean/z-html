@@ -21,6 +21,7 @@ const norm = @import("modules/normalize.zig");
 const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
 const parser = @import("modules/parser.zig");
+const colours = @import("modules/colours.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -67,6 +68,12 @@ pub const TextOptions = struct {
     keep_new_lines: bool = false,
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
+
+pub const ElementStyles = colours.ElementStyles;
+pub const SyntaxStyle = colours.SyntaxStyle;
+pub const Style = colours.Style;
+pub const getStyleForElement = colours.getStyleForElement;
+pub const isKnownAttribute = colours.isKnownAttribute;
 
 pub const do_sanitize = sanitize.sanitize;
 pub const Parser = parser.Parser;
@@ -324,7 +331,7 @@ pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 // Serialization
 //=====================================
 pub const serializeToString = serialize.serializeToString;
-pub const serializeNode = serialize.serializeNode;
+// pub const serializeNode = serialize.serializeNode;
 pub const serializeElement = serialize.serializeElement;
 
 //=====================================

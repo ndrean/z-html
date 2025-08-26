@@ -165,6 +165,16 @@ DIV
       #text
 ```
 
+### Pretty print
+
+From the HTML string:
+
+```html
+<body><div><button phx-click="increment">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href="https://example.com">example.com</a></p></div></body>
+```
+
+You can output a nice colourful log:
+
 ### DOM tree: tuple and W3C JSON
 
 - the tuple version: `{tagName, attributes, children}`

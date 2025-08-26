@@ -12,6 +12,7 @@ const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
 
 extern "c" fn lxb_html_parser_create() *HtmlParser;
 extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) *HtmlParser;
+extern "c" fn lxb_html_parser_clean(parser: *HtmlParser) void;
 extern "c" fn lxb_html_parser_init(parser: *HtmlParser) usize;
 extern "c" fn lxb_html_parse(parser: *HtmlParser, html: [*:0]const u8, size: usize) *z.HTMLDocument;
 
@@ -22,16 +23,31 @@ extern "c" fn lxb_html_parse_fragment(
     size: usize,
 ) *z.DomNode;
 extern "c" fn lxb_html_parser_tree_node(parser: *HtmlParser) *HtmlTree;
-extern "c" fn lxb_html_serialize_pretty_str(node: *z.DomNode, opt: usize, indent: usize, str: *z.String) usize;
+
 extern "c" fn lxb_html_parser_tree_node_init(parser: *HtmlParser) *HtmlTree;
 
-extern "c" fn lxb_html_serialize_pretty_tree_cb(
-    node: *z.DomNode,
-    opt: usize,
-    indent: usize,
-    cb: *const fn ([*:0]const u8, len: usize, ctx: *anyopaque) callconv(.C) c_int,
-    ctx: ?*anyopaque,
-) c_int;
+// ===
+// const lxbString = extern struct {
+//     data: ?[*]u8, // Pointer to string data
+//     length: usize, // String length
+//     size: usize, // Allocated size
+// };
+
+// extern "c" fn lxb_html_serialize_pretty_tree_cb(
+//     node: *z.DomNode,
+//     opt: usize,
+//     indent: usize,
+//     cb: *const fn ([*:0]const u8, len: usize, ctx: *anyopaque) callconv(.C) c_int,
+//     ctx: ?*anyopaque,
+// ) c_int;
+// extern "c" fn lxb_html_serialize_pretty_str(
+//     node: *z.DomNode,
+//     opt: usize,
+//     indent: usize,
+//     str: *lxbString,
+// ) usize;
+
+// ===
 
 pub const Parser = struct {
     doc: *z.HTMLDocument,
@@ -61,28 +77,58 @@ pub const Parser = struct {
     }
 };
 
-const SerializerCtx = struct {};
+// pub const Colors = struct {
+//     pub const black = "\x1b[30m";
+//     pub const red = "\x1b[31m";
+//     pub const green = "\x1b[32m";
+//     pub const yellow = "\x1b[33m";
+//     pub const blue = "\x1b[34m";
+//     pub const magenta = "\x1b[35m";
+//     pub const cyan = "\x1b[36m";
+//     pub const white = "\x1b[37m";
+//     pub const reset = "\x1b[0m";
+// };
 
-fn serializer_cb(data: [*:0]const u8, len: usize, ctx: *anyopaque) callconv(.C) c_int {
-    _ = len;
-    _ = ctx;
-    std.debug.print("{s}", .{data});
-    return 0;
-}
+// const SerializerCtx = struct {
+//     indent: usize = 0,
+//     opt: usize = LXB_HTML_SERIALIZE_OPT_UNDEF,
+// };
 
-fn serialize_pretty(node: *z.DomNode, ctx: ?*anyopaque) c_int {
-    _ = ctx;
-    return lxb_html_serialize_pretty_tree_cb(node, 0, 0, serializer_cb, null);
-}
+// fn serializer_cb(data: [*:0]const u8, len: usize, context: *anyopaque) callconv(.C) c_int {
+//     _ = len;
+//     const ctx: *SerializerCtx = @ptrCast(@alignCast(context));
+//     const l = std.mem.len(data);
+//     _ = ctx;
 
-test "parse" {
-    var p = try Parser.init();
-    var ctx: SerializerCtx = .{};
-    defer p.deinit();
-    const doc = try p.parse("<html><body><ul><li>1</li><li>2</li><li>3</li><li>4</li></ul></body></html>");
-    const body = try z.bodyNode(doc);
-    _ = serialize_pretty(body, &ctx);
-}
+//     if (std.mem.eql(u8, data[0..l], "body")) {
+//         std.debug.print("{s}{s}{s}", .{ Colors.green, data, Colors.reset });
+//     } else if (std.mem.eql(u8, data[0..l], "<") or std.mem.eql(u8, data[0..l], "</") or std.mem.eql(u8, data[0..l], ">")) {
+//         std.debug.print("{s}{s}{s}", .{ Colors.yellow, data, Colors.reset });
+//     } else {
+//         std.debug.print("{s}", .{data});
+//     }
+//     return 0;
+// }
+
+// fn serialize_pretty_cb(node: *z.DomNode, ctx: *SerializerCtx) c_int {
+//     // _ = ctx;
+//     return lxb_html_serialize_pretty_tree_cb(
+//         node,
+//         ctx.opt,
+//         ctx.indent,
+//         serializer_cb,
+//         ctx,
+//     );
+// }
+
+// test "parse" {
+//     var p = try Parser.init();
+//     var ctx: SerializerCtx = SerializerCtx{ .indent = 0, .opt = 0 };
+//     defer p.deinit();
+//     const doc = try p.parse("<html><body><ul><li>1</li><li>2</li><li>3</li><li>4</li></ul></body></html>");
+//     const body = try z.bodyNode(doc);
+//     _ = serialize_pretty_cb(body, &ctx);
+// }
 
 // ==================================================================
 
@@ -129,21 +175,19 @@ test "parse" {
 //     }
 // };
 
+/// HTML node representation
+///
+/// - #element: {tag_name, attributes, children}
+/// - #text: "text content"
+/// - #comment: {tag: "comment", text: "comment text"}
 pub const HtmlNode = union(enum) {
-    /// Element: {tag_name, attributes, children}
     element: struct {
         tag: []const u8,
         attributes: []z.AttributePair,
         children: []HtmlNode,
     },
-
-    /// Text content: "text content"
     text: []const u8,
-
-    /// Comment: {tag: "comment", text: "comment text"}
     comment: struct { tag: []const u8, text: []const u8 },
-
-    /// Document node (root)
     document: struct {
         children: []HtmlNode,
     },
@@ -180,6 +224,17 @@ pub const HtmlNode = union(enum) {
         }
     }
 
+    pub fn output(self: HtmlNode, allocator: std.mem.Allocator, should_print: bool) !?[]u8 {
+        if (should_print) {
+            self.printTupleRecursive();
+            return null;
+        } else {
+            var buffer = std.ArrayList(u8).init(allocator);
+            defer buffer.deinit();
+            try self.toStringRecursive(&buffer);
+            return buffer.toOwnedSlice();
+        }
+    }
     pub fn display(self: HtmlNode) void {
         self.printTuple();
     }
@@ -690,3 +745,19 @@ test "tree to HTML conversion" {
     try testing.expect(std.mem.indexOf(u8, html, "</div>") != null);
     try testing.expect(std.mem.indexOf(u8, html, "<!-- A comment -->") != null);
 }
+
+// test "complex tree" {
+//     const tree = "{\"BODY\",[],[{\"DIV\",[{\"id\",\"container\"},{\"class\",\"main active\"},{\"data-value\",\"123\"}],[{\"comment\",\" Start of content \"},{\"P\",[{\"class\",\"text\"}],[\"Hello\",{\"STRONG\",[],[\"World\"]},\"!\"]},{\"comment\",\" End of content \"}]}]}";
+
+//     const html = try treeToHtml(testing.allocator, tree);
+//     defer testing.allocator.free(html);
+
+//     std.debug.print("\n\n\nGenerated HTML:\n {s}\n", .{html});
+
+//     // Should produce: <div class="greeting" id="hello">Hello World</div><!-- A comment -->
+//     try testing.expect(std.mem.indexOf(u8, html, "<div") != null);
+//     try testing.expect(std.mem.indexOf(u8, html, "class=\"greeting\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, html, "Hello World") != null);
+//     try testing.expect(std.mem.indexOf(u8, html, "</div>") != null);
+//     try testing.expect(std.mem.indexOf(u8, html, "<!-- A comment -->") != null);
+// }
