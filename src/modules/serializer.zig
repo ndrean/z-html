@@ -192,32 +192,6 @@ test "Serializer" {
     print("\n\na", .{});
 }
 
-// extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) usize;
-// /// [Serialize] Serializes _only_ the current node
-// ///
-// /// Caller needs to free the returned slice.
-// pub fn serializeNode(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
-//     var str: lxbString = .{
-//         .data = null,
-//         .length = 0,
-//         .size = 0,
-//     };
-
-//     const status = lxb_html_serialize_str(node, &str);
-//     if (status != z._OK) {
-//         return Err.SerializeFailed;
-//     }
-
-//     if (str.data == null or str.length == 0) {
-//         return Err.NoBodyElement;
-//     }
-
-//     const result = try allocator.alloc(u8, str.length);
-//     @memcpy(result, str.data.?[0..str.length]);
-
-//     return result;
-// }
-
 /// [Serialize] Serializes the HTMLElement tree
 ///
 /// Caller needs to free the returned slice.
