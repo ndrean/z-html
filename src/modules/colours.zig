@@ -5,183 +5,7 @@ const print = z.Writer.print;
 
 const testing = std.testing;
 
-// color enum that stores numeric codes instead of strings
-// pub const Colour = enum {
-//     BLACK,
-//     RED,
-//     GREEN,
-//     YELLOW,
-//     BLUE,
-//     MAGENTA,
-//     CYAN,
-//     WHITE,
-//     PURPLE,
-//     ORANGE,
-//     RESET,
-
-//     pub fn colorCode(self: Colour) u8 {
-//         return switch (self) {
-//             .BLACK => 30,
-//             .RED => 31,
-//             .GREEN => 32,
-//             .YELLOW => 33,
-//             .BLUE => 34,
-//             .MAGENTA => 35,
-//             .CYAN => 36,
-//             .WHITE => 37,
-//             .PURPLE => 35, // Use magenta base for purple
-//             .ORANGE => 31, // Use red base for orange
-//             .RESET => 0,
-//         };
-//     }
-
-//     pub fn code(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => "\x1b[38;2;102;51;153m", // True RGB purple
-//             .ORANGE => "\x1b[38;5;208m", // 256-color orange
-//             .RESET => "\x1b[0m",
-//             else => comptime blk: {
-//                 var result: []const u8 = undefined;
-//                 switch (self) {
-//                     .BLACK => result = "\x1b[30m",
-//                     .RED => result = "\x1b[31m",
-//                     .GREEN => result = "\x1b[32m",
-//                     .YELLOW => result = "\x1b[33m",
-//                     .BLUE => result = "\x1b[34m",
-//                     .MAGENTA => result = "\x1b[35m",
-//                     .CYAN => result = "\x1b[36m",
-//                     .WHITE => result = "\x1b[37m",
-//                     else => unreachable,
-//                 }
-//                 break :blk result;
-//             },
-//         };
-//     }
-
-//     // optimized methods using combined ANSI codes
-//     pub fn italic(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[3;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[3;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[3;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn underline(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[4;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[4;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[4;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn inverse(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[7;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[7;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[7;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn bold(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[1;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[1;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[1;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn dim(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[2;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[2;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[2;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     // Combine multiple effects in single ANSI sequence
-//     pub fn boldItalic(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[1;3;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[1;3;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[1;3;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn underlineItalic(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[4;3;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[4;3;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[4;3;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     pub fn underlineBold(self: Colour) []const u8 {
-//         return switch (self) {
-//             .PURPLE => comptime std.fmt.comptimePrint("\x1b[4;1;38;2;102;51;153m", .{}),
-//             .ORANGE => comptime std.fmt.comptimePrint("\x1b[4;1;38;5;208m", .{}),
-//             .RESET => "\x1b[0m",
-//             inline else => comptime std.fmt.comptimePrint("\x1b[4;1;{d}m", .{self.colorCode()}),
-//         };
-//     }
-
-//     // Background colors with foreground
-//     pub fn withBg(self: Colour, bg: Colour) []const u8 {
-//         if (self == .RESET or bg == .RESET) return "\x1b[0m";
-
-//         return switch (self) {
-//             .PURPLE => switch (bg) {
-//                 .PURPLE => comptime std.fmt.comptimePrint("\x1b[38;2;102;51;153;48;2;102;51;153m", .{}),
-//                 inline else => comptime std.fmt.comptimePrint("\x1b[38;2;102;51;153;{d}m", .{bg.colorCode() + 10}),
-//             },
-//             .ORANGE => switch (bg) {
-//                 .ORANGE => comptime std.fmt.comptimePrint("\x1b[38;5;208;48;5;208m", .{}),
-//                 inline else => comptime std.fmt.comptimePrint("\x1b[38;5;208;{d}m", .{bg.colorCode() + 10}),
-//             },
-//             else => switch (bg) {
-//                 .PURPLE => comptime std.fmt.comptimePrint("\x1b[{d};48;2;102;51;153m", .{self.colorCode()}),
-//                 .ORANGE => comptime std.fmt.comptimePrint("\x1b[{d};48;5;208m", .{self.colorCode()}),
-//                 inline else => comptime std.fmt.comptimePrint("\x1b[{d};{d}m", .{ self.colorCode(), bg.colorCode() + 10 }),
-//             },
-//         };
-//     }
-
-//     // combination: effect + foreground + background
-//     pub fn fullStyle(self: Colour, effects: []const AnsiCode, bg: ?Colour) []const u8 {
-//         var codes: [8]u8 = undefined;
-//         var count: u8 = 0;
-
-//         // Add effects
-//         for (effects) |effect| {
-//             codes[count] = @intFromEnum(effect);
-//             count += 1;
-//         }
-
-//         // Add foreground
-//         if (self != .RESET) {
-//             codes[count] = self.colorCode();
-//             count += 1;
-//         }
-
-//         // Add background
-//         if (bg) |background| {
-//             if (background != .RESET) {
-//                 codes[count] = background.colorCode() + 10;
-//                 count += 1;
-//             }
-//         }
-
-//         return self.code();
-//     }
-// };
-
+// ANSI escape codes for styling in the terminal
 const AnsiCode = enum(u8) {
     // Text effects
     RESET = 0,
@@ -215,7 +39,9 @@ const AnsiCode = enum(u8) {
     BG_WHITE = 47,
 };
 
+// Escape colour codes
 pub const Style = struct {
+    pub const RESET = "\x1b[0m";
     // Plain colors
     pub const BLACK = "\x1b[30m";
     pub const RED = "\x1b[31m";
@@ -227,7 +53,6 @@ pub const Style = struct {
     pub const WHITE = "\x1b[37m";
     pub const PURPLE = "\x1b[38;2;102;51;153m";
     pub const ORANGE = "\x1b[38;5;208m";
-    pub const RESET = "\x1b[0m";
 
     // Bold colors (for headings, important elements)
     pub const BOLD_RED = "\x1b[1;31m";
@@ -288,20 +113,27 @@ pub const Style = struct {
     pub const DIM_GREEN = "\x1b[2;32m";
     pub const DIM_YELLOW = "\x1b[2;33m";
 
+    // with background
     pub const BODY = "\x1b[1;30;47m";
+    pub const WHITE_BLACK = "\x1b[1;37;40m";
+    pub const YELLOW_BLACK = "\x1b[1;33;40m";
+    pub const BLACK_YELLOW = "\x1b[1;30;43m";
+    pub const RED_WHITE = "\x1b[1;31;47m";
+    pub const MAGENTA_WHITE = "\x1b[1;35;47m";
 
     // Underline bold for table headers
     pub const UNDERLINE_BOLD_WHITE = "\x1b[4;1;37m";
     pub const UNDERLINE_BOLD_CYAN = "\x1b[4;1;36m";
 };
 
+/// Default colour styles for HTML elements
 pub const ElementStyles = struct {
     pub const html = Style.BOLD_CYAN;
     pub const head = Style.CYAN;
     pub const body = Style.BODY;
     pub const title = Style.BOLD_BLUE;
     pub const meta = Style.BLUE;
-    pub const link = Style.BLUE;
+    pub const link = Style.UNDERLINE_GREEN;
     pub const script = Style.YELLOW;
     pub const style = Style.YELLOW;
 
@@ -357,14 +189,19 @@ pub const ElementStyles = struct {
     pub const svg = Style.PURPLE;
 };
 
+/// Default syntax & attributes `Style`
 pub const SyntaxStyle = struct {
     pub const brackets = Style.WHITE;
+    pub const attributes = Style.ITALIC_ORANGE;
+    // DEFAULT style for ALL attributes
     pub const text = Style.WHITE;
-    pub const attributes = Style.ITALIC_ORANGE; // DEFAULT style for ALL attributes
     pub const attr_equals = Style.ITALIC_ORANGE;
     pub const attr_values = Style.MAGENTA;
 };
 
+/// Check if the attribute is a known HTML attribute,
+///
+/// including ARIA or data-* attribute or other framework (Phoenix, Alpine, Vue, HTMX)
 pub fn isKnownAttribute(attr: []const u8) bool {
     // Standard HTML attributes
     if (std.mem.eql(u8, attr, "id") or
@@ -389,25 +226,32 @@ pub fn isKnownAttribute(attr: []const u8) bool {
         return true;
     }
 
-    // Framework attributes using startsWith
-    if (std.mem.startsWith(u8, attr, "data-") and attr.len > 5) {
-        return true; // data-*
-    }
-    if (std.mem.startsWith(u8, attr, "phx-") and attr.len > 4) {
-        return true; // phx-*
-    }
-    if (std.mem.startsWith(u8, attr, "v-") and attr.len > 2) {
-        return true; // v-*
-    }
-    if (std.mem.startsWith(u8, attr, "hx-") and attr.len > 3) {
-        return true; // hx-*
-    }
-    if (std.mem.startsWith(u8, attr, "x-") and attr.len > 2) {
-        return true; // x-* (Alpine.js)
-    }
+    // ARIA attributes
     if (std.mem.startsWith(u8, attr, "aria-") and attr.len > 5) {
         return true; // aria-*
     }
+
+    // Data attributes using startsWith
+    if (std.mem.startsWith(u8, attr, "data-") and attr.len > 5) {
+        return true; // data-*
+    }
+    // Framework attributes
+    if (std.mem.startsWith(u8, attr, "phx-") and attr.len > 4) {
+        return true; // phx-*
+    }
+    // Vue.js attributes
+    if (std.mem.startsWith(u8, attr, "v-") and attr.len > 2) {
+        return true; // v-*
+    }
+    // HTMX attributes
+    if (std.mem.startsWith(u8, attr, "hx-") and attr.len > 3) {
+        return true; // hx-*
+    }
+    // Alpine.js attributes
+    if (std.mem.startsWith(u8, attr, "x-") and attr.len > 2) {
+        return true; // x-* (Alpine.js)
+    }
+
     if (std.mem.startsWith(u8, attr, "on") and attr.len > 2) {
         return true; // onclick, onload, etc.
     }
@@ -422,7 +266,13 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "h1")) return ElementStyles.h1;
     if (std.mem.eql(u8, element_name, "h2")) return ElementStyles.h2;
     if (std.mem.eql(u8, element_name, "h3")) return ElementStyles.h3;
+    if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
+    if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;
+    if (std.mem.eql(u8, element_name, "h6")) return ElementStyles.h6;
+
     if (std.mem.eql(u8, element_name, "a")) return ElementStyles.a;
+    if (std.mem.eql(u8, element_name, "link")) return ElementStyles.link;
+
     if (std.mem.eql(u8, element_name, "strong")) return ElementStyles.strong;
     if (std.mem.eql(u8, element_name, "em")) return ElementStyles.em;
     if (std.mem.eql(u8, element_name, "code")) return ElementStyles.code;

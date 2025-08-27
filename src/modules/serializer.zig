@@ -6,7 +6,7 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
-const print = z.Writer.print;
+const print = z.Writer.log;
 
 const testing = std.testing;
 
@@ -177,19 +177,25 @@ const PrintCtx = struct {
 test "Serializer" {
     const allocator = testing.allocator;
 
+    try z.Writer.initLog("logfile.log");
+    defer z.Writer.deinitLog();
+
     // Test serialization of a simple node
-    const doc = try z.parseFromString("<div><button phx-click=\"increment\">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div>");
+    const doc = try z.parseFromString("<div><button phx-click=\"increment\">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script>");
     defer z.destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
 
-    const result_1 = try serializeToString(allocator, body);
-    defer allocator.free(result_1);
-    print("1---: \n{s}\n", .{result_1});
+    const result = try serializeToString(allocator, body);
+    defer allocator.free(result);
 
-    print("\n\n\n", .{});
+    const expected = "<body><div><button phx-click=\"increment\">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script></body>";
+
+    try testing.expectEqualStrings(expected, result);
+
+    print("\n\n", .{});
     _ = prettyPrint(body);
-    print("\n\na", .{});
+    print("\n\n a", .{});
 }
 
 /// [Serialize] Serializes the HTMLElement tree
