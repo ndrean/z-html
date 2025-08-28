@@ -1,6 +1,7 @@
 const std = @import("std");
 const z = @import("zhtml.zig");
 const builtin = @import("builtin");
+// const Writer = z.Writer;
 // const wri/ter = std.io.getStdOut().writer();
 
 // const writer = if (builtin.mode == .Debug)
@@ -14,31 +15,31 @@ const builtin = @import("builtin");
 //     };
 // }
 
-fn Context(comptime WriterType: type) type {
-    return struct {
-        writer: WriterType,
+// fn Context(comptime WriterType: type) type {
+//     return struct {
+//         writer: WriterType,
 
-        pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
-            try self.writer.print(fmt, args);
-        }
+//         pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+//             try self.writer.print(fmt, args);
+//         }
 
-        pub fn deinit(self: *@This()) void {
-            if (@hasDecl(WriterType, "deinit")) {
-                self.writer.deinit();
-            } else {
-                // assume no cleanup needed
-            }
-        }
-    };
-}
+//         pub fn deinit(self: *@This()) void {
+//             if (@hasDecl(WriterType, "deinit")) {
+//                 self.writer.deinit();
+//             } else {
+//                 // assume no cleanup needed
+//             }
+//         }
+//     };
+// }
 
 fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8, ctx: anytype) !void {
-    const doc = try z.parseFromString(fragment);
+    const doc = try z.printDocStruct(fragment);
     defer z.destroyDocument(doc);
 
     const body_node = try z.bodyNode(doc);
 
-    const html = try z.serializeToString(
+    const html = try z.outerHTML(
         allocator,
         body_node,
     );
@@ -54,7 +55,7 @@ fn serialiazeAndClean(allocator: std.mem.Allocator, fragment: []const u8, ctx: a
         .{ .remove_comments = true },
     );
 
-    const new_html = try z.serializeToString(
+    const new_html = try z.outerHTML(
         allocator,
         body_node,
     );
@@ -78,27 +79,29 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
-    const stdout_writer = std.io.getStdOut().writer();
-    const DebugWriter = struct {
-        pub fn print(_: @This(), comptime fmt: []const u8, args: anytype) !void {
-            std.debug.print(fmt, args);
-            return;
-        }
-    };
+    // const stdout_writer = std.io.getStdOut().writer();
+    // const DebugWriter = struct {
+    //     pub fn print(_: @This(), comptime fmt: []const u8, args: anytype) !void {
+    //         std.debug.print(fmt, args);
+    //         return;
+    //     }
+    // };
 
-    const debug_writer = DebugWriter{};
+    // const debug_writer = DebugWriter{};
 
-    const writerType = if (builtin.mode == .Debug)
-        @TypeOf(debug_writer)
-    else
-        @TypeOf(stdout_writer);
+    // const writerType = if (builtin.mode == .Debug)
+    //     @TypeOf(debug_writer)
+    // else
+    //     @TypeOf(stdout_writer);
 
-    const ctx = Context(writerType){
-        .writer = if (builtin.mode == .Debug)
-            debug_writer
-        else
-            stdout_writer,
-    };
+    // const ctx = Context(writerType){
+    //     .writer = if (builtin.mode == .Debug)
+    //         debug_writer
+    //     else
+    //         stdout_writer,
+    // };
+
+    // const ctx = .{ .writer = Writer };
 
     const fragment =
         \\<div   class  =  " container test "   id  = "main"  >
@@ -124,8 +127,11 @@ pub fn main() !void {
         \\</article>
     ;
 
-    try ctx.writer.print("\n\n---------ELEMENTS---------\n\n", .{});
-    try serialiazeAndClean(allocator, fragment, ctx);
+    _ = fragment;
+    _ = allocator;
+
+    // try ctx.writer.print("\n\n---------ELEMENTS---------\n\n", .{});
+    // try serialiazeAndClean(allocator, fragment, ctx);
 
     // Example menu system
     // try writer.print("\n=== Z-HTML Examples ===\n", .{});

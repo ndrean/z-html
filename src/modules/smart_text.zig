@@ -94,7 +94,7 @@
 
 // test "context-aware escaping detection" {
 //     const html = "<div><script>alert('test');</script><p>normal text</p></div>";
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.printDocStruct(html);
 //     defer z.destroyDocument(doc);
 
 //     const body = try z.bodyElement(doc);
@@ -185,7 +185,7 @@
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseFromString(messy_html);
+//     const doc = try z.printDocStruct(messy_html);
 //     defer z.destroyDocument(doc);
 //     const body = try z.bodyElement(doc);
 //     const body_node = z.elementToNode(body);
@@ -193,7 +193,7 @@
 //     // Apply cleaning
 //     try z.cleanDomTree(allocator, body_node, .{ .remove_comments = true, .remove_empty_elements = true });
 
-//     const cleaned_result = try z.serializeToString(allocator, body_node);
+//     const cleaned_result = try z.outerHTML(allocator, body_node);
 //     defer allocator.free(cleaned_result);
 
 //     // Cleaner normalized the DOM structure
@@ -210,7 +210,7 @@
 //     // ========================================================================
 
 //     const html_with_script = "<div><script>const config = {url: 'https://api.com'};</script><p></p></div>";
-//     const doc2 = try z.parseFromString(html_with_script);
+//     const doc2 = try z.printDocStruct(html_with_script);
 //     defer z.destroyDocument(doc2);
 
 //     const div = z.firstChild(z.elementToNode(try z.bodyElement(doc2))).?;
@@ -247,7 +247,7 @@
 //     const allocator = testing.allocator;
 
 //     const html = "<div><script>alert('hello');</script><p>  <em>Hello</em> & world!</p></div>";
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.printDocStruct(html);
 //     defer z.destroyDocument(doc);
 
 //     const body = try z.bodyElement(doc);

@@ -22,7 +22,7 @@ pub fn main() !void {
         \\</html>
     ;
 
-    const doc = try z.parseFromString(html);
+    const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
     print("=== DOM Search Functions Demo ===\n", .{});

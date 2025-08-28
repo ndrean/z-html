@@ -1,8 +1,8 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
-const print = z.Writer.print;
-
+// const print = z.Writer.print;
+const print = std.debug.print;
 const testing = std.testing;
 
 // ANSI escape codes for styling in the terminal
@@ -112,6 +112,7 @@ pub const Style = struct {
     pub const DIM_RED = "\x1b[2;31m";
     pub const DIM_GREEN = "\x1b[2;32m";
     pub const DIM_YELLOW = "\x1b[2;33m";
+    pub const DIM_WHITE = "\x1b[2;37m";
 
     // with background
     pub const BODY = "\x1b[1;30;47m";
@@ -191,12 +192,13 @@ pub const ElementStyles = struct {
 
 /// Default syntax & attributes `Style`
 pub const SyntaxStyle = struct {
-    pub const brackets = Style.WHITE;
-    pub const attributes = Style.ITALIC_ORANGE;
+    pub const brackets = Style.DIM_WHITE;
+    pub const attribute = Style.ITALIC_ORANGE;
     // DEFAULT style for ALL attributes
     pub const text = Style.WHITE;
-    pub const attr_equals = Style.ITALIC_ORANGE;
-    pub const attr_values = Style.MAGENTA;
+    pub const attr_equal = Style.ITALIC_ORANGE;
+    pub const attr_value = Style.MAGENTA;
+    pub const danger = Style.INVERSE_RED; // for <script>, <style> content
 };
 
 /// Check if the attribute is a known HTML attribute,
@@ -253,7 +255,7 @@ pub fn isKnownAttribute(attr: []const u8) bool {
     }
 
     if (std.mem.startsWith(u8, attr, "on") and attr.len > 2) {
-        return true; // onclick, onload, etc.
+        return false; // onclick, onload, etc.
     }
 
     return false;
@@ -291,8 +293,8 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "title")) return Style.BOLD_BLUE;
     if (std.mem.eql(u8, element_name, "meta")) return Style.BLUE;
     if (std.mem.eql(u8, element_name, "link")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "script")) return Style.YELLOW;
-    if (std.mem.eql(u8, element_name, "style")) return Style.YELLOW;
+    if (std.mem.eql(u8, element_name, "script")) return Style.BLACK_YELLOW;
+    if (std.mem.eql(u8, element_name, "style")) return Style.YELLOW_BLACK;
     if (std.mem.eql(u8, element_name, "h4")) return Style.MAGENTA;
     if (std.mem.eql(u8, element_name, "h5")) return Style.MAGENTA;
     if (std.mem.eql(u8, element_name, "h6")) return Style.MAGENTA;
@@ -322,4 +324,40 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "svg")) return Style.PURPLE;
 
     return null;
+}
+
+pub fn isDangerousAttributeValue(value: []const u8) bool {
+    // clean quotes if any
+    const clean_value = if (std.mem.startsWith(u8, value, "\"") and std.mem.endsWith(u8, value, "\"") and value.len > 2)
+        value[1 .. value.len - 1]
+    else
+        value;
+
+    var lowercase_buf: [1024]u8 = undefined;
+    if (clean_value.len > lowercase_buf.len) return false;
+
+    for (clean_value, 0..) |c, i| {
+        lowercase_buf[i] = std.ascii.toLower(c);
+    }
+    const clean_lower = lowercase_buf[0..clean_value.len];
+
+    // Check for script injection patterns
+    if (std.mem.indexOf(u8, clean_lower, "<script") != null) return true;
+    if (std.mem.indexOf(u8, clean_lower, "</script") != null) return true;
+    if (std.mem.indexOf(u8, clean_lower, "javascript:") != null) return true;
+    if (std.mem.indexOf(u8, clean_lower, "vbscript:") != null) return true;
+
+    // lexbor escape most of data:text/html and data:text/javascript, so don't worry about them
+    // only signal potentially dangerous b64 encoded data as the browser decodes it
+
+    // if (std.mem.indexOf(u8, clean_lower, "data:text/javascript") != null) return true;
+    // if (std.mem.indexOf(u8, clean_lower, "data:text/html") != null) return true;
+    if (std.mem.startsWith(u8, clean_lower, "data:") and
+        std.mem.indexOf(u8, clean_lower, "base64") != null) return true;
+
+    if (std.mem.startsWith(u8, clean_lower, "file:")) return true;
+    if (std.mem.startsWith(u8, clean_lower, "ftp:")) return true;
+    if (std.mem.startsWith(u8, clean_lower, "//")) return true;
+
+    return false;
 }

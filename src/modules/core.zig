@@ -22,7 +22,6 @@ pub const LXB_TAG_SCRIPT: u32 = 0x29;
 // =============================================================
 extern "c" fn lxb_html_document_create() ?*z.HTMLDocument;
 extern "c" fn lxb_html_document_destroy(doc: *z.HTMLDocument) void;
-extern "c" fn lxb_html_document_parse(doc: *z.HTMLDocument, html: [*]const u8, len: usize) usize;
 
 extern "c" fn lxb_html_document_create_element_noi(doc: *z.HTMLDocument, tag_name: [*]const u8, tag_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
 
@@ -68,7 +67,7 @@ extern "c" fn lxb_dom_node_last_child_noi(node: *z.DomNode) ?*z.DomNode;
 ///
 /// Caller must free with `destroyDocument`.
 ///
-/// To create a useable document, simply use instead `parseFromString("")`
+/// To create a useable document, simply use instead `z.parseFromString("")`
 /// ## Example
 /// ```
 /// const doc = try createDocument();
@@ -81,26 +80,6 @@ pub fn createDocument() !*z.HTMLDocument {
 /// [core] Destroy an HTML document.
 pub fn destroyDocument(doc: *z.HTMLDocument) void {
     lxb_html_document_destroy(doc);
-}
-
-/// [core] Parse HTML string into document and creates a new document.
-/// Returns a new document.
-///
-/// Tihs creates a new document. Caller must free with `destroyDocument()`.
-///
-/// ## Example
-/// ```
-/// const doc = try parseFromString("<!DOCTYPE html><html><body></body></html>");
-/// defer destroyDocument(doc);
-/// ---
-/// ```
-pub fn parseFromString(html: []const u8) !*z.HTMLDocument {
-    const doc = createDocument() catch {
-        return Err.DocCreateFailed;
-    };
-    const status = lxb_html_document_parse(doc, html.ptr, html.len);
-    if (status != z._OK) return Err.ParseFailed;
-    return doc;
 }
 
 // =============================================================================
@@ -233,7 +212,7 @@ pub fn ownerDocument(node: *z.DomNode) *z.HTMLDocument {
 }
 
 test "documentRoot - ownerDocument" {
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const doc_root = documentRoot(doc);
@@ -338,7 +317,7 @@ pub fn nodeToComment(node: *z.DomNode) ?*z.Comment {
 }
 
 test "creation & convertions" {
-    const doc = try parseFromString("<html><body><!-- a comment --></body></html>");
+    const doc = try z.parseFromString("<html><body><!-- a comment --></body></html>");
     defer destroyDocument(doc);
 
     const body = try bodyNode(doc);
@@ -626,7 +605,7 @@ pub fn lastChild(node: *z.DomNode) ?*z.DomNode {
 
 test "firstChild / lastChild" {
     {
-        const doc = try parseFromString("<ul><li>Hello</li><li>World</li></ul>");
+        const doc = try z.parseFromString("<ul><li>Hello</li><li>World</li></ul>");
         defer z.destroyDocument(doc);
         const body = try bodyNode(doc);
         const ul = firstChild(body);
@@ -639,7 +618,7 @@ test "firstChild / lastChild" {
         try testing.expectEqualStrings("World", world);
     }
     {
-        const doc = try parseFromString("<p></p>");
+        const doc = try z.parseFromString("<p></p>");
         defer z.destroyDocument(doc);
         const body = try bodyNode(doc);
         const p = firstChild(body);
@@ -745,15 +724,15 @@ test "nextElementSibling" {
 ///
 /// Caller needs to free the slice
 pub fn childNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.DomNode {
-    var nodes = std.ArrayList(*z.DomNode).init(allocator);
+    var nodes: std.ArrayList(*z.DomNode) = .empty;
 
     var child = firstChild(parent_node);
     while (child != null) {
-        try nodes.append(child.?);
+        try nodes.append(allocator, child.?);
         child = nextSibling(child.?);
     }
 
-    return nodes.toOwnedSlice();
+    return nodes.toOwnedSlice(allocator);
 }
 
 /// [core] Helper: Collect only element children from an element
@@ -777,15 +756,15 @@ pub fn childNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.D
 /// ```
 /// ## Signature
 pub fn children(allocator: std.mem.Allocator, parent_element: *z.HTMLElement) ![]*z.HTMLElement {
-    var elements = std.ArrayList(*z.HTMLElement).init(allocator);
+    var elements: std.ArrayList(*z.HTMLElement) = .empty;
 
     var child = firstElementChild(parent_element);
     while (child != null) {
-        try elements.append(child.?);
+        try elements.append(allocator, child.?);
         child = nextElementSibling(child.?);
     }
 
-    return elements.toOwnedSlice();
+    return elements.toOwnedSlice(allocator);
 }
 
 test "children" {
@@ -841,7 +820,7 @@ pub fn appendChildren(parent: *z.DomNode, child_nodes: []const *z.DomNode) void 
 
 test "appendChild/dren" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const body = try bodyNode(doc);
@@ -852,7 +831,7 @@ test "appendChild/dren" {
     const child_nodes: []const *z.DomNode = &.{ div, p };
     appendChildren(body, child_nodes);
 
-    const html = try z.serializeToString(allocator, body);
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
     try testing.expectEqualStrings(
         "<body><div></div><p></p></body>",
@@ -872,7 +851,7 @@ pub fn insertBefore(reference_node: *z.DomNode, new_node: *z.DomNode) void {
 
 test "insertBefore / insertAfter" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><ul><li id=\"1\">First</li></ul></body></html>");
+    const doc = try z.parseFromString("<html><body><ul><li id=\"1\">First</li></ul></body></html>");
     defer destroyDocument(doc);
 
     const body = try bodyNode(doc);
@@ -895,7 +874,7 @@ test "insertBefore / insertAfter" {
         elementToNode(first_li.?),
         elementToNode(last_li),
     );
-    const html = try z.serializeToString(allocator, body);
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
     try testing.expectEqualStrings(
         "<body><ul><li id=\"0\"></li><li id=\"1\">First</li><li id=\"2\"></li></ul></body>",
@@ -991,7 +970,7 @@ pub fn insertAdjacentElement(
 
 test "insertAdjacentElement - all positions & invalid" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<div id=\"target\">Target Content</div>");
+    const doc = try z.parseFromString("<div id=\"target\">Target Content</div>");
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
@@ -1048,7 +1027,7 @@ test "insertAdjacentElement - all positions & invalid" {
     const invalid = insertAdjacentElement(target.?, "invalid", after_element);
     try testing.expectError(Err.InvalidPosition, invalid);
 
-    const html = try z.serializeToString(allocator, body);
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
 
     const pretty_expected =
@@ -1069,7 +1048,7 @@ test "insertAdjacentElement - all positions & invalid" {
 test "insertAdjacentElement - empty target & cloning" {
     const allocator = testing.allocator;
 
-    const doc = try parseFromString("<div id=\"target\"><p id=\"1\"></p></div>");
+    const doc = try z.parseFromString("<div id=\"target\"><p id=\"1\"></p></div>");
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
@@ -1095,7 +1074,7 @@ test "insertAdjacentElement - empty target & cloning" {
             clone_element,
         );
     }
-    const resulting_html = try z.serializeToString(allocator, body);
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
 
     const pretty_expectation =
@@ -1214,7 +1193,7 @@ test "enum / string insertAdjacentHTML" {
     ;
     const init_html = try z.normalizeText(allocator, pretty_html, .{});
     defer allocator.free(init_html);
-    const doc = try parseFromString(init_html);
+    const doc = try z.parseFromString(init_html);
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
@@ -1245,7 +1224,7 @@ test "enum / string insertAdjacentHTML" {
         "<p>After End</p>",
     );
 
-    const html = try z.serializeToString(allocator, body);
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
 
     // const clean_html = try z.normalizeText(allocator, html, .{});
@@ -1292,7 +1271,7 @@ test "enum / string insertAdjacentHTML" {
 test "insertAdjacentHTML - all positions" {
     const allocator = testing.allocator;
 
-    const doc = try parseFromString("<div id=\"target\">Target Content</div>");
+    const doc = try z.parseFromString("<div id=\"target\">Target Content</div>");
     defer destroyDocument(doc);
 
     const body = try z.bodyNode(doc);
@@ -1322,7 +1301,7 @@ test "insertAdjacentHTML - all positions" {
         "<p id=\"after\">After</p>",
     );
 
-    const html = try z.serializeToString(allocator, body);
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
 
     const pretty_expected =
@@ -1343,7 +1322,7 @@ test "insertAdjacentHTML - all positions" {
 test "insertAdjacentHTML - preserve order with multiple elements" {
     {
         const allocator = testing.allocator;
-        const doc = try parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
+        const doc = try z.parseFromString("<html><body><div id=\"target\">Content</div></body></html>");
         defer destroyDocument(doc);
 
         const body = try z.bodyNode(doc);
@@ -1371,7 +1350,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             "<p>First</p><p>Second</p><span>Third</span>",
         );
 
-        const html = try z.serializeToString(allocator, body);
+        const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
         defer allocator.free(html);
 
         const pretty_html =
@@ -1397,7 +1376,7 @@ test "insertAdjacent demo" {
     const allocator = testing.allocator;
 
     // Create a simple document structure
-    const doc = try parseFromString(
+    const doc = try z.parseFromString(
         \\<html><body>
         \\    <div id="container">
         \\        <p id="target">Target Element</p>
@@ -1437,7 +1416,7 @@ test "insertAdjacent demo" {
     );
 
     // Show result after insertAdjacentElement
-    const html1 = try z.serializeToString(allocator, body);
+    const html1 = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html1);
 
     // Normalize whitespace for clean comparison
@@ -1471,7 +1450,7 @@ test "insertAdjacent demo" {
     );
 
     // Show final result
-    const html2 = try z.serializeToString(allocator, body);
+    const html2 = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html2);
 
     // Normalize whitespace for clean comparison
@@ -1514,7 +1493,7 @@ test "insertAdjacent demo" {
         "<p>First</p><p>Second</p><span>Third</span>",
     );
 
-    const html3 = try z.serializeToString(allocator, body);
+    const html3 = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html3);
 
     // Normalize and verify multiple elements were inserted
@@ -1635,7 +1614,7 @@ test "isNodeEmpty" {
 
 test "what is empty?" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const body_node = try bodyNode(doc);
@@ -1645,7 +1624,7 @@ test "what is empty?" {
 
     const innerHtml =
         "<p id=\"1\"></p><span>  </span><br/><img alt=\"img\"/><div>  \n </div><script></script><p> text </p>";
-    _ = try z.setInnerHTML(allocator, body, innerHtml, .{});
+    _ = try z.setInnerHTML(body, innerHtml);
     const p = firstChild(body_node);
     const span = nextSibling(p.?);
     const br = nextSibling(span.?);
@@ -1859,7 +1838,7 @@ test "check error get body of empty element" {
 }
 
 test "root node element" {
-    const doc = try parseFromString("");
+    const doc = try z.parseFromString("");
     defer z.destroyDocument(doc);
     // // try z.printDocumentStructure(doc);
     const body_doc_node = try bodyNode(doc);
@@ -1871,7 +1850,7 @@ test "root node element" {
 
 test "children and childNodes" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
+    const doc = try z.parseFromString("<html><body><div>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
     const body = try bodyElement(doc);
@@ -1897,7 +1876,7 @@ test "children and childNodes" {
 
 test "consistency check" {
     const allocator = testing.allocator;
-    const doc = try parseFromString("<html><body><div id='test' class='demo'>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
+    const doc = try z.parseFromString("<html><body><div id='test' class='demo'>text<p>para</p><!-- comment --><span>span</span></div></body></html>");
     defer destroyDocument(doc);
 
     const body = try bodyElement(doc);
@@ -1926,7 +1905,7 @@ test "consistency check" {
 }
 
 test "createTextNode and appendChild" {
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const div = try createElementAttr(doc, "div", &.{});
@@ -1947,7 +1926,7 @@ test "createTextNode and appendChild" {
 }
 
 test "insertNodeBefore and insertNodeAfter" {
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const body_node = try bodyNode(doc);
@@ -1981,7 +1960,7 @@ test "insertNodeBefore and insertNodeAfter" {
     try testing.expect(third_child == elementToNode(div3));
 }
 test "appendChildren helper" {
-    const doc = try parseFromString("<html><body></body></html>");
+    const doc = try z.parseFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
     const body_node = try bodyNode(doc);
@@ -2025,7 +2004,7 @@ test "isWhitespaceOnlyText" {
 }
 
 test "isWhitespaceOnlyNode" {
-    const doc = try parseFromString("<p>   </p>");
+    const doc = try z.parseFromString("<p>   </p>");
     defer destroyDocument(doc);
     const body_node = try z.bodyNode(doc);
     const p = firstChild(body_node);
@@ -2116,7 +2095,7 @@ test "create Html element, tagFromQualifiedName, custom element" {
     try testing.expect(found_custom);
 
     const allocator = std.testing.allocator;
-    const text = try z.serializeToString(allocator, body_node);
+    const text = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(text);
     try testing.expectEqualStrings("<body><p></p><custom-element data-id=\"123\"></custom-element><span></span></body>", text);
 
@@ -2153,7 +2132,7 @@ test "void vs empty element detection" {
         \\</div>
     ;
 
-    const doc = try parseFromString(html);
+    const doc = try z.parseFromString(html);
     defer destroyDocument(doc);
 
     const body = try bodyElement(doc);
@@ -2209,7 +2188,7 @@ test "void vs empty element detection" {
 
 test "practical string-to-DOM scenarios" {
     {
-        // 1: Full page `parseFromString()` and `serializeToString()` round-trip test
+        // 1: Full page `z.parseFromString()` and `outerHTML()` round-trip test
         const allocator = testing.allocator;
 
         const full_page =
@@ -2223,12 +2202,12 @@ test "practical string-to-DOM scenarios" {
             \\</html>
         ;
 
-        const doc = try parseFromString(full_page);
+        const doc = try z.parseFromString(full_page);
         defer destroyDocument(doc);
 
-        const serialized_html = try z.serializeToString(
+        const serialized_html = try z.outerHTML(
             allocator,
-            documentRoot(doc).?, // HTML
+            z.nodeToElement(documentRoot(doc).?).?, // HTML
         );
         defer allocator.free(serialized_html);
 
@@ -2259,7 +2238,7 @@ test "practical string-to-DOM scenarios" {
     }
     {
         // 2: Dynamic fragment building and insertion with `setInnerHTML()`
-        const template_doc = try parseFromString("<html><body><div id='content'></div></body></html>");
+        const template_doc = try z.parseFromString("<html><body><div id='content'></div></body></html>");
         defer destroyDocument(template_doc);
 
         const template_root = z.documentRoot(template_doc);
@@ -2271,10 +2250,10 @@ test "practical string-to-DOM scenarios" {
             .{ .name = "Bob", .email = "bob@example.com" },
         };
         const allocator = testing.allocator;
-        var user_list = std.ArrayList(u8).init(allocator);
-        defer user_list.deinit();
+        var user_list: std.ArrayList(u8) = .empty;
+        defer user_list.deinit(allocator);
 
-        try user_list.appendSlice("<ul>");
+        try user_list.appendSlice(allocator, "<ul>");
         for (user_data) |user| {
             const user_item = try std.fmt.allocPrint(
                 allocator,
@@ -2283,18 +2262,13 @@ test "practical string-to-DOM scenarios" {
             );
             defer allocator.free(user_item);
 
-            try user_list.appendSlice(user_item);
+            try user_list.appendSlice(allocator, user_item);
         }
-        try user_list.appendSlice("</ul>");
+        try user_list.appendSlice(allocator, "</ul>");
 
-        _ = try z.setInnerHTML(
-            allocator,
-            content_div.?,
-            user_list.items,
-            .{ .allow_html = true },
-        );
+        _ = try z.setInnerHTML(content_div.?, user_list.items);
 
-        const result = try z.serializeElement(allocator, content_div.?);
+        const result = try z.outerHTML(allocator, content_div.?);
         defer allocator.free(result);
 
         const expected_pretty_result =
@@ -2320,7 +2294,7 @@ test "practical string-to-DOM scenarios" {
             "<div class=\"alert alert-info\">Information message</div>",
         };
 
-        const app_doc = try parseFromString("<html><body><div id=\"app\"></div></body></html>");
+        const app_doc = try z.parseFromString("<html><body><div id=\"app\"></div></body></html>");
         defer destroyDocument(app_doc);
         const app_root = z.documentRoot(app_doc);
 
@@ -2356,7 +2330,7 @@ test "practical string-to-DOM scenarios" {
             // );
         }
 
-        const result = try z.serializeElement(allocator, app_div.?);
+        const result = try z.outerHTML(allocator, app_div.?);
         defer allocator.free(result);
 
         const expected_pretty_result =

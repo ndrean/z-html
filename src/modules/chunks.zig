@@ -130,9 +130,9 @@ test "chunks1" {
         "P",
     );
 
-    const html = try z.serializeToString(
+    const html = try z.outerHTML(
         allocator,
-        z.elementToNode(body),
+        body,
     );
     defer allocator.free(html);
 
@@ -196,9 +196,9 @@ test "chunk parsing comprehensive" {
     );
 
     // Test serialization
-    const html = try z.serializeToString(
+    const html = try z.outerHTML(
         allocator,
-        z.elementToNode(body),
+        body,
     );
     defer allocator.free(html);
 

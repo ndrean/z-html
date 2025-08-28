@@ -6,7 +6,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
 
     std.debug.print("\n=== Memory Safety Analysis ===\n", .{});
 
-    const doc = try z.parseFromString("<div><span>content</span></div>");
+    const doc = try z.printDocStruct("<div><span>content</span></div>");
     defer z.destroyDocument(doc);
 
     const body = try z.bodyElement(doc);
@@ -41,7 +41,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
 
 test "Practical usage patterns" {
     const allocator = std.testing.allocator;
-    const doc = try z.parseFromString("<div><p>para</p><span>text</span></div>");
+    const doc = try z.printDocStruct("<div><p>para</p><span>text</span></div>");
     defer z.destroyDocument(doc);
 
     const body = try z.bodyElement(doc);

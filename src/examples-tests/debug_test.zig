@@ -8,7 +8,7 @@ pub fn main() !void {
         \\</div>
     ;
 
-    const doc = try zhtml.parseFromString(html);
+    const doc = try zhtml.printDocStruct(html);
     defer zhtml.destroyDocument(doc);
 
     std.debug.print("Document parsed successfully\n", .{});

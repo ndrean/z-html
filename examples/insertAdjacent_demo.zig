@@ -8,7 +8,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     // Create a simple document
-    const doc = try z.parseFromString(
+    const doc = try z.printDocStruct(
         \\<html><body>
         \\    <div id="container">
         \\        <p id="target">Target Element</p>
@@ -33,7 +33,7 @@ pub fn main() !void {
 
     // Show result after insertAdjacentElement
     const body = try z.bodyNode(doc);
-    const html1 = try z.serializeToString(allocator, body);
+    const html1 = try z.outerHTML(allocator, body);
     defer allocator.free(html1);
     std.debug.print("After insertAdjacentElement:\n{s}\n\n", .{html1});
 
@@ -44,7 +44,7 @@ pub fn main() !void {
     try z.insertAdjacentHTML(allocator, target_node, .beforeend, "<span style='color: red;'>Last Child</span>");
 
     // Show final result
-    const html2 = try z.serializeToString(allocator, body);
+    const html2 = try z.outerHTML(allocator, body);
     defer allocator.free(html2);
     std.debug.print("After insertAdjacentHTML:\n{s}\n\n", .{html2});
 

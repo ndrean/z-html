@@ -213,8 +213,8 @@ fn removeCommentWithSpacing(allocator: std.mem.Allocator, comment_node: *z.DomNo
 /// Caller needs to free the slice
 pub fn normalizeText(allocator: std.mem.Allocator, html: []const u8, options: z.TextOptions) ![]u8 {
     _ = options;
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     var i: usize = 0;
     while (i < html.len) {
@@ -232,11 +232,11 @@ pub fn normalizeText(allocator: std.mem.Allocator, html: []const u8, options: z.
                 const next_char = html[i];
 
                 if (!(last_char == '>' and next_char == '<')) {
-                    try result.append(' ');
+                    try result.append(allocator, ' ');
                 }
             }
         } else {
-            try result.append(ch);
+            try result.append(allocator, ch);
             i += 1;
         }
     }
@@ -244,94 +244,7 @@ pub fn normalizeText(allocator: std.mem.Allocator, html: []const u8, options: z.
     // Trim the result
     const final_result = std.mem.trim(u8, result.items, &std.ascii.whitespace);
     return try allocator.dupe(u8, final_result);
-    // // Trim leading and trailing whitespace
-    // const trimmed = std.mem.trim(
-    //     u8,
-    //     text,
-    //     &std.ascii.whitespace,
-    // );
-
-    // const maybe_keep_new_lines = options.keep_new_lines;
-
-    // var result = std.ArrayList(u8).init(allocator);
-    // defer result.deinit();
-
-    // var i: usize = 0;
-    // while (i < trimmed.len) {
-    //     const ch = trimmed[i];
-
-    //     if (std.ascii.isWhitespace(ch)) {
-    //         // Look ahead to see if we're between HTML elements (> ... <)
-    //         const whitespace_start = i;
-    //         while (i < trimmed.len and std.ascii.isWhitespace(trimmed[i])) {
-    //             i += 1;
-    //         }
-
-    //         // Check if whitespace is between HTML elements
-    //         var prev_char: u8 = 0;
-    //         if (whitespace_start > 0) prev_char = trimmed[whitespace_start - 1];
-    //         var next_char: u8 = 0;
-    //         if (i < trimmed.len) next_char = trimmed[i];
-
-    //         // If whitespace is between > and < (between HTML elements), skip it
-    //         // Otherwise, collapse to single space (within text content)
-    //         if (prev_char == '>' and next_char == '<') {
-    //             // Skip whitespace between elements completely
-    //             continue;
-    //         } else {
-    //             // Handle newlines based on keep_new_lines option
-    //             if (maybe_keep_new_lines and std.mem.indexOfScalar(u8, trimmed[whitespace_start..i], '\n') != null) {
-    //                 // Preserve newline if keep_new_lines is true and there was a newline in the whitespace
-    //                 try result.append('\n');
-    //             } else {
-    //                 // Preserve single space for text content
-    //                 try result.append(' ');
-    //             }
-    //         }
-    //     } else {
-    //         try result.append(ch);
-    //         i += 1;
-    //     }
-    // }
-
-    // const normalized = try result.toOwnedSlice();
-
-    // // Note: DOM cleaning should not escape HTML content.
-    // // Escaping is for new text insertion, not cleaning existing HTML.
-    // // The escape option is ignored in the cleaner context.
-    // return normalized;
 }
-
-// ORIGINAL VERSION - for text node content only:
-// [cleaner] Remove excessive whitespace from text content (original version)
-//
-// This was the original function designed for normalizing whitespace within text nodes,
-// not for processing full HTML markup.
-//
-// Caller needs to free the slice
-// pub fn normalizeTextWhitespace_original(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-//     // Trim leading and trailing whitespace
-//     const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
-//
-//     // Collapse internal whitespace sequences to single spaces
-//     var result = std.ArrayList(u8).init(allocator);
-//     defer result.deinit();
-//
-//     var prev_was_whitespace = false;
-//     for (trimmed) |ch| {
-//         if (std.ascii.isWhitespace(ch)) {
-//             if (!prev_was_whitespace) {
-//                 try result.append(' '); // Normalize all whitespace to spaces
-//                 prev_was_whitespace = true;
-//             }
-//         } else {
-//             try result.append(ch);
-//             prev_was_whitespace = false;
-//         }
-//     }
-//
-//     return result.toOwnedSlice();
-// }
 
 // ========================================================================
 // === TESTS ===
@@ -461,7 +374,7 @@ test "cleaning options coverage" {
         const body_node = try z.bodyNode(doc);
 
         try cleanDomTree(allocator, body_node, .{});
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
 
         // Should preserve comments and empty elements
@@ -496,11 +409,11 @@ test "cleaning options coverage" {
 
         const doc = try z.parseFromString(html);
         defer z.destroyDocument(doc);
-        const body_node = try z.bodyNode(doc);
+        const body = try z.bodyElement(doc);
 
-        try cleanDomTree(allocator, body_node, opts);
+        try cleanDomTree(allocator, z.elementToNode(body), opts);
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, body);
         defer allocator.free(result);
 
         // Debug: print the actual result to see what we're getting
@@ -529,12 +442,12 @@ test "cleaning options coverage" {
         defer z.destroyDocument(doc);
         const body_node = try z.bodyNode(doc);
 
-        const before_empty = try z.serializeToString(allocator, body_node);
+        const before_empty = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(before_empty);
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
         // print("After empty element removal: {s}\n", .{result});
         // print("T3: {s}\n", .{result});
@@ -589,7 +502,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
         // print("T4: {s}\n", .{result});
 
@@ -647,7 +560,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
 
         // print("Test 5 (escape ignored in cleaning) result: '{s}'\n", .{result});
@@ -685,7 +598,7 @@ test "cleaning options coverage" {
 
         try cleanDomTree(allocator, body_node, opts);
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
 
         // print("Test 6 (cleaning only, escape ignored) result: '{s}'\n", .{result});
@@ -738,7 +651,7 @@ test "keep_new_lines option comprehensive test" {
             },
         );
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
         // print("{s}\n", .{result});
 
@@ -759,7 +672,7 @@ test "keep_new_lines option comprehensive test" {
         const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
-        const before_newlines = try z.serializeToString(allocator, body_node);
+        const before_newlines = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(before_newlines);
         // print("Before newlines cleaning: {s}\n", .{before_newlines});
 
@@ -772,7 +685,7 @@ test "keep_new_lines option comprehensive test" {
             },
         );
 
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
         // print("After newlines cleaning (keep=true): {s}\n", .{result});
 
@@ -817,7 +730,7 @@ test "complete DOM cleaning with proper node removal" {
 
     // print("\n=== Complete DOM Cleaning Test ===\n", .{});
 
-    const before = try z.serializeToString(allocator, body_node);
+    const before = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(before);
 
     try cleanDomTree(
@@ -830,7 +743,7 @@ test "complete DOM cleaning with proper node removal" {
         },
     );
 
-    const after = try z.serializeToString(allocator, body_node);
+    const after = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(after);
     // print("\n\nAfter cleaning:=============\n{s}\n\n", .{after});
 
@@ -870,13 +783,13 @@ test "comment removal between text nodes concatenation issue" {
     const body = try z.bodyElement(doc);
     const body_node = z.elementToNode(body);
 
-    const before = try z.serializeToString(allocator, body_node);
+    const before = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(before);
     // print("Before comment removal: {s}\n", .{before});
 
     try cleanDomTree(allocator, body_node, .{ .remove_comments = true });
 
-    const after = try z.serializeToString(allocator, body_node);
+    const after = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(after);
     // print("After comment removal: {s}\n", .{after});
 
@@ -991,12 +904,12 @@ test "comment removal with proper spacing" {
         const body = try z.bodyElement(doc);
         const body_node = z.elementToNode(body);
 
-        const before = try z.serializeToString(allocator, body_node);
+        const before = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(before);
 
         try cleanDomTree(allocator, body_node, .{ .remove_comments = true });
 
-        const after = try z.serializeToString(allocator, body_node);
+        const after = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(after);
 
         // print("Test {d}: {s}\n", .{ i + 1, test_case.description });
@@ -1036,7 +949,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
         .{ .escape = false },
     );
     {
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
 
         // print("Unescaped text insertion result: '{s}'\n", .{result});
@@ -1053,7 +966,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
         .{ .escape = true },
     );
     {
-        const result = try z.serializeToString(allocator, body_node);
+        const result = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
         defer allocator.free(result);
 
         // print("Escaped text insertion result: '{s}'\n", .{result});

@@ -10,7 +10,7 @@ test "Newly added lexbor functions" {
     // Test qualified name function
     print("\n1. Element Qualified Name:\n", .{});
     const html = "<div><svg:circle xmlns:svg='http://www.w3.org/2000/svg' r='10'/><p>Regular paragraph</p></div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
     const body = try z.bodyElement(doc);

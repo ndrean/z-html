@@ -144,13 +144,13 @@ pub const FragmentResult = struct {
         const all_nodes = try self.getNodes(allocator);
         defer allocator.free(all_nodes);
 
-        var elements = std.ArrayList(*z.HTMLElement).init(allocator);
+        var elements: std.ArrayList(*z.HTMLElement) = .empty;
         for (all_nodes) |node| {
             if (z.nodeToElement(node)) |element| {
-                try elements.append(element);
+                try elements.append(allocator, element);
             }
         }
-        return elements.toOwnedSlice();
+        return elements.toOwnedSlice(allocator);
     }
 
     /// Serialize the fragment back to HTML
@@ -782,7 +782,7 @@ test "malformed fragment part recovery by lexbor" {
 
     try z.normalize(allocator, body_elt.?);
 
-    const serialized = try z.serializeToString(allocator, body);
+    const serialized = try z.outerHTML(allocator, body_elt.?);
     defer allocator.free(serialized);
 
     // lexbor should auto-fix part of the malformed HTML
@@ -866,12 +866,7 @@ test "show" {
         const temp_div_elt = try z.createElement(doc, "div");
         const temp_div = z.elementToNode(temp_div_elt);
 
-        _ = try z.setInnerHTML(
-            allocator,
-            temp_div_elt,
-            inner_content,
-            .{},
-        );
+        _ = try z.setInnerHTML(temp_div_elt, inner_content);
 
         // Move the LI element to the UL
         if (z.firstChild(temp_div)) |li| {
@@ -889,7 +884,7 @@ test "show" {
     ); // #document-fragment
 
     z.appendFragment(main, fragment_node);
-    try z.printDocumentStructure(doc);
+    // try z.printDocStruct(doc);
 
     const lis = try z.getElementsByTagName(doc, "LI");
     defer if (lis) |collection| {
@@ -898,7 +893,7 @@ test "show" {
     const li_count = z.collectionLength(lis.?);
     try testing.expect(li_count == 0);
 
-    const fragment_txt = try z.serializeToString(allocator, main);
+    const fragment_txt = try z.outerHTML(allocator, z.nodeToElement(main).?);
 
     defer allocator.free(fragment_txt);
 

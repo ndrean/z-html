@@ -27,7 +27,7 @@ test "Smart text processing features" {
     // Test 2: Context-aware escaping detection
     print("\n2. Context-Aware Escaping Detection:\n", .{});
     const html = "<div><script>alert('test');</script><style>body { color: red; }</style><p>normal text</p></div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
     const body = try z.bodyElement(doc);
@@ -76,7 +76,7 @@ test "Smart text processing features" {
     // Test 4: Context-aware text processing integration
     print("\n4. Context-Aware Text Processing Integration:\n", .{});
     const integration_html = "<div><script>console.log('hello');</script><p>  <strong>Hello</strong> & world!</p></div>";
-    const integration_doc = try z.parseFromString(integration_html);
+    const integration_doc = try z.printDocStruct(integration_html);
     defer z.destroyDocument(integration_doc);
 
     const integration_body = try z.bodyElement(integration_doc);

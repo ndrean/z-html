@@ -8,7 +8,7 @@ This document explains the three distinct phases of HTML processing in z-html an
 
 ```zig
 const html = "<my-widget><script>alert('xss')</script></my-widget>";
-const doc = try z.parseFromString(html);  // ← Lexbor parses structure
+const doc = try z.printDocStruct(html);  // ← Lexbor parses structure
 ```
 
 **What happens:**
@@ -81,7 +81,7 @@ if (isNoEscapeElementFastZeroCopy(element)) {
 
 ```zig
 // Normalize existing DOM structure
-const messy_dom = parseFromString(user_uploaded_html);
+const messy_dom = printDocStruct(user_uploaded_html);
 try normalizer.cleanDomTree(allocator, messy_dom, .{
     .remove_comments = true,
     .remove_empty_elements = true
@@ -125,7 +125,7 @@ if (isNoEscapeElementFast("script")) {
 const user_input = "<my-widget><script>steal_cookies()</script></my-widget>";
 
 // 2. PARSE TO DOM (Phase 1)
-const doc = try parseFromString(user_input);
+const doc = try printDocStruct(user_input);
 // ↳ Creates DOM structure, scripts don't execute in Zig
 
 // 3. OPTIONAL: NORMALIZE DOM (Phase 2)

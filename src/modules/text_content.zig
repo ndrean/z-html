@@ -69,7 +69,7 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
 /// const p = firstChild(try bodyNode(doc));
 /// try setTextContent(p.?, "Hi");
 ///
-/// const text = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+/// const text = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
 /// defer allocator.free(text);
 /// try testing.expectEqualStrings("<p>Hi</p>", text);
 /// ---
@@ -95,7 +95,7 @@ test "setTextContent" {
     defer allocator.free(p_text);
     try testing.expectEqualStrings("New text", p_text);
     try testing.expectEqualStrings("New text", z.textContent_zc(p.?));
-    const txt = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+    const txt = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
     defer allocator.free(txt);
     try testing.expectEqualStrings("<p>New text</p>", txt);
 }
@@ -113,7 +113,7 @@ test "setTextContent" {
 /// try replaceText(allocator, inner_text.?, "Hi ", .{});
 /// try testing.expectEqualStrings("Hi world", z.textContent_zc(p.?));
 ///
-/// const html = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+/// const html = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
 /// defer allocator.free(html);
 /// try testing.expectEqualStrings("<p>Hi <strong>world</strong></p>", html);
 /// ---
@@ -160,7 +160,7 @@ test "replaceTextContent" {
     const p_text = z.textContent_zc(p.?);
     try testing.expectEqualStrings("New textworld", p_text);
     try testing.expectEqualStrings("New text", z.textContent_zc(inner_text.?));
-    const txt = try z.serializeElement(allocator, z.nodeToElement(p.?).?);
+    const txt = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
     defer allocator.free(txt);
     try testing.expectEqualStrings("<p>New text<strong>world</strong></p>", txt);
 }
@@ -268,21 +268,21 @@ test "gets all text elements from Fragment" {
 ///
 /// Caller must free the returned slice.
 pub fn escapeHtml(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     for (text) |ch| {
         switch (ch) {
-            '<' => try result.appendSlice("&lt;"),
-            '>' => try result.appendSlice("&gt;"),
-            '&' => try result.appendSlice("&amp;"),
-            '"' => try result.appendSlice("&quot;"),
-            '\'' => try result.appendSlice("&#39;"),
-            else => try result.append(ch),
+            '<' => try result.appendSlice(allocator, "&lt;"),
+            '>' => try result.appendSlice(allocator, "&gt;"),
+            '&' => try result.appendSlice(allocator, "&amp;"),
+            '"' => try result.appendSlice(allocator, "&quot;"),
+            '\'' => try result.appendSlice(allocator, "&#39;"),
+            else => try result.append(allocator, ch),
         }
     }
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 test "get & set NodeTextContent and escape option" {

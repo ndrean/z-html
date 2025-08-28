@@ -37,7 +37,7 @@ pub fn hasClass(element: *z.HTMLElement, class_name: []const u8) bool {
 /// [classList] Get the class attribute list as a borrowed string from lexbor
 ///
 /// Unsafe: Use it only for parsing
-fn classListAsString_zc(element: *z.HTMLElement) ?[]const u8 {
+pub fn classListAsString_zc(element: *z.HTMLElement) ?[]const u8 {
     if (!z.hasAttribute(element, "class")) return null;
 
     var class_len: usize = 0;
@@ -47,7 +47,6 @@ fn classListAsString_zc(element: *z.HTMLElement) ?[]const u8 {
 
 /// [classList] Get class list as string without creating the classList
 ///
-/// Return
 /// Caller owns the slice
 pub fn classListAsString(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var class_len: usize = 0;
@@ -135,15 +134,15 @@ pub const DOMTokenList = struct {
     fn sync(self: *Self) !void {
         if (!self.dirty) return;
 
-        var class_string = std.ArrayList(u8).init(self.allocator);
-        defer class_string.deinit();
+        var class_string: std.ArrayList(u8) = .empty;
+        defer class_string.deinit(self.allocator);
 
         var iter = self.classes.iterator();
         var first = true;
         while (iter.next()) |entry| {
-            if (!first) try class_string.append(' ');
+            if (!first) try class_string.append(self.allocator, ' ');
             first = false;
-            try class_string.appendSlice(entry.key_ptr.*);
+            try class_string.appendSlice(self.allocator, entry.key_ptr.*);
         }
 
         _ = z.setAttribute(
@@ -246,18 +245,18 @@ pub const DOMTokenList = struct {
 
     /// Get class string as it would appear in DOM
     pub fn toString(self: *const Self, allocator: std.mem.Allocator) ![]u8 {
-        var class_string = std.ArrayList(u8).init(allocator);
-        defer class_string.deinit();
+        var class_string: std.ArrayList(u8) = .empty;
+        defer class_string.deinit(allocator);
 
         var iter = self.classes.iterator();
         var first = true;
         while (iter.next()) |entry| {
-            if (!first) try class_string.append(' ');
+            if (!first) try class_string.append(self.allocator, ' ');
             first = false;
-            try class_string.appendSlice(entry.key_ptr.*);
+            try class_string.appendSlice(self.allocator, entry.key_ptr.*);
         }
 
-        return class_string.toOwnedSlice();
+        return class_string.toOwnedSlice(self.allocator);
     }
 };
 

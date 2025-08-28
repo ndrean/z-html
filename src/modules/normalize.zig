@@ -14,7 +14,7 @@ const print = std.debug.print;
 // Fast DOM traversal for optimized ID search
 extern "c" fn lxb_dom_node_simple_walk(
     root: *z.DomNode,
-    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.C) c_int,
+    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.c) c_int,
     ctx: ?*anyopaque,
 ) void;
 
@@ -32,7 +32,7 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
     var context = NormCtx{ .allocator = allocator };
 
     const callback = struct {
-        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
+        fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             const ctx_ptr: *NormCtx = castContext(NormCtx, ctx);
             if (z.isTypeText(node)) {
                 const text_content = z.textContent_zc(node);
@@ -42,11 +42,11 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
                     &std.ascii.whitespace,
                 );
                 z.replaceText(ctx_ptr.allocator, node, trimmed, .{}) catch {
-                    return z.Action.CONTINUE.toInt();
+                    return z._CONTINUE;
                 };
             }
 
-            return z.Action.CONTINUE.toInt();
+            return z._CONTINUE;
         }
     }.cb;
 
@@ -103,9 +103,9 @@ const Context = struct {
         return .{
             .allocator = alloc,
             .options = opts,
-            .nodes_to_remove = std.ArrayList(*z.DomNode).init(alloc),
-            .text_merges = std.ArrayList(TextMerge).init(alloc),
-            .template_nodes = std.ArrayList(*z.DomNode).init(alloc),
+            .nodes_to_remove = .empty,
+            .text_merges = .empty,
+            .template_nodes = .empty,
         };
     }
 
@@ -113,9 +113,9 @@ const Context = struct {
         for (self.text_merges.items) |merge| {
             self.allocator.free(merge.new_content);
         }
-        self.text_merges.deinit();
-        self.nodes_to_remove.deinit();
-        self.template_nodes.deinit();
+        self.text_merges.deinit(self.allocator);
+        self.nodes_to_remove.deinit(self.allocator);
+        self.template_nodes.deinit(self.allocator);
     }
 
     /// _Walk-up_ the tree to check if the node is inside a whitespace preserved element.
@@ -169,30 +169,30 @@ pub fn normalizeWithOptions(
 /// It is a two-step process (you can't modify the DOM during the walk):
 /// - traverse the DOM with "simple_walk" and collect nodes for post-processing
 /// - post-process the collected nodes
-fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
+fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     const context_ptr: *Context = castContext(Context, ctx);
 
     switch (z.nodeType(node)) {
         .comment => {
             if (context_ptr.options.skip_comments) {
                 // collect comments for post-processing
-                context_ptr.nodes_to_remove.append(node) catch {
-                    return z.Action.STOP.toInt();
+                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
                 };
             }
         },
         .element => {
             if (z.isTemplate(node)) {
                 // Collect template nodes for post-processing
-                context_ptr.template_nodes.append(node) catch {
-                    return z.Action.STOP.toInt();
+                context_ptr.template_nodes.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
                 };
-                return z.Action.CONTINUE.toInt();
+                return z._CONTINUE;
             }
         },
         .text => {
             if (context_ptr.shouldPreserveWhitespace(node)) {
-                return z.Action.CONTINUE.toInt();
+                return z._CONTINUE;
             }
 
             if (context_ptr.options.trim_text or context_ptr.options.remove_whitespace_text_nodes) {
@@ -206,24 +206,27 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
                 if (context_ptr.options.remove_whitespace_text_nodes) {
                     if (trimmed.len == 0) {
                         // collect for post-processing
-                        context_ptr.nodes_to_remove.append(node) catch {
-                            return z.Action.STOP.toInt();
+                        context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                            return z._STOP;
                         };
                     }
                 }
 
-                if (std.mem.eql(u8, text_content, trimmed)) return z.Action.CONTINUE.toInt();
+                if (std.mem.eql(u8, text_content, trimmed)) return z._CONTINUE;
 
                 if (context_ptr.options.trim_text and trimmed.len > 0) {
                     const trimmed_copy = context_ptr.allocator.dupe(u8, trimmed) catch {
-                        return z.Action.STOP.toInt();
+                        return z._STOP;
                     };
                     // collect for post-processing
-                    context_ptr.text_merges.append(.{
-                        .target_node = node,
-                        .new_content = trimmed_copy,
-                    }) catch {
-                        return z.Action.STOP.toInt();
+                    context_ptr.text_merges.append(
+                        context_ptr.allocator,
+                        .{
+                            .target_node = node,
+                            .new_content = trimmed_copy,
+                        },
+                    ) catch {
+                        return z._STOP;
                     };
                 }
             }
@@ -232,7 +235,7 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.C) c_int {
         else => {},
     }
 
-    return z.Action.CONTINUE.toInt();
+    return z._CONTINUE;
 }
 
 fn PostWalkOperations(
@@ -318,7 +321,7 @@ test "normalize, context preservation, comments removed" {
             },
         );
 
-        const result = try z.serializeElement(
+        const result = try z.outerHTML(
             allocator,
             body_elt,
         );
@@ -346,7 +349,7 @@ test "normalize, context preservation, comments removed" {
             },
         );
 
-        const result = try z.serializeElement(
+        const result = try z.outerHTML(
             allocator,
             body_elt,
         );
@@ -404,7 +407,7 @@ test "template normalize" {
             },
         );
 
-        const serialized = try z.serializeToString(allocator, root);
+        const serialized = try z.outerHTML(allocator, z.nodeToElement(root).?);
         defer allocator.free(serialized);
 
         const expected = "<html><head></head><body><div><p>Before template</p><template id=\"test\"><span>Template content</span><em></em><strong>Bold text</strong></template><p>After template</p></div></body></html>";
@@ -442,11 +445,15 @@ test "escape" {
         },
     );
 
-    const serialized = try z.serializeToString(allocator, root);
+    const serialized = try z.outerHTML(allocator, z.nodeToElement(root).?);
     defer allocator.free(serialized);
 
-    print("{s}\n", .{serialized});
+    // print("{s}\n", .{serialized});
     // const expected = "<html><head></head><body><div>Some <b>bold</b> text</div></body></html>";
 
     // try testing.expectEqualStrings(expected, serialized);
+}
+
+test "DOMPurify" {
+    _ = "";
 }

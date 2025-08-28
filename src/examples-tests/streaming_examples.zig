@@ -222,7 +222,7 @@ test "chunk parsing with malformed HTML recovery" {
 
     // lexbor automatically recovers and fixes malformed HTML
     const doc = chunk_parser.getDocument();
-    const html = try z.serializeToString(allocator, try z.bodyNode(doc));
+    const html = try z.outerHTML(allocator, try z.bodyNode(doc));
     defer allocator.free(html);
 
     print("Recovered HTML: {s}\n", .{html});

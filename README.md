@@ -14,12 +14,12 @@ In other words, you can use `JavaScript` semantics on the server with `Zig`.
 This project exposes a significant / essential subset of all available `lexbor` functions:
 
 - Parsing:
-  - document parsing: `parseFromString()`
+  - document parsing: `printDocStruct()`
   - chunk processing
   - fragment / context-aware parsing
   - `setInnerHTML()` and `insertAdjacentHTML()`
 - Serialization:
-  - tree: `serializeToString()`
+  - tree: `outerHTML()`
   - `innerHTML()`
 - DOM_tree and back
   - compressed tuple: `DOM_toTuple()` and `Tuple_toDOM()`
@@ -66,7 +66,7 @@ test "Append fragment" {
   const allocator = std.testing.allocator;
 
   // create the skeleton <html><body></body></html>
-  const doc = try z.parseFromString("");
+  const doc = try z.printDocStruct("");
   defer z.destroyDocument(doc);
 
   const body = try z.bodyNode(doc);
@@ -119,7 +119,7 @@ test "Append fragment" {
   try testing.expect(li_count == 3);
 
   // second test: we check that the full string is what we expect
-  const serialized_fragment = try z.serializeToString(allocator, div);
+  const serialized_fragment = try z.outerHTML(allocator, div);
   defer allocator.free(serialized_fragment);
 
   const expected_fragment =
@@ -311,7 +311,7 @@ Fragment parsing handles templates and components (for template engines, compone
 
 | Method | Context Awareness | Cross-Document | Memory Management | Use Case |
 |--|--|--|--|---|
-| `parseFromString` | Full document | Single doc | Document owns all | Complete pages |
+| `printDocStruct` | Full document | Single doc | Document owns all | Complete pages |
 | `setInnerHTML` | Parent element context | Same document | Element cleanup | Content replacement |
 | `parseFragment` | Explicit context | Cross-document via `parseFragmentInto` | Fragment result owns | Templates/components |
 

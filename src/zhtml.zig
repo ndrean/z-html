@@ -13,8 +13,7 @@ const collection = @import("modules/collection.zig");
 const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
-// const smart_text = @import("modules/smart_text.zig");
-const walker = @import("modules/search_attributes.zig");
+const walker = @import("modules/walker.zig");
 const classes = @import("modules/class_list.zig");
 const template = @import("modules/template.zig");
 const norm = @import("modules/normalize.zig");
@@ -25,24 +24,14 @@ const colours = @import("modules/colours.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
-pub const Writer = log.GlobalWriter;
+// pub const Writer = log.GlobalWriter;
 
 // =========================================================
 // General Status codes & constants & definitions
 // =========================================================
 
-pub const Action = enum(c_int) {
-    /// Continue traversing the DOM tree
-    CONTINUE = 0,
-    /// Stop traversal immediately (single element searches)
-    STOP = 1,
-
-    // Convert to u32 for C callback compatibility
-    pub fn toInt(self: Action) c_int {
-        return @intFromEnum(self);
-    }
-};
-
+pub const _CONTINUE: c_int = 0;
+pub const _STOP: c_int = 1;
 pub const _OK: usize = 0;
 
 // from lexbor source: /tag/const.h
@@ -69,14 +58,28 @@ pub const TextOptions = struct {
     allow_html: bool = true, // Security: explicitly allow HTML parsing
 };
 
+// =====================================
+// Colouring and syntax highlighting
+// =====================================
 pub const ElementStyles = colours.ElementStyles;
 pub const SyntaxStyle = colours.SyntaxStyle;
 pub const Style = colours.Style;
 pub const getStyleForElement = colours.getStyleForElement;
 pub const isKnownAttribute = colours.isKnownAttribute;
+pub const isDangerousAttributeValue = colours.isDangerousAttributeValue;
 
-pub const do_sanitize = sanitize.sanitize;
-pub const Parser = parser.Parser;
+// ====================================
+// Sanitizer
+// ====================================
+
+// ====================================
+// Walker Search traversal functions
+// ====================================
+pub const simpleWalk = walker.simpleWalk;
+pub const castContext = walker.castContext;
+pub const genProcessAll = walker.genProcessAll;
+pub const genSearchElement = walker.genSearchElement;
+pub const genSearchElements = walker.genSearchElements;
 
 //=====================================
 // Main structs
@@ -92,11 +95,6 @@ pub const DocumentFragment = opaque {};
 //=====================================
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
-
-//=====================================
-// Parser
-//=====================================
-pub const parseFromString = lxb.parseFromString;
 
 //=====================================
 // Create / Destroy Node / Element
@@ -168,8 +166,8 @@ pub const NoEscapeTagSet = tag.NoEscapeTagSet;
 // from lexbor source: /tag/const.h
 
 pub const tagFromQualifiedName = tag.tagFromQualifiedName;
-pub const matchesTagName = tag.matchesTagName;
 pub const tagFromElement = tag.tagFromElement;
+pub const matchesTagName = tag.matchesTagName;
 pub const isVoidName = tag.isVoidName;
 pub const isVoidElement = tag.isVoidElement; // Change name
 pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
@@ -225,8 +223,17 @@ pub const appendChildren = lxb.appendChildren;
 pub const childNodes = lxb.childNodes;
 pub const children = lxb.children;
 
+//=====================================
+// Parser
+//=====================================
+
+pub const HtmlTree = opaque {};
+pub const parseFromString = parser.parseFromString;
+// Parser engine
+pub const Parser = parser.Parser;
+
 // ============================================================
-// Chunk processing
+// Chunk processing engine
 // ============================================================
 pub const ChunkParser = chunks.ChunkParser;
 pub const HtmlParser = chunks.HtmlParser;
@@ -265,82 +272,49 @@ pub const appendParsedContent = template.appendParsedContent;
 
 // ===========================================================================
 // DOM Traversal utilities
-pub const collectChildItems = traverse.collectChildItems;
-pub const collectChildElements = traverse.collectChildElements;
-pub const elementMatchCollector = traverse.elementMatchCollector;
-pub const nodeMatchCollector = traverse.nodeMatchCollector;
+// pub const collectChildItems = traverse.collectChildItems;
+// pub const collectChildElements = traverse.collectChildElements;
+// pub const elementMatchCollector = traverse.elementMatchCollector;
+// pub const nodeMatchCollector = traverse.nodeMatchCollector;
 
 //=====================================
 // DOM Tree representation utilities
 //=====================================
 pub const DomTreeNode = tree.HtmlNode;
 pub const DomTreeArray = tree.HtmlTree;
-pub const JsonTreeNode = tree.JsonNode;
-pub const JsonTreeArray = tree.JsonTree;
-pub const JsonAttribute = tree.JsonAttribute;
+// pub const JsonTreeNode = tree.JsonNode;
+// pub const JsonTreeArray = tree.JsonTree;
+// pub const JsonAttribute = tree.JsonAttribute;
 
 // conversion functions
 pub const freeHtmlTree = tree.freeHtmlTree;
-pub const freeJsonTree = tree.freeJsonTree;
-pub const documentToJsonTree = tree.documentToJsonTree;
+// pub const freeJsonTree = tree.freeJsonTree;
+// pub const documentToJsonTree = tree.documentToJsonTree;
 pub const documentToTupleTree = tree.documentToTupleTree;
 
-// Pretty logging helpers
 pub const printNode = tree.printNode;
-pub const jsonNodeToString = tree.jsonNodeToString;
-pub const jsonTreeToString = tree.jsonTreeToString;
-pub const parseJsonString = tree.parseJsonString;
-pub const parseJsonTreeString = tree.parseJsonTreeString;
+// pub const jsonNodeToString = tree.jsonNodeToString;
+// pub const jsonTreeToString = tree.jsonTreeToString;
+// pub const parseJsonString = tree.parseJsonString;
+// pub const parseJsonTreeString = tree.parseJsonTreeString;
 
 pub const nodeToHtml = tree.nodeToHtml;
 pub const treeToHtml = tree.treeToHtml;
-pub const roundTripConversion = tree.roundTripConversion;
 pub const freeDomTreeArray = tree.freeHtmlTree;
 pub const freeDomTreeNode = tree.freeHtmlNode;
-pub const freeJsonTreeArray = tree.freeJsonTree;
-pub const freeJsonTreeNode = tree.freeJsonNode;
-
-pub const printDocumentStructure = tree.printDocumentStructure;
 
 //=====================================
-// Collection management
-//=====================================
-pub const DomCollection = opaque {};
-pub const createCollection = collection.createCollection;
-pub const createDefaultCollection = collection.createDefaultCollection;
-pub const createSingleElementCollection = collection.createSingleElementCollection;
-pub const destroyCollection = collection.destroyCollection;
-pub const clearCollection = collection.clearCollection;
-pub const collectionLength = collection.collectionLength;
-pub const getCollectionElementAt = collection.getCollectionElementAt;
-pub const getFirstCollectionElement = collection.getCollectionFirstElement;
-pub const getLastCollectionElement = collection.getCollectionLastElement;
-pub const isCollectionEmpty = collection.isCollectionEmpty;
-pub const appendElementToCollection = collection.appendElementToCollection;
-pub const collectionIterator = collection.iterator;
-pub const debugPrint = collection.debugPrint;
-pub const collectionToSlice = collection.collectionToSlice;
-pub const CollectionIterator = collection.CollectionIterator;
-
-// Collection configuration
-pub const setDefaultCapacity = collection.setDefaultCapacity;
-pub const getDefaultCapacity = collection.getDefaultCapacity;
-pub const resetDefaultCapacity = collection.resetDefaultCapacity;
-
-//=====================================
-// Serialization
-//=====================================
-pub const serializeToString = serialize.serializeToString;
-// pub const serializeNode = serialize.serializeNode;
-pub const serializeElement = serialize.serializeElement;
-
-//=====================================
-// Inner / outer HTML manipulation
+// Sanitation / Serialization / Inner / outer HTML manipulation
 //=====================================
 pub const innerHTML = serialize.innerHTML;
 pub const setInnerHTML = serialize.setInnerHTML; // Security-first API with TextOptions
-// pub const setInnerHTMLUnsafe = serialize.setInnerHTMLUnsafe; // Direct lexbor access
 pub const outerHTML = serialize.outerHTML;
+pub const outerNodeHTML = serialize.outerNodeHTML;
+
+pub const sanitizeNode = sanitize.sanitizeNode;
+pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
+pub const printDocStruct = tree.printDocStruct;
+pub const prettyPrint = serialize.prettyPrint;
 
 pub const cleanDomTree = cleaner.cleanDomTree;
 pub const normalizeText = cleaner.normalizeText;
@@ -355,6 +329,16 @@ pub const CssSelectorList = opaque {};
 pub const CssSelectorSpecificity = opaque {};
 pub const querySelectorAll = css.querySelectorAll;
 pub const querySelector = css.querySelector;
+
+//=========================================
+// Class handling - DOMTokenList
+//=========================================
+pub const hasClass = classes.hasClass;
+pub const classListAsString = classes.classListAsString;
+pub const classListAsString_zc = classes.classListAsString_zc;
+
+pub const DOMTokenList = classes.DOMTokenList;
+pub const classList = classes.classList;
 
 //=========================================
 // Attributes
@@ -381,17 +365,47 @@ pub const getAttributeValue = attrs.getAttributeValue;
 pub const getAttributeName_zc = attrs.getAttributeName_zc;
 pub const getAttributeName = attrs.getAttributeName;
 
+//=========================================
+// Attribute struct reflexion
+//=========================================
+
+pub const getFirstAttribute = attrs.getFirstAttribute;
+pub const getNextAttribute = attrs.getNextAttribute;
+
 //=======================================
 // ------- Search (simple walk)
 // ======================================
-pub const getElementById = walker.getElementById;
-pub const getElementByTag = walker.getElementByTag;
-pub const getElementByClass = walker.getElementByClass;
-pub const getElementByAttribute = walker.getElementByAttribute;
-pub const getElementByDataAttribute = walker.getElementByDataAttribute;
-// multiple
-pub const getElementsByClass = walker.getElementsByClass;
-pub const getElementsByTag = walker.getElementsByTag;
+pub const getElementById = attrs.getElementById;
+pub const getElementByClass = attrs.getElementByClass;
+pub const getElementByAttribute = attrs.getElementByAttribute;
+pub const getElementByDataAttribute = attrs.getElementByDataAttribute;
+pub const getElementByTag = attrs.getElementByTag; // multiple
+pub const getElementsById = attrs.getElementsById; // multiple
+
+//=====================================
+// Collection management
+//=====================================
+pub const DomCollection = opaque {};
+pub const createCollection = collection.createCollection;
+pub const createDefaultCollection = collection.createDefaultCollection;
+pub const createSingleElementCollection = collection.createSingleElementCollection;
+pub const destroyCollection = collection.destroyCollection;
+pub const clearCollection = collection.clearCollection;
+pub const collectionLength = collection.collectionLength;
+pub const getCollectionElementAt = collection.getCollectionElementAt;
+pub const getFirstCollectionElement = collection.getCollectionFirstElement;
+pub const getLastCollectionElement = collection.getCollectionLastElement;
+pub const isCollectionEmpty = collection.isCollectionEmpty;
+pub const appendElementToCollection = collection.appendElementToCollection;
+pub const collectionIterator = collection.iterator;
+pub const debugPrint = collection.debugPrint;
+pub const collectionToSlice = collection.collectionToSlice;
+pub const CollectionIterator = collection.CollectionIterator;
+
+// Collection configuration
+pub const setDefaultCapacity = collection.setDefaultCapacity;
+pub const getDefaultCapacity = collection.getDefaultCapacity;
+pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
 //=========================================
 // Collection based Elements Search
@@ -403,54 +417,7 @@ pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 pub const getElementsByTagName = collection.getElementsByTagName;
 pub const getElementsByName = collection.getElementsByName;
 
-//=========================================
-// Class handling - DOMTokenList
-//=========================================
-pub const hasClass = classes.hasClass;
-pub const classListAsString = classes.classListAsString;
-
-pub const DOMTokenList = classes.DOMTokenList;
-pub const classList = classes.classList;
-
-//=========================================
-// Attribute struct reflexion
-//=========================================
-
-pub const getFirstAttribute = attrs.getFirstAttribute;
-
-pub const getNextAttribute = attrs.getNextAttribute;
-
-//=========================================
-// UTILITY FUNCTIONS
-//=========================================
-
-/// [zhtml] Debug: Get only element children (filter out text/comment nodes)
-pub fn getElementChildrenWithTypes(allocator: std.mem.Allocator, parent_node: *DomNode) ![]*HTMLElement {
-    var elements = std.ArrayList(*HTMLElement).init(allocator);
-    defer elements.deinit();
-
-    var child = firstChild(parent_node);
-    while (child != null) {
-        if (isTypeElement(child.?)) {
-            if (nodeToElement(child.?)) |element| {
-                try elements.append(element);
-            }
-        }
-        child = nextSibling(child.?);
-    }
-
-    return elements.toOwnedSlice();
-}
-
-// ----------------------------------------------------------------------------
-// Smart Text Processing (LazyHTML-level improvements)
-// ----------------------------------------------------------------------------
-
-// pub const leadingWhitespaceSize = smart_text.leadingWhitespaceSize;
-// pub const isNoEscapeTextNode = smart_text.isNoEscapeTextNode;
-// pub const escapeHtmlSmart = smart_text.escapeHtmlSmart;
-// pub const processTextContentSmart = smart_text.processTextContentSmart;
-
+// ***************************************************************************
 // ***************************************************************************
 // Test all imported modules
 // ****************************************************************************

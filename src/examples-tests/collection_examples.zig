@@ -23,7 +23,7 @@ pub fn runCollectionExamples() !void {
     ;
 
     // Parse the HTML
-    const doc = try z.parseFromString(html);
+    const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
     std.debug.print("=== getElementById Examples ===\n", .{});

@@ -167,7 +167,7 @@ test "set template" {
     );
 
     // try useTemplate(template, z.elementToNode(tbody.?));
-    const resulting_html = try z.serializeToString(allocator, body);
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
 
     const expected_pretty =
@@ -194,7 +194,7 @@ test "set template" {
         \\</body>
     ;
 
-    const serialized = try z.serializeToString(allocator, body);
+    const serialized = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(serialized);
     const normalized_expected = try z.normalizeText(allocator, expected_pretty, .{});
     defer allocator.free(normalized_expected);
@@ -242,7 +242,7 @@ test "set template with order" {
     );
 
     // try useTemplate(template, z.elementToNode(tbody.?));
-    const resulting_html = try z.serializeToString(allocator, body);
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
 
     const expected_pretty =
@@ -269,7 +269,7 @@ test "set template with order" {
         \\</body>
     ;
 
-    const serialized = try z.serializeToString(allocator, body);
+    const serialized = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(serialized);
     const normalized_expected = try z.normalizeText(allocator, expected_pretty, .{});
     defer allocator.free(normalized_expected);
@@ -325,7 +325,7 @@ test "use template" {
     const doc = try z.parseFromString(initial_html);
     defer z.destroyDocument(doc);
     const body = try z.bodyNode(doc);
-    const txt = try z.serializeToString(allocator, body);
+    const txt = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(txt);
 
     // check body serialization (remove whitespaces and empoty text nodes)
@@ -338,7 +338,7 @@ test "use template" {
     try testing.expect(isTemplate(z.elementToNode(template_elt.?)));
     try testing.expect(z.isNodeEmpty(z.elementToNode(template_elt.?)));
 
-    const temp_html = try z.serializeElement(allocator, template_elt.?);
+    const temp_html = try z.outerHTML(allocator, template_elt.?);
     defer allocator.free(temp_html);
 
     // check template serialization
@@ -355,7 +355,7 @@ test "use template" {
     try useTemplate(template, tbody_node);
     try useTemplate(template, tbody_node);
 
-    const resulting_html = try z.serializeToString(allocator, body);
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
 
     const expected_pretty_html =
