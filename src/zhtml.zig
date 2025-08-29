@@ -268,7 +268,6 @@ pub const nodeToTemplate = template.nodeToTemplate;
 pub const elementToTemplate = template.elementToTemplate;
 
 pub const templateContent = template.templateContent;
-
 pub const useTemplate = template.useTemplate;
 
 // ===========================================================================
