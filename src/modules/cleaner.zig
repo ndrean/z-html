@@ -146,7 +146,7 @@ fn maybeCleanOrRemoveTextNode(allocator: std.mem.Allocator, node: *z.DomNode, op
 
     // Only update if content actually changed
     if (!std.mem.eql(u8, text, cleaned)) {
-        // try setTextContent(node, cleaned);
+        // try setContentAsText(node, cleaned);
         try z.replaceText(allocator, node, cleaned, options);
     }
     return false;
@@ -935,7 +935,7 @@ test "escape option works correctly for text insertion (not cleaning)" {
     const body_node = try z.bodyNode(doc);
     const div_node = z.firstChild(body_node).?;
     const p_node = z.firstChild(div_node).?;
-    try z.setTextContent(p_node, "");
+    try z.setContentAsText(p_node, "");
     const inner_text = z.firstChild(p_node).?;
 
     // Simulate user input that should be escaped

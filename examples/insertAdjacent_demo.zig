@@ -24,11 +24,11 @@ pub fn main() !void {
 
     // Demo insertAdjacentElement with all positions
     const before_elem = try z.createElementAttr(doc, "h2", &.{.{ .name = "class", .value = "before" }});
-    try z.setTextContent(z.elementToNode(before_elem), "Before Begin");
+    try z.setContentAsText(z.elementToNode(before_elem), "Before Begin");
     try z.insertAdjacentElement(target_node, .beforebegin, z.elementToNode(before_elem));
 
     const after_elem = try z.createElementAttr(doc, "h2", &.{.{ .name = "class", .value = "after" }});
-    try z.setTextContent(z.elementToNode(after_elem), "After End");
+    try z.setContentAsText(z.elementToNode(after_elem), "After End");
     try z.insertAdjacentElement(target_node, .afterend, z.elementToNode(after_elem));
 
     // Show result after insertAdjacentElement

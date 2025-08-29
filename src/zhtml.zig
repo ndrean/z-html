@@ -190,7 +190,7 @@ pub const commentContent_zc = text.commentContent_zc;
 pub const textContent = text.textContent;
 pub const textContent_zc = text.textContent_zc;
 pub const replaceText = text.replaceText;
-pub const setTextContent = text.setTextContent;
+pub const setContentAsText = text.setContentAsText;
 pub const escapeHtml = text.escapeHtml;
 
 // ====================================
@@ -268,7 +268,8 @@ pub const nodeToTemplate = template.nodeToTemplate;
 pub const elementToTemplate = template.elementToTemplate;
 
 pub const templateContent = template.templateContent;
-pub const appendParsedContent = template.appendParsedContent;
+
+pub const useTemplate = template.useTemplate;
 
 // ===========================================================================
 // DOM Traversal utilities
@@ -322,13 +323,13 @@ pub const normalizeText = cleaner.normalizeText;
 //=========================================
 // CSS selectors
 //=========================================
-pub const CssSelectorEngine = css.CssSelectorEngine;
-pub const CssParser = opaque {};
-pub const CssSelectors = opaque {};
-pub const CssSelectorList = opaque {};
-pub const CssSelectorSpecificity = opaque {};
-pub const querySelectorAll = css.querySelectorAll;
-pub const querySelector = css.querySelector;
+// pub const CssSelectorEngine = css.CssSelectorEngine;
+// pub const CssParser = opaque {};
+// pub const CssSelectors = opaque {};
+// pub const CssSelectorList = opaque {};
+// pub const CssSelectorSpecificity = opaque {};
+// pub const querySelectorAll = css.querySelectorAll;
+// pub const querySelector = css.querySelector;
 
 //=========================================
 // Class handling - DOMTokenList

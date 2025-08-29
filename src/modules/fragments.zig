@@ -44,8 +44,8 @@ pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
 /// [fragment] Append all children from a document fragment to a parent node
 ///
 /// The fragment is emptied: the fragment children are moved into the DOM, not copied
-pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
-    var fragment_child = z.firstChild(fragment);
+pub fn appendFragment(parent: *z.DomNode, fragmentNode: *z.DomNode) void {
+    var fragment_child = z.firstChild(fragmentNode);
     while (fragment_child != null) {
         const next_sibling = z.nextSibling(fragment_child.?);
         z.appendChild(parent, fragment_child.?);
@@ -53,17 +53,50 @@ pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
     }
 }
 
-/// Simple parsing of a fragment into a given node within a context into a given document.
+test "append with createDocumentFragment" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("<html><body><ul id=\"ul\"></ul></body></html>");
+    defer z.destroyDocument(doc);
+
+    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
+
+    const fragment = try z.createDocumentFragment(doc);
+    const fragment_node = z.fragmentToNode(fragment);
+    defer z.destroyNode(fragment_node);
+
+    for (browsers) |browser| {
+        // Create elements directly in the same document as the fragment
+        const li = try z.createElement(doc, "li");
+        const text = try z.createTextNode(doc, browser);
+        z.appendChild(z.elementToNode(li), text);
+        z.appendChild(fragment_node, z.elementToNode(li));
+    }
+
+    // Append the fragment to the ul of the real document
+    const body_node = try z.bodyNode(doc);
+    const ul_element = z.getElementById(body_node, "ul");
+    const ul = z.elementToNode(ul_element.?);
+
+    z.appendFragment(ul, fragment_node);
+
+    // Verify that all 5 li elements were added to the ul
+    const child_elements = try z.children(allocator, ul_element.?);
+    defer allocator.free(child_elements);
+
+    try testing.expect(child_elements.len == 5);
+}
+
+/// HTML parsing of a fragment into a new a #document-fragment, given node within a context.
 ///
-/// Does not modify the original document.
+/// To append to an existing node, use `appendFragment()` to move the fragment nodes and defer this fragment node destruction.
 ///
+/// This fragment has a single usage.
 /// ## Example
 /// ```
-/// // create default <html><body></body></html>)
-/// const doc = try z.parseFromString("");
+/// const doc = try z.parseFromString(<html><body></body></html>);
 /// const body = try z.bodyNode(doc);
-/// _ = try parseFragmentSimple(body, "<li>Hello</li>", .ul);
-/// try testing.expect(z.isNodeEmpty(body));
+/// const fragment_root = try parseFragmentSimple(body, "<li>Hello</li>", .ul);
+/// z.appendFragment(body, fragment_root);
 /// ```
 /// ## Signature
 pub fn parseFragmentSimple(
@@ -91,140 +124,23 @@ pub fn parseFragmentSimple(
     };
 }
 
-/// Cross document fragment parsing and appending into a document
-pub fn parseFragmentInto(
-    allocator: std.mem.Allocator,
-    target_doc: *z.HTMLDocument,
-    target_parent: *z.DomNode,
-    html_fragment: []const u8,
-    context: z.FragmentContext,
-) !void {
-    const fragment_result = try parseFragment(
-        allocator,
-        html_fragment,
-        context,
-    );
-    defer fragment_result.deinit();
+test "simple fragment parse" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
 
-    // Get all nodes from the fragment
-    const children = try fragment_result.getNodes(allocator);
+    const fragment_root = try parseFragmentSimple(body, "<p></p>", .body);
+    defer z.destroyNode(fragment_root);
+    z.appendFragment(body, fragment_root); // moves
+    z.appendFragment(body, fragment_root); // fragment_root is now empty!
+
+    const children = try z.children(allocator, z.nodeToElement(body).?);
     defer allocator.free(children);
-
-    // Clone each node into the target document and append
-    for (children) |child| {
-        const imported_node = z.importNode(child, target_doc);
-        z.appendChild(target_parent, imported_node);
-    }
+    try testing.expect(children.len == 1);
 }
 
-/// [fragment] Fragment parsing result
-///
-/// Caller must use `deinit()` to free the underlying document.
-///
-/// Methods exposed: `getNodes()`, `getElements()`, `serializeFlat()`, `deinit()`
-pub const FragmentResult = struct {
-    allocator: std.mem.Allocator,
-    document: *z.HTMLDocument,
-    fragment_root: *z.DomNode,
-    context_element: *z.HTMLElement,
-
-    pub fn deinit(self: FragmentResult) void {
-        z.destroyDocument(self.document);
-    }
-
-    /// Get all top-level nodes from the fragment
-    pub fn getNodes(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.DomNode {
-        return z.childNodes(allocator, self.fragment_root);
-    }
-
-    /// Get all top-level elements from the fragment (skipping text nodes)
-    ///
-    /// Allocated
-    pub fn getElements(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.HTMLElement {
-        const all_nodes = try self.getNodes(allocator);
-        defer allocator.free(all_nodes);
-
-        var elements: std.ArrayList(*z.HTMLElement) = .empty;
-        for (all_nodes) |node| {
-            if (z.nodeToElement(node)) |element| {
-                try elements.append(allocator, element);
-            }
-        }
-        return elements.toOwnedSlice(allocator);
-    }
-
-    /// Serialize the fragment back to HTML
-    ///
-    /// Allocated
-    pub fn serializeFlat(self: FragmentResult, allocator: std.mem.Allocator) ![]u8 {
-        try z.normalize(
-            allocator,
-            z.nodeToElement(self.fragment_root).?,
-        );
-        // Serialize the fragment_root's innerHTML
-        return z.innerHTML(
-            allocator,
-            z.nodeToElement(self.fragment_root).?,
-        );
-    }
-};
-
-/// [fragment] Parse an HTML fragment with specified context
-///
-/// Caller must call `result.deinit()` to free the underlying document.
-///
-/// You have access to:
-/// - the child elements with the allocated `result.getElements()`
-/// - the child nodes with the allocated `result.getNodes()`
-/// - the serialized normalized HTML with the allocated `result.serializeFlat()`.
-/// ## Example
-/// ```
-/// const result = try parseFragment(allocator, fragment, context);
-/// defer result.deinit();
-/// const children = result.getElements(allocator);
-/// defer allocator.free(children);
-/// ---
-/// ```
-pub fn parseFragment(
-    allocator: std.mem.Allocator,
-    html_fragment: []const u8,
-    context: z.FragmentContext,
-) !FragmentResult {
-
-    // Create a new document for the fragment
-    const doc = try z.createDocument();
-
-    // Create context element that determines parsing rules
-    const tag_name = context.toTagName();
-    const context_element = z.createElement(doc, tag_name) catch {
-        z.destroyDocument(doc);
-        return Err.CreateElementFailed;
-    };
-
-    // Parse the fragment within the context
-    const parse_root = lxb_html_document_parse_fragment(
-        doc,
-        context_element,
-        html_fragment.ptr,
-        html_fragment.len,
-    ) orelse {
-        z.destroyDocument(doc);
-        return Err.ParseFailed;
-    };
-
-    return FragmentResult{
-        .allocator = allocator,
-        .document = doc,
-        .fragment_root = parse_root,
-        .context_element = context_element,
-    };
-}
-
-// ============================================================================
-// TESTS AND EXAMPLES
-// ============================================================================
-
-test "simple fragment parsing" {
+test "second simple fragment parsing" {
     const allocator = testing.allocator;
     const doc = try z.parseFromString("");
     defer z.destroyDocument(doc);
@@ -246,73 +162,75 @@ test "simple fragment parsing" {
     );
     defer z.destroyNode(parse_root);
 
-    try testing.expect(z.isNodeEmpty(body)); // nothing happened
+    // insert fragment into the body
+    z.appendFragment(body, parse_root);
+    try z.normalize(allocator, z.nodeToElement(body).?);
+    const html = try z.innerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(html);
 
-    const elements = try z.children(
-        allocator,
-        z.nodeToElement(parse_root).?,
-    );
-    defer allocator.free(elements);
-
-    try testing.expect(elements.len == 1);
-    try testing.expect(z.matchesTagName(elements[0], "div"));
-
-    const grand_child = try z.children(allocator, elements[0]);
-    defer allocator.free(grand_child);
-
-    for ([_][]const u8{ "h3", "p", "button" }, 0..) |tag_name, i| {
-        try testing.expect(z.matchesTagName(grand_child[i], tag_name));
-    }
+    try testing.expectEqualStrings("<div class=\"card\"><h3>Product Title</h3><p class=\"price\">$99.99</p><button>Add to Cart</button></div>", html);
 }
 
-test "parseFragment: template component parsing: TO BE REVIEWED WITH APPENDFRAGMENT" {
+test "interpolated simple fragment parsing" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("<html><body><ul id=\"ul\"></ul></body></html>");
+    defer z.destroyDocument(doc);
 
-    const component_template =
-        \\<div class="user-card" data-user-id="{{id}}">
-        \\  <img src="{{avatar}}" alt="{{name}}" class="avatar">
-        \\  <div class="user-info">
-        \\    <h4>{{name}}</h4>
-        \\    <p class="role">{{role}}</p>
-        \\    <span class="status {{status_class}}">{{status}}</span>
-        \\  </div>
-        \\  <div class="actions">
-        \\    <button data-action="message">Message</button>
-        \\    <button data-action="follow">Follow</button>
-        \\  </div>
-        \\</div>
-    ;
+    const body_node = try z.bodyNode(doc);
+    const ul_element = z.getElementById(body_node, "ul");
+    const ul = z.elementToNode(ul_element.?);
 
-    const result = try parseFragment(allocator, component_template, .template);
-    defer result.deinit();
+    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
+    var len: usize = 0;
+    for (browsers) |b| len += b.len;
+    var result = try allocator.alloc(u8, len + 5 * 9);
+    defer allocator.free(result);
 
-    const elements = try result.getElements(allocator);
-    defer allocator.free(elements);
+    var offset: usize = 0;
+    for (browsers) |browser| {
+        const li_text = try std.fmt.allocPrint(allocator, "<li>{s}</li>", .{browser});
+        defer allocator.free(li_text);
+        @memcpy(result[offset .. offset + li_text.len], li_text);
+        offset += li_text.len;
+    }
 
-    try testing.expect(elements.len == 1);
+    const fragment_root = try parseFragmentSimple(ul, result, .ul);
+    defer z.destroyNode(fragment_root);
 
-    const serialized = try result.serializeFlat(allocator);
-    defer allocator.free(serialized);
+    z.appendFragment(ul, fragment_root);
+    try z.normalize(allocator, ul_element.?);
+    const html = try z.outerHTML(allocator, z.nodeToElement(ul).?);
+    defer allocator.free(html);
+    try testing.expectEqualStrings("<ul id=\"ul\"><li>Firefox</li><li>Chrome</li><li>Opera</li><li>Safari</li><li>Internet Explorer</li></ul>", html);
+}
 
-    // Template variables should be preserved as-is
-    try testing.expect(std.mem.indexOf(u8, serialized, "{{id}}") != null);
-    try testing.expect(std.mem.indexOf(u8, serialized, "{{name}}") != null);
-    try testing.expect(std.mem.indexOf(u8, serialized, "user-card") != null);
-    try testing.expect(!z.isNodeEmpty(result.fragment_root));
+/// Cross document fragment parsing and appending into a document
+///
+/// The fragment nodes are cloned into an existing document
+pub fn parseFragmentInto(
+    allocator: std.mem.Allocator,
+    target_doc: *z.HTMLDocument,
+    target_parent: *z.DomNode,
+    html_fragment: []const u8,
+    context: z.FragmentContext,
+) !void {
+    const fragment_result = try parseFragment(
+        allocator,
+        target_parent,
+        html_fragment,
+        context,
+    );
+    defer fragment_result.deinit();
 
-    // const doc = try z.createDocument();
-    // const body_elt = try z.createElement(doc, "body");
-    // const txt = try result.serializeFlat(allocator);
-    // defer allocator.free(txt);
+    const children = try fragment_result.getNodes(allocator);
+    defer allocator.free(children);
 
-    // z.appendFragment(z.elementToNode(body_elt), result.fragment_root);
-    // try testing.expect(!z.isNodeEmpty(result.fragment_root));
-    // const chn = try result.getNodes(allocator);
-    // defer allocator.free(chn);
-    // try testing.expect(chn.len == 1);
-    // const gch = try z.childNodes(allocator, chn[0]);
-    // defer allocator.free(gch);
-    // try testing.expect(gch.len == 3);
+    // Clone each node into the target document and append
+    for (children) |child| {
+        // const imported_node = z.importNode(child, target_doc);
+        const cloned_node = z.cloneNode(child, target_doc);
+        z.appendChild(target_parent, cloned_node.?);
+    }
 }
 
 test "parseFragmentInto: multiple fragment composition" {
@@ -389,8 +307,185 @@ test "parseFragmentInto: multiple fragment composition" {
     try testing.expect(std.mem.indexOf(u8, final_html, "<footer>") != null);
 }
 
+/// [fragment] Fragment parsing result
+///
+/// Caller must use `deinit()` to free the underlying document.
+///
+/// Methods exposed: `appendFragment()`,`getNodes()`, `getElements()`, `serializeFlat()`, `deinit()`
+pub const FragmentResult = struct {
+    allocator: std.mem.Allocator,
+    working_document: *z.HTMLDocument,
+    target_node: *z.DomNode,
+    fragment_root: *z.DomNode,
+
+    pub fn deinit(self: FragmentResult) void {
+        // z.destroyNode(self.fragment_root);
+        z.destroyDocument(self.working_document);
+    }
+
+    pub fn appendFragment(self: FragmentResult, target_node: *z.DomNode) !void {
+        const children = try self.getNodes(self.allocator);
+        defer self.allocator.free(children);
+        const target_doc = z.ownerDocument(target_node);
+
+        // Clone each node into the target document and append
+        for (children) |child| {
+            const imported_node = z.importNode(child, target_doc);
+            // const cloned_node = z.cloneNode(child, target_doc);
+            z.appendChild(target_node, imported_node);
+        }
+    }
+    /// Get all top-level nodes from the fragment
+    pub fn getNodes(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.DomNode {
+        return z.childNodes(allocator, self.fragment_root);
+    }
+
+    /// Get all top-level elements from the fragment (skipping text nodes)
+    ///
+    /// Caller must free the allocated slice
+    pub fn getElements(self: FragmentResult, allocator: std.mem.Allocator) ![]*z.HTMLElement {
+        const all_nodes = try self.getNodes(allocator);
+        defer allocator.free(all_nodes);
+
+        var elements: std.ArrayList(*z.HTMLElement) = .empty;
+        for (all_nodes) |node| {
+            if (z.nodeToElement(node)) |element| {
+                try elements.append(allocator, element);
+            }
+        }
+        return elements.toOwnedSlice(allocator);
+    }
+
+    /// Serialize the fragment back to HTML
+    ///
+    /// Caller must free the allocated slice
+    pub fn serializeFlat(self: FragmentResult, allocator: std.mem.Allocator) ![]u8 {
+        try z.normalize(
+            allocator,
+            z.nodeToElement(self.fragment_root).?,
+        );
+        // Serialize the fragment_root's innerHTML
+        return z.innerHTML(
+            allocator,
+            z.nodeToElement(self.fragment_root).?,
+        );
+    }
+};
+
+/// [fragment] Parse an HTML fragment with specified context
+///
+/// Caller must call `result.deinit()` to free the underlying document.
+///
+/// You have access to:
+/// - the child elements with the allocated `result.getElements()`
+/// - the child nodes with the allocated `result.getNodes()`
+/// - the serialized normalized HTML with the allocated `result.serializeFlat()`.
+/// ## Example
+/// ```
+/// const body = try bodyNode(doc);
+/// const result = try parseFragment(allocator, fragment, context);
+/// defer result.deinit();
+/// result.appendFragment(body);
+/// ```
+pub fn parseFragment(
+    allocator: std.mem.Allocator,
+    target_node: *z.DomNode,
+    html_fragment: []const u8,
+    context: z.FragmentContext,
+) !FragmentResult {
+
+    // Create a new document for the fragment
+    const doc = try z.createDocument();
+
+    // Create context element that determines parsing rules
+    const tag_name = context.toTagName();
+    const context_element = z.createElement(doc, tag_name) catch {
+        z.destroyDocument(doc);
+        return Err.CreateElementFailed;
+    };
+
+    // Parse the fragment within the context into a new #document-fragment
+    const parse_root = lxb_html_document_parse_fragment(
+        doc,
+        context_element,
+        html_fragment.ptr,
+        html_fragment.len,
+    ) orelse {
+        z.destroyDocument(doc);
+        return Err.ParseFailed;
+    };
+
+    return FragmentResult{
+        .allocator = allocator,
+        .working_document = doc,
+        .target_node = target_node,
+        .fragment_root = parse_root,
+    };
+}
+
+// ============================================================================
+// TESTS AND EXAMPLES
+// ============================================================================
+
+test "parseFragment: template component parsing" {
+    const allocator = testing.allocator;
+    // insert into a new document
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const body_elt = try z.createElement(doc, "body");
+
+    const component_template =
+        \\<div class="user-card" data-user-id="{{id}}">
+        \\  <img src="{@avatar}" alt="{{name}}" class="avatar">
+        \\  <div class="user-info">
+        \\    <h4>{{name}}</h4>
+        \\    <p class="role">{{role}}</p>
+        \\    <span class="status {{status_class}}">{{status}}</span>
+        \\  </div>
+        \\  <div class="actions">
+        \\    <button data-action="message">Message</button>
+        \\    <button data-action="follow">Follow</button>
+        \\  </div>
+        \\</div>
+    ;
+
+    const expected = "<div class=\"user-card\" data-user-id=\"{{id}}\"><img src=\"{@avatar}\" alt=\"{{name}}\" class=\"avatar\"><div class=\"user-info\"><h4>{{name}}</h4><p class=\"role\">{{role}}</p><span class=\"status {{status_class}}\">{{status}}</span></div><div class=\"actions\"><button data-action=\"message\">Message</button><button data-action=\"follow\">Follow</button></div></div>";
+
+    const result = try parseFragment(
+        allocator,
+        z.elementToNode(body_elt),
+        component_template,
+        .template,
+    );
+    defer result.deinit();
+
+    try testing.expect(!z.isNodeEmpty(result.fragment_root));
+
+    // Check serialization
+    const serializedFlatFragment = try result.serializeFlat(allocator);
+    defer allocator.free(serializedFlatFragment);
+    try testing.expectEqualStrings(expected, serializedFlatFragment);
+    // try testing.expect(std.mem.indexOf(u8, serializedFlatFragment, "{{name}}") != null);
+    // try testing.expect(std.mem.indexOf(u8, serializedFlatFragment, "{@avatar}") != null);
+    // try testing.expect(std.mem.indexOf(u8, serializedFlatFragment, "user-card") != null);
+
+    const elements = try result.getElements(allocator);
+    defer allocator.free(elements);
+    try testing.expect(elements.len == 1);
+
+    try result.appendFragment(z.elementToNode(body_elt));
+
+    const new_html = try z.innerHTML(allocator, body_elt);
+    defer allocator.free(new_html);
+    try testing.expectEqualStrings(expected, new_html);
+}
+
 test "parseFragment parsing table" {
     const allocator = testing.allocator;
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+    const body_elt = try z.createElement(doc, "body");
 
     const table_fragment =
         \\<tbody>
@@ -410,6 +505,7 @@ test "parseFragment parsing table" {
     // Parse in the context of a table
     const result = try parseFragment(
         allocator,
+        z.elementToNode(body_elt),
         table_fragment,
         .tbody,
     );
@@ -431,6 +527,8 @@ test "parseFragment parsing table" {
 
 test "select options fragment" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const options_fragment =
         \\<option value="us">United States</option>
@@ -445,6 +543,7 @@ test "select options fragment" {
 
     const result = try parseFragment(
         allocator,
+        body,
         options_fragment,
         .select,
     );
@@ -461,6 +560,8 @@ test "select options fragment" {
 
 test "list item fragments with context" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const list_items_fragment =
         \\<li>First item</li>
@@ -469,7 +570,12 @@ test "list item fragments with context" {
     ;
 
     // Test with unordered list context
-    const ul_result = try parseFragment(allocator, list_items_fragment, .ul);
+    const ul_result = try parseFragment(
+        allocator,
+        body,
+        list_items_fragment,
+        .ul,
+    );
     defer ul_result.deinit();
 
     const ul_elements = try ul_result.getElements(allocator);
@@ -481,7 +587,12 @@ test "list item fragments with context" {
     try testing.expectEqualStrings("LI", z.tagName_zc(ul_elements[2]));
 
     // Test with ordered list context
-    const ol_result = try parseFragment(allocator, list_items_fragment, .ol);
+    const ol_result = try parseFragment(
+        allocator,
+        body,
+        list_items_fragment,
+        .ol,
+    );
     defer ol_result.deinit();
 
     const ol_elements = try ol_result.getElements(allocator);
@@ -501,6 +612,8 @@ test "list item fragments with context" {
 
 test "definition list fragments" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const dl_fragment =
         \\<dt>Term 1</dt>
@@ -509,7 +622,12 @@ test "definition list fragments" {
         \\<dd>Definition for term 2</dd>
     ;
 
-    const result = try parseFragment(allocator, dl_fragment, .dl);
+    const result = try parseFragment(
+        allocator,
+        body,
+        dl_fragment,
+        .dl,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -530,6 +648,8 @@ test "definition list fragments" {
 
 test "fieldset legend fragments" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const fieldset_fragment =
         \\<legend>Contact Information</legend>
@@ -537,7 +657,12 @@ test "fieldset legend fragments" {
         \\<input type="text" id="name" name="name">
     ;
 
-    const result = try parseFragment(allocator, fieldset_fragment, .fieldset);
+    const result = try parseFragment(
+        allocator,
+        body,
+        fieldset_fragment,
+        .fieldset,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -551,6 +676,8 @@ test "fieldset legend fragments" {
 
 test "details summary fragments" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const details_fragment =
         \\<summary>Click to expand</summary>
@@ -561,7 +688,12 @@ test "details summary fragments" {
         \\</ul>
     ;
 
-    const result = try parseFragment(allocator, details_fragment, .details);
+    const result = try parseFragment(
+        allocator,
+        body,
+        details_fragment,
+        .details,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -575,6 +707,8 @@ test "details summary fragments" {
 
 test "optgroup nested options" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const optgroup_fragment =
         \\<option value="ny">New York</option>
@@ -582,7 +716,12 @@ test "optgroup nested options" {
         \\<option value="tx">Texas</option>
     ;
 
-    const result = try parseFragment(allocator, optgroup_fragment, .optgroup);
+    const result = try parseFragment(
+        allocator,
+        body,
+        optgroup_fragment,
+        .optgroup,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -602,6 +741,8 @@ test "optgroup nested options" {
 
 test "image map area fragments" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const map_fragment =
         \\<area shape="rect" coords="0,0,100,100" href="/section1" alt="Section 1">
@@ -609,7 +750,12 @@ test "image map area fragments" {
         \\<area shape="poly" coords="200,0,250,50,200,100,150,50" href="/section3" alt="Section 3">
     ;
 
-    const result = try parseFragment(allocator, map_fragment, .map);
+    const result = try parseFragment(
+        allocator,
+        body,
+        map_fragment,
+        .map,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -623,13 +769,20 @@ test "image map area fragments" {
 
 test "figure with image and caption" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const figure_fragment =
         \\<img src="/chart.png" alt="Sales Chart" width="400" height="300">
         \\<figcaption>Monthly sales performance for Q4 2024</figcaption>
     ;
 
-    const result = try parseFragment(allocator, figure_fragment, .figure);
+    const result = try parseFragment(
+        allocator,
+        body,
+        figure_fragment,
+        .figure,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -648,6 +801,8 @@ test "figure with image and caption" {
 
 test "form input fragments" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const form_fragment =
         \\<label for="email">Email Address:</label>
@@ -657,7 +812,12 @@ test "form input fragments" {
         \\<button type="submit">Login</button>
     ;
 
-    const result = try parseFragment(allocator, form_fragment, .form);
+    const result = try parseFragment(
+        allocator,
+        body,
+        form_fragment,
+        .form,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -679,6 +839,8 @@ test "form input fragments" {
 
 test "video with sources" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const video_fragment =
         \\<source src="/video.webm" type="video/webm">
@@ -687,7 +849,12 @@ test "video with sources" {
         \\<p>Your browser doesn't support HTML5 video.</p>
     ;
 
-    const result = try parseFragment(allocator, video_fragment, .video);
+    const result = try parseFragment(
+        allocator,
+        body,
+        video_fragment,
+        .video,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -708,6 +875,8 @@ test "video with sources" {
 
 test "audio with sources" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const audio_fragment =
         \\<source src="/audio.ogg" type="audio/ogg">
@@ -716,7 +885,12 @@ test "audio with sources" {
         \\<p>Your browser doesn't support HTML5 audio.</p>
     ;
 
-    const result = try parseFragment(allocator, audio_fragment, .audio);
+    const result = try parseFragment(
+        allocator,
+        body,
+        audio_fragment,
+        .audio,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -731,6 +905,8 @@ test "audio with sources" {
 
 test "picture with responsive sources" {
     const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
 
     const picture_fragment =
         \\<source media="(min-width: 800px)" srcset="/hero-large.jpg">
@@ -738,7 +914,12 @@ test "picture with responsive sources" {
         \\<img src="/hero-small.jpg" alt="Hero image">
     ;
 
-    const result = try parseFragment(allocator, picture_fragment, .picture);
+    const result = try parseFragment(
+        allocator,
+        body,
+        picture_fragment,
+        .picture,
+    );
     defer result.deinit();
 
     const elements = try result.getElements(allocator);
@@ -790,54 +971,12 @@ test "malformed fragment part recovery by lexbor" {
     try testing.expectEqualStrings(expected_recovered, serialized);
 }
 
-test "append createDocumentFragment" {
-    const allocator = testing.allocator;
-    const doc = try z.parseFromString("<html><body><ul id=\"ul\"></ul></body></html>");
-    defer z.destroyDocument(doc);
-
-    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
-
-    const fragment = try z.createDocumentFragment(doc);
-
-    for (browsers) |browser| {
-        const li = try z.createElement(doc, "li");
-        const text = try z.createTextNode(doc, browser);
-        z.appendChild(z.elementToNode(li), text);
-        z.appendChild(z.fragmentToNode(fragment), z.elementToNode(li));
-    }
-
-    const fragment_node = z.fragmentToNode(fragment);
-
-    const body_node = try z.bodyNode(doc);
-    const ul_element = z.getElementById(body_node, "ul");
-    const ul = z.elementToNode(ul_element.?);
-
-    z.appendFragment(ul, fragment_node);
-
-    var p_count: usize = 0;
-    var child = z.firstChild(ul);
-    while (child != null) : (child = z.nextSibling(child.?)) {
-        if (!z.isTypeElement(child.?)) continue;
-
-        if (z.tagFromElement(z.nodeToElement(child.?).?)) |tag| {
-            if (tag == .li) {
-                p_count += 1;
-            }
-        }
-    }
-    try testing.expectEqual(@as(usize, 5), p_count);
-
-    const child_elements = try z.children(allocator, ul_element.?);
-    defer allocator.free(child_elements);
-
-    try testing.expect(child_elements.len == 5);
-}
-
 test "show" {
     const allocator = testing.allocator;
 
     const doc = try z.parseFromString("");
     defer z.destroyDocument(doc);
+    const body = try z.bodyNode(doc);
 
     const main_elt = try z.createElement(doc, "main");
     const div_elt = try z.createElementAttr(
@@ -876,6 +1015,7 @@ test "show" {
     }
     z.appendChild(div, ul);
     z.appendChild(main, div);
+    z.appendChild(body, main);
 
     const fragment_elt = try z.createDocumentFragment(doc);
     const fragment_node = z.fragmentToNode(fragment_elt);
@@ -884,14 +1024,13 @@ test "show" {
     ); // #document-fragment
 
     z.appendFragment(main, fragment_node);
-    // try z.printDocStruct(doc);
 
     const lis = try z.getElementsByTagName(doc, "LI");
     defer if (lis) |collection| {
         z.destroyCollection(collection);
     };
     const li_count = z.collectionLength(lis.?);
-    try testing.expect(li_count == 0);
+    try testing.expect(li_count == 3);
 
     const fragment_txt = try z.outerHTML(allocator, z.nodeToElement(main).?);
 
@@ -914,4 +1053,161 @@ test "show" {
     defer allocator.free(expected);
 
     try testing.expectEqualStrings(expected, fragment_txt);
+}
+
+test "set fragment with order" {
+    const allocator = testing.allocator;
+
+    const pretty_html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+    ;
+    const initial_html = try z.normalizeText(
+        allocator,
+        pretty_html,
+        .{},
+    );
+    defer allocator.free(initial_html);
+
+    const doc = try z.parseFromString(initial_html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+
+    const tbody = z.getElementByTag(body, .tbody);
+
+    try z.parseFragmentInto(
+        allocator,
+        doc,
+        z.elementToNode(tbody.?),
+        "<tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr><tr><td class=\"record\">Code: 2</td><td>Name: 2</td></tr>",
+        .tbody,
+    );
+
+    // try useTemplate(template, z.elementToNode(tbody.?));
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(resulting_html);
+
+    const expected_pretty =
+        \\<body>
+        \\  <table id="producttable">
+        \\    <thead>
+        \\      <tr>
+        \\        <td>UPC_Code</td>
+        \\        <td>Product_Name</td>
+        \\      </tr>
+        \\    </thead>
+        \\    <tbody>
+        \\      <!-- existing data could optionally be included here -->
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\      <tr>
+        \\        <td class="record">Code: 2</td>
+        \\        <td>Name: 2</td>
+        \\      </tr>
+        \\    </tbody>
+        \\  </table>
+        \\</body>
+    ;
+
+    const serialized = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(serialized);
+    const normalized_expected = try z.normalizeText(allocator, expected_pretty, .{});
+    defer allocator.free(normalized_expected);
+
+    try testing.expectEqualStrings(normalized_expected, serialized);
+
+    // try z.printDocumentStructure(doc);
+}
+
+test "yet another insert test" {
+    const allocator = testing.allocator;
+
+    const pretty_html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+    ;
+    const initial_html = try z.normalizeText(
+        allocator,
+        pretty_html,
+        .{},
+    );
+    defer allocator.free(initial_html);
+
+    const doc = try z.parseFromString(initial_html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyNode(doc);
+
+    const tbody = z.getElementByTag(body, .tbody);
+
+    try z.parseFragmentInto(
+        allocator,
+        doc,
+        z.elementToNode(tbody.?),
+        "<tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr>",
+        .tbody,
+    );
+    try z.parseFragmentInto(
+        allocator,
+        doc,
+        z.elementToNode(tbody.?),
+        "<tr><td class=\"record\">Code: 2</td><td>Name: 2</td></tr>",
+        .tbody,
+    );
+
+    // try useTemplate(template, z.elementToNode(tbody.?));
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(resulting_html);
+
+    const expected_pretty =
+        \\<body>
+        \\  <table id="producttable">
+        \\    <thead>
+        \\      <tr>
+        \\        <td>UPC_Code</td>
+        \\        <td>Product_Name</td>
+        \\      </tr>
+        \\    </thead>
+        \\    <tbody>
+        \\      <!-- existing data could optionally be included here -->
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\      <tr>
+        \\        <td class="record">Code: 2</td>
+        \\        <td>Name: 2</td>
+        \\      </tr>
+        \\    </tbody>
+        \\  </table>
+        \\</body>
+    ;
+
+    const serialized = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(serialized);
+    const normalized_expected = try z.normalizeText(allocator, expected_pretty, .{});
+    defer allocator.free(normalized_expected);
+
+    try testing.expectEqualStrings(normalized_expected, serialized);
 }

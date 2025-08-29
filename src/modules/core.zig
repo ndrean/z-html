@@ -1394,7 +1394,7 @@ test "insertAdjacent demo" {
         "h2",
         &.{.{ .name = "class", .value = "before" }},
     );
-    try z.setTextContent(elementToNode(before_elem), "Before Begin");
+    try z.setContentAsText(elementToNode(before_elem), "Before Begin");
 
     try insertAdjacentElement(
         target.?,
@@ -1407,7 +1407,7 @@ test "insertAdjacent demo" {
         "h2",
         &.{.{ .name = "class", .value = "after" }},
     );
-    try z.setTextContent(elementToNode(after_elem), "After End");
+    try z.setContentAsText(elementToNode(after_elem), "After End");
 
     try insertAdjacentElement(
         target.?,
@@ -2028,7 +2028,7 @@ test "isWhitespaceOnlyNode" {
     const div = try createElement(doc, "div");
     const node_div = elementToNode(div);
 
-    try z.setTextContent(node_div, "\n \r  \t");
+    try z.setContentAsText(node_div, "\n \r  \t");
     // should be true
     const div_text = z.firstChild(node_div).?;
     try testing.expect(z.isTypeText(div_text));
@@ -2038,7 +2038,7 @@ test "isWhitespaceOnlyNode" {
     const span = try createElement(doc, "span");
     const node_span = elementToNode(span);
 
-    try z.setTextContent(node_span, "\n \r a \t");
+    try z.setContentAsText(node_span, "\n \r a \t");
     // should be true
     const span_text = z.firstChild(node_span).?;
 

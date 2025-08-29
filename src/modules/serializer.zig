@@ -436,6 +436,7 @@ test "sanitized HTML into a fragment" {
     const malicious_content = "<div><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
 
     const fragment_node = z.fragmentToNode(fragment);
+    defer z.destroyNode(fragment_node);
     const new_node = try z.parseFragmentSimple(fragment_node, malicious_content, .div);
     const fragment_txt = try outerNodeHTML(allocator, new_node);
     defer allocator.free(fragment_txt);

@@ -457,39 +457,39 @@ test "collection basic operations" {
     try testing.expect(iter.next() == null);
 }
 
-test "collection with CSS selector results" {
-    const allocator = testing.allocator;
+// test "collection with CSS selector results" {
+//     const allocator = testing.allocator;
 
-    const doc = try z.parseFromString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
-    defer z.destroyDocument(doc);
+//     const doc = try z.parseFromString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
+//     defer z.destroyDocument(doc);
 
-    // Use CSS selector to populate collection
-    const elements = try z.querySelectorAll(allocator, doc, "p.test");
-    defer allocator.free(elements);
+//     // Use CSS selector to populate collection
+//     const elements = try z.querySelectorAll(allocator, doc, "p.test");
+//     defer allocator.free(elements);
 
-    // Verify we found elements
-    try testing.expect(elements.len == 2);
-}
+//     // Verify we found elements
+//     try testing.expect(elements.len == 2);
+// }
 
-test "collection iterator" {
-    const allocator = testing.allocator;
+// test "collection iterator" {
+//     const allocator = testing.allocator;
 
-    const doc = try z.parseFromString("<div><p>1</p><p>2</p><p>3</p></div>");
-    defer z.destroyDocument(doc);
+//     const doc = try z.parseFromString("<div><p>1</p><p>2</p><p>3</p></div>");
+//     defer z.destroyDocument(doc);
 
-    const elements = try z.querySelectorAll(allocator, doc, "p");
-    defer allocator.free(elements);
+//     const elements = try z.querySelectorAll(allocator, doc, "p");
+//     defer allocator.free(elements);
 
-    try testing.expect(elements.len == 3);
+//     try testing.expect(elements.len == 3);
 
-    // Test that we got valid elements (they're non-optional pointers, so they can't be null)
-    for (elements, 0..) |element, i| {
-        // Elements from findElements are guaranteed to be non-null
-        // Just verify the pointer is valid by checking it's not undefined behavior
-        _ = element; // Use the element to avoid unused variable warning
-        _ = i; // Use the index if needed
-    }
-}
+//     // Test that we got valid elements (they're non-optional pointers, so they can't be null)
+//     for (elements, 0..) |element, i| {
+//         // Elements from findElements are guaranteed to be non-null
+//         // Just verify the pointer is valid by checking it's not undefined behavior
+//         _ = element; // Use the element to avoid unused variable warning
+//         _ = i; // Use the index if needed
+//     }
+// }
 
 test "getElementsByAttribute functionality" {
     const html =

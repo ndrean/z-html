@@ -62,20 +62,22 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
     return text_ptr[0..len];
 }
 
-/// [core] Set text content on a node, _replacing_ any existing content.
+/// [core] Sets any inner content of a node with new content as text.
+///
+/// This **replaces** _any_ existing content, even empty. check `replaceText()` to modify existing text nodes.
 /// ## Example
 /// ```
 /// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
 /// defer z.destroyDocument(doc);
 /// const p = firstChild(try bodyNode(doc));
-/// try setTextContent(p.?, "Hi");
+/// try setContentAsText(p.?, "Hi");
 ///
 /// const text = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
 /// defer allocator.free(text);
 /// try testing.expectEqualStrings("<p>Hi</p>", text);
 /// ---
 /// ```
-pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
+pub fn setContentAsText(node: *z.DomNode, content: []const u8) !void {
     const status = lxb_dom_node_text_content_set(
         node,
         content.ptr,
@@ -84,21 +86,37 @@ pub fn setTextContent(node: *z.DomNode, content: []const u8) !void {
     if (status != z._OK) return Err.SetTextContentFailed;
 }
 
-test "setTextContent" {
+test "setContentAsText" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+    const doc = try z.parseFromString("<p>Hello <strong>world</strong></p><p></p>");
     defer z.destroyDocument(doc);
 
-    const p = z.firstChild(try z.bodyNode(doc));
-    try setTextContent(p.?, "New text");
+    // replace the inner content of an element with a new text node
+    const p1 = z.firstChild(try z.bodyNode(doc)).?;
+    try testing.expect(z.isNodeEmpty(p1) == false);
+    try testing.expect(z.tagFromElement(z.firstElementChild(z.nodeToElement(p1).?).?) == .strong);
+    try setContentAsText(p1, "New text");
+    try testing.expectEqualStrings("New text", z.textContent_zc(p1));
 
-    const p_text = try textContent(allocator, p.?);
-    defer allocator.free(p_text);
-    try testing.expectEqualStrings("New text", p_text);
-    try testing.expectEqualStrings("New text", z.textContent_zc(p.?));
-    const txt = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
-    defer allocator.free(txt);
-    try testing.expectEqualStrings("<p>New text</p>", txt);
+    const txt1 = try z.outerHTML(allocator, z.nodeToElement(p1).?);
+    defer allocator.free(txt1);
+    try testing.expectEqualStrings("<p>New text</p>", txt1);
+
+    // setting text content on empty paragraph
+    const p2 = z.nextSibling(p1).?;
+    try testing.expect(z.isNodeEmpty(p2) == true);
+    try setContentAsText(p2, "hi");
+    try testing.expectEqualStrings("hi", z.textContent_zc(p2));
+    const txt2 = try z.outerHTML(allocator, z.nodeToElement(p2).?);
+    defer allocator.free(txt2);
+    try testing.expectEqualStrings("<p>hi</p>", txt2);
+
+    // create
+    const div_elt = try z.createElement(doc, "div");
+    const div = z.elementToNode(div_elt);
+
+    try setContentAsText(div, "Hola");
+    try testing.expectEqualStrings("Hola", z.textContent_zc(div));
 }
 
 /// [core] replace the text data of a _text node_ with escape option.
@@ -135,15 +153,13 @@ pub fn replaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []cons
 
     const current_len = z.textContent_zc(n).len;
 
-    const status = lxb_dom_character_data_replace(
+    if (lxb_dom_character_data_replace(
         n,
         final_text.ptr,
         final_text.len,
         0, // Start position
         current_len, // Replace entire content
-    );
-
-    if (status != z._OK) return Err.SetTextContentFailed;
+    ) != z._OK) return Err.SetTextContentFailed;
 }
 
 test "replaceTextContent" {
@@ -293,7 +309,7 @@ test "get & set NodeTextContent and escape option" {
     defer z.destroyDocument(doc);
     const node = z.elementToNode(element);
 
-    try z.setTextContent(node, "Hello, world!");
+    try z.setContentAsText(node, "Hello, world!");
 
     const text_content = z.textContent_zc(node);
 
@@ -382,8 +398,8 @@ test "first set text content" {
 
     const p = z.firstChild(body).?;
     const span = z.nextSibling(p).?;
-    try z.setTextContent(p, "new text");
-    try z.setTextContent(span, "second");
+    try z.setContentAsText(p, "new text");
+    try z.setContentAsText(span, "second");
 
     const p_text = z.textContent_zc(p);
     try testing.expectEqualStrings("new text", p_text);
