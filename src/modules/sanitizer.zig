@@ -82,35 +82,89 @@ pub const SanitizerOptions = struct {
 const AttributeAction = struct {
     element: *z.HTMLElement,
     attr_name: []u8, // owned copy for deferred removal
+    needs_free: bool,
 };
+
+/// Stack memory configuration
+const STACK_ATTR_BUFFER_SIZE = 2048; // 2KB for attribute name storage
+const MAX_STACK_REMOVALS = 32; // Stack space for removal operations
+const MAX_STACK_TEMPLATES = 8; // Most documents have few templates
 
 // Context for sanitization - following your normalize pattern
 const SanitizeContext = struct {
     allocator: std.mem.Allocator,
     options: SanitizerOptions,
 
-    // Collections for post-walk operations
-    nodes_to_remove: std.ArrayList(*z.DomNode),
-    attributes_to_remove: std.ArrayList(AttributeAction),
-    template_nodes: std.ArrayList(*z.DomNode),
+    // Stack attribute name storage
+    attr_name_buffer: [STACK_ATTR_BUFFER_SIZE]u8,
+    attr_name_fba: std.heap.FixedBufferAllocator,
 
+    // Stack arrays (same names as before)
+    nodes_to_remove: [MAX_STACK_REMOVALS]*z.DomNode,
+    attributes_to_remove: [MAX_STACK_REMOVALS]AttributeAction,
+    template_nodes: [MAX_STACK_TEMPLATES]*z.DomNode,
+
+    // Counters
+    nodes_count: usize,
+    attrs_count: usize,
+    templates_count: usize,
+
+    // Correct init signature - returns new instance
     fn init(alloc: std.mem.Allocator, opts: SanitizerOptions) @This() {
-        return .{
+        var self = @This(){
             .allocator = alloc,
             .options = opts,
-            .nodes_to_remove = .empty,
-            .attributes_to_remove = .empty,
-            .template_nodes = .empty,
+            .attr_name_buffer = undefined,
+            .attr_name_fba = undefined,
+            .nodes_to_remove = undefined,
+            .attributes_to_remove = undefined,
+            .template_nodes = undefined,
+            .nodes_count = 0,
+            .attrs_count = 0,
+            .templates_count = 0,
         };
+        self.attr_name_fba = std.heap.FixedBufferAllocator.init(&self.attr_name_buffer);
+        return self;
     }
 
     fn deinit(self: *@This()) void {
-        for (self.attributes_to_remove.items) |action| {
-            self.allocator.free(action.attr_name);
+        // Stack-only cleanup - only free heap fallback attribute names
+        for (self.attributes_to_remove[0..self.attrs_count]) |action| {
+            if (action.needs_free) {
+                self.allocator.free(action.attr_name);
+            }
         }
-        self.attributes_to_remove.deinit(self.allocator);
-        self.nodes_to_remove.deinit(self.allocator);
-        self.template_nodes.deinit(self.allocator);
+    }
+
+    fn addNodeToRemove(self: *@This(), node: *z.DomNode) !void {
+        if (self.nodes_count >= MAX_STACK_REMOVALS) {
+            return error.TooManyNodesToRemove;
+        }
+        self.nodes_to_remove[self.nodes_count] = node;
+        self.nodes_count += 1;
+    }
+
+    fn addAttributeToRemove(self: *@This(), element: *z.HTMLElement, attr_name: []const u8) !void {
+        if (self.attrs_count >= MAX_STACK_REMOVALS) {
+            return error.TooManyAttributesToRemove;
+        }
+
+        const owned_name = try self.allocator.dupe(u8, attr_name);
+
+        self.attributes_to_remove[self.attrs_count] = AttributeAction{
+            .element = element,
+            .attr_name = owned_name,
+            .needs_free = true,
+        };
+        self.attrs_count += 1;
+    }
+
+    fn addTemplate(self: *@This(), template_node: *z.DomNode) !void {
+        if (self.templates_count >= MAX_STACK_TEMPLATES) {
+            return error.TooManyTemplates;
+        }
+        self.template_nodes[self.templates_count] = template_node;
+        self.templates_count += 1;
     }
 };
 
@@ -121,15 +175,14 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     switch (z.nodeType(node)) {
         .comment => {
             if (context_ptr.options.skip_comments) {
-                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                context_ptr.addNodeToRemove(node) catch {
                     return z._STOP;
                 };
             }
         },
         .element => {
             if (z.isTemplate(node)) {
-                // Handle templates separately, like in your normalize code
-                context_ptr.template_nodes.append(context_ptr.allocator, node) catch {
+                context_ptr.addTemplate(node) catch {
                     return z._STOP;
                 };
                 return z._CONTINUE;
@@ -138,14 +191,14 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             const element = z.nodeToElement(node) orelse return z._CONTINUE;
 
             const tag = z.tagFromElement(z.nodeToElement(node).?) orelse {
-                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                context_ptr.addNodeToRemove(node) catch {
                     return z._STOP;
                 };
                 return z._CONTINUE;
             };
 
             if (shouldRemoveTag(context_ptr.options, tag)) {
-                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                context_ptr.addNodeToRemove(node) catch {
                     return z._STOP;
                 };
                 return z._CONTINUE;
@@ -153,7 +206,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
 
             const tag_str = @tagName(tag);
             if (ALLOWED_TAGS.get(tag_str) == null) {
-                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                context_ptr.addNodeToRemove(node) catch {
                     return z._STOP;
                 };
                 return z._CONTINUE;
@@ -165,7 +218,6 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             return z._CONTINUE;
         },
 
-        // includes text nodes
         else => {},
     }
 
@@ -188,7 +240,9 @@ fn shouldRemoveTag(options: SanitizerOptions, tag: z.HtmlTag) bool {
 fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_name: []const u8) !void {
     const allowed_attrs = ALLOWED_TAGS.get(tag_name) orelse return;
 
-    const attrs = z.getAttributes(context.allocator, element) catch return;
+    // Use stack-buffered attribute collection (much faster!)
+    const attrs = z.getAttributes_bf(context.allocator, element) catch return;
+
     defer {
         for (attrs) |attr| {
             context.allocator.free(attr.name);
@@ -231,14 +285,7 @@ fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement
             }
         }
         if (should_remove) {
-            const owned_name = try context.allocator.dupe(u8, attr_pair.name);
-            try context.attributes_to_remove.append(
-                context.allocator,
-                .{
-                    .element = element,
-                    .attr_name = owned_name,
-                },
-            );
+            try context.addAttributeToRemove(element, attr_pair.name);
         }
     }
 }
@@ -253,18 +300,18 @@ fn isValidTarget(value: []const u8) bool {
 /// Post-walk operations - follows your PostWalkOperations pattern
 fn sanitizePostWalkOperations(allocator: std.mem.Allocator, context: *SanitizeContext, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
     // Remove dangerous attributes using your removeAttribute function
-    for (context.attributes_to_remove.items) |action| {
+    for (context.attributes_to_remove[0..context.attrs_count]) |action| {
         try z.removeAttribute(action.element, action.attr_name);
     }
 
     // Remove dangerous nodes
-    for (context.nodes_to_remove.items) |node| {
+    for (context.nodes_to_remove[0..context.nodes_count]) |node| {
         z.removeNode(node);
         z.destroyNode(node);
     }
 
     // Process templates (following your template handling pattern)
-    for (context.template_nodes.items) |template_node| {
+    for (context.template_nodes[0..context.templates_count]) |template_node| {
         try sanitizeTemplateContent(allocator, template_node, options);
     }
 }

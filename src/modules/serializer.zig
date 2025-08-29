@@ -273,10 +273,10 @@ test "what does std.mem.endsWith, std.mem.eql find?" {
 }
 
 // -------------------------------------------------------------------------------
-// Set Safe  innerHTML - To finish
+// SetInnerHTML - To finish
 // -------------------------------------------------------
 
-/// [Serialize] Sets / replaces element's inner HTML with security controls.
+/// [Serialize] Sets / replaces element's inner HTML with minimal security controls.
 pub fn setInnerHTML(element: *z.HTMLElement, content: []const u8) !*z.HTMLElement {
     // const espaced_html = sanitize(allocator, element)
     return lxb_html_element_inner_html_set(element, content.ptr, content.len);
@@ -429,31 +429,33 @@ test "setInnerHTML lexbor security sanitation" {
 
 test "sanitized HTML into a fragment" {
     const allocator = testing.allocator;
-    const doc = try z.createDocument();
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
     defer z.destroyDocument(doc);
 
-    const fragment = try z.createDocumentFragment(doc);
-    const malicious_content = "<div><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
+    // const fragment = try z.createDocumentFragment(doc);
+    const malicious_content = "<div><!-- a comment --><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
 
-    const fragment_node = z.fragmentToNode(fragment);
-    defer z.destroyNode(fragment_node);
-    const new_node = try z.parseFragmentSimple(fragment_node, malicious_content, .div);
-    const fragment_txt = try outerNodeHTML(allocator, new_node);
+    // const fragment_node = z.fragmentToNode(fragment);
+    const fragment_root = try z.parseFragmentSimple(
+        body,
+        malicious_content,
+        .div,
+    );
+    defer z.destroyNode(fragment_root);
+
+    const fragment_txt = try outerNodeHTML(allocator, fragment_root);
     defer allocator.free(fragment_txt);
+    // try prettyPrint(fragment_root);
 
-    // try prettyPrint(new_node); // <- first check what lexbor sanitzed
+    try testing.expectEqualStrings("<html><div><!-- a comment --><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></html>", fragment_txt);
 
-    try testing.expectEqualStrings("<html><div><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></html>", fragment_txt);
+    try z.sanitizeNode(allocator, fragment_root); // <- second sanitation pass
+    // try prettyPrint(fragment_root); // <- first check what lexbor sanitzed
 
-    try z.sanitizeNode(allocator, new_node); // <- second sanitation pass
-
-    const doc2 = try z.parseFromString("<html><body></body></html>");
-    defer z.destroyDocument(doc2);
-    const body2 = try z.bodyNode(doc2);
-    z.appendFragment(body2, new_node);
-    const body2_elt = z.nodeToElement(body2).?;
+    z.appendFragment(body, fragment_root);
     // try z.normalize(allocator, body2_elt);
-    const html_string = try z.outerHTML(allocator, body2_elt);
+    const html_string = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html_string);
 
     try testing.expectEqualStrings("<body><div><button>Become rich</button><img alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></body>", html_string);
@@ -464,10 +466,125 @@ test "sanitized HTML into a fragment" {
     // try z.prettyPrint(body2);
 }
 
-test "Serializer sanitation" {
-    const doc = try z.parseFromString("<div><button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\">Potentially dangerous, not escaped</button><!-- a comment --><div> The current value is: {@counter} </div> <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><a href=\"javascript:alert('XSS')\">Dangerous, not escaped</a><img src=\"javascript:alert('XSS')\" alt=\"not escaped\"><iframe src=\"javascript:alert('XSS')\" alt=\"not escaped\"></iframe><a href=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">Safe escaped</a><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><iframe src=\"data:text/html,<script>alert('XSS')</script>\" >Escaped</iframe><img src=\"data:image/svg+xml,<svg onload=alert('XSS')\" alt=\"escaped\"></svg>\"><img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==\" alt=\"potential dangerous b64\"><a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\">Potential dangerous b64</a><img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\" alt=\"potential dangerous b64\"><a href=\"file:///etc/passwd\">Dangerous Local file access</a><img src=\"file:///etc/passwd\" alt=\"dangerous local file access\"><p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script>");
+pub fn setSafeInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, context: z.FragmentContext, content: []const u8) !void {
+    const node = z.elementToNode(element);
 
+    const fragment_root = try z.parseFragmentSimple(
+        node,
+        content,
+        context,
+    );
+
+    try z.sanitizeNode(allocator, fragment_root);
+    z.appendFragment(node, fragment_root);
+}
+
+test "setSafeInnerHTML" {
+    const allocator = testing.allocator;
+    const doc = try z.parseFromString("");
     defer z.destroyDocument(doc);
 
+    const body_elt = try z.bodyElement(doc);
+
+    try setSafeInnerHTML(
+        allocator,
+        body_elt,
+        .div,
+        "<!-- a comment --><script>alert('XSS')</script><p id=\"1\" phx-click=\"increment\">Click me</p>",
+    );
+    // try z.prettyPrint(z.elementToNode(body_elt));
+}
+
+test "Serializer sanitation" {
+    const malicious_content = "<div><button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\">Potentially dangerous, not escaped</button><!-- a comment --><div data-time=\"{@current}\"> The current value is: {@counter} </div> <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><a href=\"javascript:alert('XSS')\">Dangerous, not escaped</a><img src=\"javascript:alert('XSS')\" alt=\"not escaped\"><iframe src=\"javascript:alert('XSS')\" alt=\"not escaped\"></iframe><a href=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">Safe escaped</a><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><iframe src=\"data:text/html,<script>alert('XSS')</script>\" >Escaped</iframe><img src=\"data:image/svg+xml,<svg onload=alert('XSS')\" alt=\"escaped\"></svg>\"><img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==\" alt=\"potential dangerous b64\"><a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\">Potential dangerous b64</a><img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\" alt=\"potential dangerous b64\"><a href=\"file:///etc/passwd\">Dangerous Local file access</a><img src=\"file:///etc/passwd\" alt=\"dangerous local file access\"><p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script><template></template>";
+
+    const doc = try z.parseFromString("");
+    const body = try z.bodyNode(doc);
+    defer z.destroyDocument(doc);
+
+    const fragment = try z.createDocumentFragment(doc);
+    const fragment_node = z.fragmentToNode(fragment);
+    defer z.destroyNode(fragment_node);
+    const new_node = try z.parseFragmentSimple(
+        body,
+        malicious_content,
+        .div,
+    );
+    // try prettyPrint(new_node);
+
+    const allocator = testing.allocator;
+    const fragment_txt = try outerNodeHTML(allocator, new_node);
+    defer allocator.free(fragment_txt);
+    try z.sanitizeNode(allocator, new_node);
     // try prettyPrint(body);
+}
+
+test "web component" {
+    const html =
+        \\<!DOCTYPE html>
+        \\<html>
+        \\  <head>
+        \\    <meta charset="utf-8">
+        \\    <title>element-details - web component using &lt;template&gt; and &lt;slot&gt;</title>
+        \\    <style>
+        \\      dl { margin-left: 6px; }
+        \\      dt { font-weight: bold; color: #217ac0; font-size: 110% }
+        \\      dt { font-family: Consolas, "Liberation Mono", Courier }
+        \\      dd { margin-left: 16px }
+        \\    </style>
+        \\  </head>
+        \\ <body>
+        \\    <h1>element-details - web component using <code>&lt;template&gt;</code> and <code>&lt;slot&gt;</code></h1>
+        \\
+        \\    <template id="element-details-template">
+        \\      <style>
+        \\      details {font-family: "Open Sans Light",Helvetica,Arial}
+        \\      .name {font-weight: bold; color: #217ac0; font-size: 120%}
+        \\      h4 { margin: 10px 0 -8px 0; }
+        \\      h4 span { background: #217ac0; padding: 2px 6px 2px 6px }
+        \\      h4 span { border: 1px solid #cee9f9; border-radius: 4px }
+        \\      h4 span { color: white }
+        \\      .attributes { margin-left: 22px; font-size: 90% }
+        \\      .attributes p { margin-left: 16px; font-style: italic }
+        \\      </style>
+        \\      <details>
+        \\        <summary>
+        \\          <span>
+        \\            <code class="name">&lt;<slot name="element-name">NEED NAME</slot>&gt;</code>
+        \\            <i class="desc"><slot name="description">NEED DESCRIPTION</slot></i>
+        \\          </span>
+        \\        </summary>
+        \\        <div class="attributes">
+        \\          <h4><span>Attributes</span></h4>
+        \\          <slot name="attributes"><p>None</p></slot>
+        \\        </div>
+        \\      </details>
+        \\      <hr>
+        \\    </template>
+        \\
+        \\    <element-details>
+        \\      <span slot="element-name">slot</span>
+        \\      <span slot="description">A placeholder inside a web
+        \\        component that users can fill with their own markup,
+        \\        with the effect of composing different DOM trees
+        \\        together.</span>
+        \\      <dl slot="attributes">
+        \\        <dt>name</dt>
+        \\        <dd>The name of the slot.</dd>
+        \\      </dl>
+        \\    </element-details>
+        \\
+        \\    <element-details>
+        \\      <span slot="element-name">template</span>
+        \\      <span slot="description">A mechanism for holding client-
+        \\        side content that is not to be rendered when a page is
+        \\        loaded but may subsequently be instantiated during
+        \\        runtime using JavaScript.</span>
+        \\    </element-details>
+        \\
+        \\    <script src="main.js"></script>
+        \\  </body>
+        \\</html>
+    ;
+    _ = html;
 }

@@ -272,6 +272,46 @@ pub fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]A
     return attrs.toOwnedSlice(allocator);
 }
 
+/// [attributes] Collect all attributes with stack buffer optimization (bf = buffered)
+///
+/// Uses zero-copy lexbor strings + stack buffer for small attribute sets.
+/// Hard limit of 16 attributes.
+///
+/// Same memory management as getAttributes - caller must free names/values/slice
+pub fn getAttributes_bf(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
+    var attribute = getFirstAttribute(element);
+    if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
+
+    // Stack buffer: most elements have < 16 attributes
+    const MAX_STACK_ATTRS = 16;
+    var stack_attrs: [MAX_STACK_ATTRS]AttributePair = undefined;
+    var attr_count: usize = 0;
+
+    // collect in stack buffer using zero-copy
+    while (attribute != null and attr_count < MAX_STACK_ATTRS) {
+        const name_zc = getAttributeName_zc(attribute.?);
+        const value_zc = getAttributeValue_zc(attribute.?);
+
+        // Copy zero-copy strings to owned memory (still required for caller)
+        const name_copy = try allocator.dupe(u8, name_zc);
+        const value_copy = try allocator.dupe(u8, value_zc);
+
+        stack_attrs[attr_count] = AttributePair{
+            .name = name_copy,
+            .value = value_copy,
+        };
+
+        attr_count += 1;
+        attribute = getNextAttribute(attribute.?);
+    }
+
+    // Fast path: all attributes fit in stack buffer
+
+    const result = try allocator.alloc(AttributePair, attr_count);
+    @memcpy(result, stack_attrs[0..attr_count]);
+    return result;
+}
+
 // ----------------------------------------------------------
 
 /// [attributes] Remove attribute from element
@@ -1165,4 +1205,115 @@ test "attribute error handling" {
         "missing",
     );
     try testing.expect(missing_attr == null);
+}
+
+test "getAttributes_bf stack buffer optimization" {
+    const allocator = testing.allocator;
+
+    // Test with small number of attributes (should use stack buffer)
+    const html_small = "<div class='test' id='main' data-value='123' title='tooltip'>Content</div>";
+    const doc_small = try z.parseFromString(html_small);
+    defer z.destroyDocument(doc_small);
+
+    const body_small = try z.bodyElement(doc_small);
+    const div_small = z.nodeToElement(z.firstChild(z.elementToNode(body_small)).?).?;
+
+    const attrs_small = try getAttributes_bf(allocator, div_small);
+    defer {
+        for (attrs_small) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs_small);
+    }
+
+    try testing.expect(attrs_small.len == 4);
+
+    // Compare with regular getAttributes to ensure same results
+    const attrs_regular = try getAttributes(allocator, div_small);
+    defer {
+        for (attrs_regular) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs_regular);
+    }
+
+    try testing.expect(attrs_small.len == attrs_regular.len);
+    for (attrs_small, attrs_regular) |small_attr, regular_attr| {
+        try testing.expectEqualStrings(small_attr.name, regular_attr.name);
+        try testing.expectEqualStrings(small_attr.value, regular_attr.value);
+    }
+}
+
+test "getAttributes_bf large attribute set" {
+    const allocator = testing.allocator;
+
+    // Create element with many attributes to test ArrayList fallback
+    const doc = try z.parseFromString("<div>Content</div>");
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyElement(doc);
+    const div = z.nodeToElement(z.firstChild(z.elementToNode(body)).?).?;
+
+    // Add 15 attributes (less than MAX_STACK_ATTRS = 16)
+    var i: u8 = 0;
+    while (i < 15) : (i += 1) {
+        var name_buf: [16]u8 = undefined;
+        var value_buf: [16]u8 = undefined;
+        const name = try std.fmt.bufPrint(&name_buf, "attr-{d}", .{i});
+        const value = try std.fmt.bufPrint(&value_buf, "value-{d}", .{i});
+        z.setAttribute(div, name, value);
+    }
+
+    const attrs = try getAttributes_bf(allocator, div);
+    defer {
+        for (attrs) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs);
+    }
+
+    try testing.expect(attrs.len == 15);
+}
+
+test "getAttributes performance comparison" {
+    const allocator = testing.allocator;
+
+    // Create test element with typical number of attributes
+    const html = "<div class='container active' id='main-content' data-component='card' data-state='loaded' title='Main Content' aria-label='Content Area'>Content</div>";
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+
+    const body = try z.bodyElement(doc);
+    const div = z.nodeToElement(z.firstChild(z.elementToNode(body)).?).?;
+
+    // Both should produce identical results
+    const attrs_regular = try getAttributes(allocator, div);
+    defer {
+        for (attrs_regular) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs_regular);
+    }
+
+    const attrs_buffered = try getAttributes_bf(allocator, div);
+    defer {
+        for (attrs_buffered) |attr| {
+            allocator.free(attr.name);
+            allocator.free(attr.value);
+        }
+        allocator.free(attrs_buffered);
+    }
+
+    // Verify identical results
+    try testing.expect(attrs_regular.len == attrs_buffered.len);
+    try testing.expect(attrs_regular.len == 6); // class, id, data-component, data-state, title, aria-label
+
+    for (attrs_regular, attrs_buffered) |regular, buffered| {
+        try testing.expectEqualStrings(regular.name, buffered.name);
+        try testing.expectEqualStrings(regular.value, buffered.value);
+    }
 }

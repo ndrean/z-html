@@ -266,7 +266,7 @@ pub const templateToElement = template.templateToElement;
 
 pub const nodeToTemplate = template.nodeToTemplate;
 pub const elementToTemplate = template.elementToTemplate;
-
+// ---
 pub const templateContent = template.templateContent;
 pub const useTemplate = template.useTemplate;
 
@@ -351,6 +351,7 @@ pub const getAttribute = attrs.getAttribute;
 pub const getAttribute_zc = attrs.getAttribute_zc;
 pub const setAttribute = attrs.setAttribute;
 
+pub const getAttributes_bf = attrs.getAttributes_bf;
 pub const getAttributes = attrs.getAttributes;
 pub const setAttributes = attrs.setAttributes;
 pub const hasAttribute = attrs.hasAttribute;
