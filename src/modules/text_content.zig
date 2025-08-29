@@ -33,9 +33,10 @@ pub fn textContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
 
     if (len == 0) return allocator.dupe(u8, "");
 
-    const result = try allocator.alloc(u8, len);
-    @memcpy(result, text_ptr[0..len]);
-    return result;
+    // const result = try allocator.alloc(u8, len);
+    // @memcpy(result, text_ptr[0..len]);
+    // return result;
+    return allocator.dupe(u8, text_ptr[0..len]);
 }
 
 test "textContent" {
