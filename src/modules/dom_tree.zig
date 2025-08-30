@@ -414,17 +414,15 @@ test "single node tuple serialization" {
 /// defer allocator.free(html);
 /// ```
 pub fn tupleStringToHtml(allocator: std.mem.Allocator, tuple_str: []const u8) ![]u8 {
-    const buffer = try allocator.alloc(u8, @max(tuple_str.len * 2, 65536)); // At least 64KB
-    defer allocator.free(buffer);
-
-    var output_stream = std.io.fixedBufferStream(buffer);
-    const output_writer = output_stream.writer();
+    // Use ArrayList for dynamic growth instead of fixed buffer
+    var result: std.ArrayList(u8) = .empty;
+    defer result.deinit(allocator);
 
     // Parse the tuple string and convert to HTML
     var parser = TupleParser.init(tuple_str);
-    try parser.parseToHtml(output_writer);
+    try parser.parseToHtmlArrayList(allocator, &result);
 
-    return allocator.dupe(u8, output_stream.getWritten());
+    return result.toOwnedSlice(allocator);
 }
 
 /// Simple tuple string parser
@@ -498,6 +496,28 @@ const TupleParser = struct {
             _ = self.advance(); // Skip ']'
         } else {
             try self.parseNodeToHtml(html_writer);
+        }
+    }
+
+    fn parseToHtmlArrayList(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
+        self.skipWhitespace();
+
+        // Handle array of nodes
+        if (self.peek() == '[') {
+            _ = self.advance(); // Skip '['
+
+            var first = true;
+            while (self.peek() != ']') {
+                if (!first) {
+                    try self.expectChar(',');
+                }
+                try self.parseNodeToHtmlArrayList(allocator, result);
+                first = false;
+                self.skipWhitespace();
+            }
+            _ = self.advance(); // Skip ']'
+        } else {
+            try self.parseNodeToHtmlArrayList(allocator, result);
         }
     }
 
@@ -582,6 +602,95 @@ const TupleParser = struct {
                 try html_writer.writeAll("</");
                 try html_writer.writeAll(tag_name);
                 try html_writer.writeByte('>');
+
+                try self.expectChar('}');
+            }
+        } else {
+            return error.UnexpectedChar;
+        }
+    }
+
+    fn parseNodeToHtmlArrayList(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
+        self.skipWhitespace();
+
+        if (self.peek() == '"') {
+            // Text node - just a quoted string
+            const text = try self.parseString();
+            try result.appendSlice(allocator, text);
+        } else if (self.peek() == '{') {
+            _ = self.advance(); // Skip '{'
+            self.skipWhitespace();
+
+            // Parse first element (tag name or "comment")
+            const first_elem = try self.parseString();
+
+            if (std.mem.eql(u8, first_elem, "comment")) {
+                // Comment node: {"comment", "text"}
+                try self.expectChar(',');
+                const comment_text = try self.parseString();
+                try result.appendSlice(allocator, "<!--");
+                try result.appendSlice(allocator, comment_text);
+                try result.appendSlice(allocator, "-->");
+                try self.expectChar('}');
+            } else {
+                // Element node: {"TAG", [attrs], [children]}
+                const tag_name = first_elem;
+
+                try self.expectChar(',');
+
+                // Parse attributes array
+                try self.expectChar('[');
+                try result.append(allocator, '<');
+                try result.appendSlice(allocator, tag_name);
+
+                // Parse each attribute
+                var first_attr = true;
+                self.skipWhitespace();
+                while (self.peek() != ']') {
+                    if (!first_attr) {
+                        try self.expectChar(',');
+                    }
+
+                    // Parse attribute: {"name", "value"}
+                    try self.expectChar('{');
+                    const attr_name = try self.parseString();
+                    try self.expectChar(',');
+                    const attr_value = try self.parseString();
+                    try self.expectChar('}');
+
+                    try result.append(allocator, ' ');
+                    try result.appendSlice(allocator, attr_name);
+                    try result.appendSlice(allocator, "=\"");
+                    try result.appendSlice(allocator, attr_value);
+                    try result.append(allocator, '"');
+
+                    first_attr = false;
+                    self.skipWhitespace();
+                }
+                _ = self.advance(); // Skip ']'
+
+                try self.expectChar(',');
+
+                // Parse children array
+                try self.expectChar('[');
+                try result.append(allocator, '>');
+
+                var first_child = true;
+                self.skipWhitespace();
+                while (self.peek() != ']') {
+                    if (!first_child) {
+                        try self.expectChar(',');
+                    }
+                    try self.parseNodeToHtmlArrayList(allocator, result);
+                    first_child = false;
+                    self.skipWhitespace();
+                }
+                _ = self.advance(); // Skip ']'
+
+                // Close tag
+                try result.appendSlice(allocator, "</");
+                try result.appendSlice(allocator, tag_name);
+                try result.append(allocator, '>');
 
                 try self.expectChar('}');
             }

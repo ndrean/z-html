@@ -20,13 +20,13 @@ const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
 const parser = @import("modules/parser.zig");
 const colours = @import("modules/colours.zig");
-const get = @import("modules/fetch.zig");
+// const get = @import("modules/fetch.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
 // pub const Writer = log.GlobalWriter;
 
-pub const fetchTest = get.fetchTest;
+// pub const fetchTest = get.fetchTest;
 // =========================================================
 // General Status codes & constants & definitions
 // =========================================================

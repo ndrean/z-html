@@ -10,10 +10,6 @@ pub fn fetchTest(allocator: std.mem.Allocator) !void {
     var body: std.ArrayList(u8) = .empty;
     defer body.deinit(allocator);
 
-    const outw = std.Io.Writer;
-    const buffer = std.io.fixedBufferStream(&body);
-    outw.init(buffer);
-
     const uri = try std.Uri.parse("https://example.com");
     const response = try client.fetch(.{
         .method = .GET,
