@@ -3,49 +3,35 @@
 > [!WARNING]
 > Work in progress
 
-`zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), a browser engine.
+`zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
 
-In other words, you can use `JavaScript` semantics on the server with `Zig`.
+This is useful for web scapping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
 
-`lexbor` follows <https://dom.spec.whatwg.org/>, and we follow - mostly - the `JavaScript` semantics.
+This binding stays as close as possible to `JavaScript` semantics.
 
 **Features:**
 
 This project exposes a significant / essential subset of all available `lexbor` functions:
 
-- Parsing:
-  - document parsing: `printDocStruct()`
+- Parsing with a parser engine
+  - document
+  - fragment context-aware parsing
   - chunk processing
-  - fragment / context-aware parsing
-  - `setInnerHTML()` and `insertAdjacentHTML()`
-- Serialization:
-  - tree: `outerHTML()`
-  - `innerHTML()`
+- Serialization
+- Sanitization (not)
 - DOM_tree and back
-  - compressed tuple: `DOM_toTuple()` and `Tuple_toDOM()`
-  - W3C JSON: `DOM_toJSON()` and `JSON_toDOM()`
-- CSS selectors search with cached CSS selectors parsing: `querySelector()` and `filter()`
+- CSS selectors search with cached CSS selectors parsing
 - Support of `<template>` elements.
-- HTML attributes
-  - fast "walker" search with _tokens_:
-    - `getElementById()`
-    - and derivatives class / data-attribute or custom `prefix-suffix` attributes
-  - Collections manipulation with a default size, including a `CollectionIterator` and  search on _exact string matching_:
-    - `getElementsById()`
-    - "attribute-value" pairs
-    - `collectionToSlice` if needed
-- DOM manipulation on nodes / elements / text / comment
-  - create / destroy
-  - node / element navigation (siblings)
-  - append (Adjacent) / insert (before/after) / remove
-  - `setInnerHTML`
+- attribute search
+- Collections and _exact string matching_:
+- DOM manipulation
 - DOM normalization with options (remove comments, whitespace, empty nodes)
-- Smart text
+- Pretty printing
 
-> [!IMPORTANT]
+> [!NOTE]
 > Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
-> We opted for the following convention: add `_zc` (for _zero_copy_) to the allocated version. For example, `textContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
-> With allocated versions, the data can outlive the current function: you can pass the data freely.
+> We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version. For example, `textContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
+> With allocated versions, the data can outlive the current function.
 
 ## Examples
 

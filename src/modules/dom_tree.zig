@@ -250,10 +250,11 @@ pub fn domToTupleString(allocator: std.mem.Allocator, doc: *z.HTMLDocument) ![]u
     }
 
     try result.append(arena_allocator, ']');
-    
+
     // Return owned slice using original allocator
     return allocator.dupe(u8, result.items);
 }
+
 
 /// [tree] Serialize single DOM node to tuple string
 pub fn nodeToTupleString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
@@ -265,7 +266,7 @@ pub fn nodeToTupleString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     // Build result using ArrayList for dynamic growth
     var result: std.ArrayList(u8) = .empty;
     try serializeNodeToArrayList(arena_allocator, &result, node);
-    
+
     // Return owned slice using original allocator
     return allocator.dupe(u8, result.items);
 }
@@ -278,8 +279,8 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
         .element => {
             const element = z.nodeToElement(node).?;
 
-            // Get tag name (zero-copy)
-            const tag_name = z.nodeName_zc(node);
+            // Get tag name (zero-copy, lowercase)
+            const tag_name = z.qualifiedName_zc(element);
 
             try result.appendSlice(arena_allocator, "{\"");
             try result.appendSlice(arena_allocator, tag_name);
@@ -364,90 +365,6 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
     }
 }
 
-/// Internal fast serialization using zero-copy lexbor strings
-fn serializeNodeFast(attr_allocator: std.mem.Allocator, output_writer: anytype, node: *z.DomNode) !void {
-    const node_type = z.nodeType(node);
-
-    switch (node_type) {
-        .element => {
-            const element = z.nodeToElement(node).?;
-
-            // Get tag name (zero-copy)
-            const tag_name = z.nodeName_zc(node);
-
-            try output_writer.writeAll("{\"");
-            try output_writer.writeAll(tag_name);
-            try output_writer.writeAll("\", [");
-
-            // Serialize attributes using getAttributes_bf for stack optimization
-            const attrs = try z.getAttributes_bf(attr_allocator, element);
-            defer {
-                for (attrs) |attr| {
-                    attr_allocator.free(attr.name);
-                    attr_allocator.free(attr.value);
-                }
-                attr_allocator.free(attrs);
-            }
-
-            for (attrs, 0..) |attr, i| {
-                if (i > 0) try output_writer.writeAll(", ");
-                try output_writer.writeAll("{\"");
-                try output_writer.writeAll(attr.name);
-                try output_writer.writeAll("\", \"");
-                try output_writer.writeAll(attr.value);
-                try output_writer.writeAll("\"}");
-            }
-
-            try output_writer.writeAll("], [");
-
-            // Serialize children
-            var first = true;
-            var child = z.firstChild(node);
-            while (child != null) {
-                if (!first) try output_writer.writeAll(", ");
-                try serializeNodeFast(attr_allocator, output_writer, child.?);
-                first = false;
-                child = z.nextSibling(child.?);
-            }
-
-            try output_writer.writeAll("]}");
-        },
-
-        .text => {
-            // Get text content (zero-copy)
-            const text_content = z.textContent_zc(node);
-            try output_writer.writeByte('"');
-            try writeEscapedString(output_writer, text_content);
-            try output_writer.writeByte('"');
-        },
-
-        .comment => {
-            const comment_content = z.textContent_zc(node);
-            try output_writer.writeAll("{\"comment\", \"");
-            try writeEscapedString(output_writer, comment_content);
-            try output_writer.writeAll("\"}");
-        },
-
-        else => {
-            // Skip other node types - serialize as empty text
-            try output_writer.writeAll("\"\"");
-        },
-    }
-}
-
-/// Write string with JSON escaping
-fn writeEscapedString(json_writer: anytype, text: []const u8) !void {
-    for (text) |ch| {
-        switch (ch) {
-            '"' => try json_writer.writeAll("\\\""),
-            '\\' => try json_writer.writeAll("\\\\"),
-            '\n' => try json_writer.writeAll("\\n"),
-            '\r' => try json_writer.writeAll("\\r"),
-            '\t' => try json_writer.writeAll("\\t"),
-            else => try json_writer.writeByte(ch),
-        }
-    }
-}
 
 test "fast tuple serialization" {
     const html = "<html><body id=\"main\" class=\"container\">Hello world<!-- Comment --><div><button phx-click=\"increment\">{@counter}</button></div></body></html>";
@@ -460,8 +377,8 @@ test "fast tuple serialization" {
 
     print("\nFast serialization result:\n{s}\n", .{result});
 
-    // Should contain the expected elements
-    try testing.expect(std.mem.indexOf(u8, result, "\"BODY\"") != null);
+    // Should contain the expected elements (lowercase HTML standard)
+    try testing.expect(std.mem.indexOf(u8, result, "\"body\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "\"id\", \"main\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"container\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "\"comment\"") != null);
@@ -482,9 +399,9 @@ test "single node tuple serialization" {
 
     print("\nSingle node result:\n{s}\n", .{result});
 
-    try testing.expect(std.mem.indexOf(u8, result, "\"DIV\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"div\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"test\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"STRONG\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"strong\"") != null);
 }
 
 //=============================================================================
@@ -680,7 +597,7 @@ test "tuple string to HTML conversion" {
     const allocator = testing.allocator;
 
     // Simple element
-    const tuple1 = "{\"DIV\", [{\"class\", \"test\"}], [\"Hello World\"]}";
+    const tuple1 = "{\"div\", [{\"class\", \"test\"}], [\"Hello World\"]}";
     const html1 = try tupleStringToHtml(allocator, tuple1);
     defer allocator.free(html1);
 
@@ -688,10 +605,10 @@ test "tuple string to HTML conversion" {
     print("Input:  {s}\n", .{tuple1});
     print("Output: {s}\n", .{html1});
 
-    try testing.expectEqualStrings("<DIV class=\"test\">Hello World</DIV>", html1);
+    try testing.expectEqualStrings("<div class=\"test\">Hello World</div>", html1);
 
     // Nested elements
-    const tuple2 = "[{\"DIV\", [], [\"Hello \", {\"STRONG\", [], [\"world\"]}, \"!\"]}]";
+    const tuple2 = "[{\"div\", [], [\"Hello \", {\"strong\", [], [\"world\"]}, \"!\"]}]";
     const html2 = try tupleStringToHtml(allocator, tuple2);
     defer allocator.free(html2);
 
@@ -699,10 +616,10 @@ test "tuple string to HTML conversion" {
     print("Input:  {s}\n", .{tuple2});
     print("Output: {s}\n", .{html2});
 
-    try testing.expectEqualStrings("<DIV>Hello <STRONG>world</STRONG>!</DIV>", html2);
+    try testing.expectEqualStrings("<div>Hello <strong>world</strong>!</div>", html2);
 
     // With comment
-    const tuple3 = "[{\"P\", [], [\"Text\"]}, {\"comment\", \" A comment \"}]";
+    const tuple3 = "[{\"p\", [], [\"Text\"]}, {\"comment\", \" A comment \"}]";
     const html3 = try tupleStringToHtml(allocator, tuple3);
     defer allocator.free(html3);
 
@@ -710,7 +627,7 @@ test "tuple string to HTML conversion" {
     print("Input:  {s}\n", .{tuple3});
     print("Output: {s}\n", .{html3});
 
-    try testing.expectEqualStrings("<P>Text</P><!-- A comment -->", html3);
+    try testing.expectEqualStrings("<p>Text</p><!-- A comment -->", html3);
 }
 
 test "round-trip: HTML → Tuple → HTML" {
@@ -769,7 +686,7 @@ test "simplified API functions" {
 
     try testing.expect(std.mem.indexOf(u8, html_result, "class=\"test\"") != null);
     try testing.expect(std.mem.indexOf(u8, html_result, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, html_result, "STRONG") != null);
+    try testing.expect(std.mem.indexOf(u8, html_result, "strong") != null);
     try testing.expect(std.mem.indexOf(u8, html_result, "world") != null);
 }
 
@@ -1024,7 +941,7 @@ test "performance benchmark: comprehensive DOM operations" {
     try testing.expect(tuple_result.len > 0);
     try testing.expect(html_result.len > 0);
     // Note: Detailed verification commented out to avoid segfault in test environment
-    // try testing.expect(std.mem.indexOf(u8, tuple_result, "\"BODY\"") != null);
+    // try testing.expect(std.mem.indexOf(u8, tuple_result, "\"body\"") != null);
     // try testing.expect(std.mem.indexOf(u8, html_result, "Performance Test") != null);
 
     print("\n✅ All comprehensive benchmarks completed successfully!\n", .{});

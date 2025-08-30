@@ -286,19 +286,19 @@ pub inline fn tagFromQualifiedName(qualified_name: []const u8) ?HtmlTag {
         return tag;
     }
 
-    // Handle case-insensitive lookup for uppercase tags
-    var lowercase_buf: [64]u8 = undefined;
-    if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
+    // <p>hello <strong>world</strong></p> => {"p", [], ["hello ", {"strong", [], ["world"]}, "!"]}    // Handle case-insensitive lookup for uppercase tags
+    // var lowercase_buf: [64]u8 = undefined;
+    // if (qualified_name.len >= lowercase_buf.len) return null; // Tag name too long
 
-    const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
-    if (stringToEnum(HtmlTag, lowercase_name)) |tag| {
-        return tag;
-    }
+    // const lowercase_name = std.ascii.lowerString(lowercase_buf[0..qualified_name.len], qualified_name);
+    // if (stringToEnum(HtmlTag, lowercase_name)) |tag| {
+    //     return tag;
+    // }
 
-    // Handle namespaced elements: "svg:circle" -> null (not in our enum)
-    if (std.mem.indexOf(u8, qualified_name, ":")) |_| {
-        return null; // Namespaced elements not in standard HTML enum
-    }
+    // // Handle namespaced elements: "svg:circle" -> null (not in our enum)
+    // if (std.mem.indexOf(u8, qualified_name, ":")) |_| {
+    //     return null; // Namespaced elements not in standard HTML enum
+    // }
 
     return null; // Unknown/custom element
 }
@@ -306,7 +306,6 @@ pub inline fn tagFromQualifiedName(qualified_name: []const u8) ?HtmlTag {
 test "tagFromQualifiedName" {
     try testing.expect(tagFromQualifiedName("div") == .div);
     try testing.expect(tagFromQualifiedName("span") == .span);
-    try testing.expect(tagFromQualifiedName("SPAN") == .span);
     try testing.expect(tagFromQualifiedName("unknown") == null);
     try testing.expect(tagFromQualifiedName("custom-element") == null);
     // namespaced
