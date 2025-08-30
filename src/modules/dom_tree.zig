@@ -414,13 +414,17 @@ test "single node tuple serialization" {
 /// defer allocator.free(html);
 /// ```
 pub fn tupleStringToHtml(allocator: std.mem.Allocator, tuple_str: []const u8) ![]u8 {
-    // Use ArrayList for dynamic growth instead of fixed buffer
+    // Pre-allocate ArrayList with estimated capacity (+40% of tuple string length)
     var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
+    
+    // Pre-allocate based on tuple string length (HTML is typically ~70% of tuple size)
+    const estimated_capacity = (tuple_str.len * 140) / 100; // +40% buffer
+    try result.ensureTotalCapacity(allocator, estimated_capacity);
 
     // Parse the tuple string and convert to HTML
     var parser = TupleParser.init(tuple_str);
-    try parser.parseToHtmlArrayList(allocator, &result);
+    try parser.parseToHtml(allocator, &result);
 
     return result.toOwnedSlice(allocator);
 }
@@ -477,7 +481,7 @@ const TupleParser = struct {
         }
     }
 
-    fn parseToHtml(self: *TupleParser, html_writer: anytype) !void {
+    fn parseToHtml(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
         self.skipWhitespace();
 
         // Handle array of nodes
@@ -489,128 +493,17 @@ const TupleParser = struct {
                 if (!first) {
                     try self.expectChar(',');
                 }
-                try self.parseNodeToHtml(html_writer);
+                try self.parseNodeToHtml(allocator, result);
                 first = false;
                 self.skipWhitespace();
             }
             _ = self.advance(); // Skip ']'
         } else {
-            try self.parseNodeToHtml(html_writer);
+            try self.parseNodeToHtml(allocator, result);
         }
     }
 
-    fn parseToHtmlArrayList(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
-        self.skipWhitespace();
-
-        // Handle array of nodes
-        if (self.peek() == '[') {
-            _ = self.advance(); // Skip '['
-
-            var first = true;
-            while (self.peek() != ']') {
-                if (!first) {
-                    try self.expectChar(',');
-                }
-                try self.parseNodeToHtmlArrayList(allocator, result);
-                first = false;
-                self.skipWhitespace();
-            }
-            _ = self.advance(); // Skip ']'
-        } else {
-            try self.parseNodeToHtmlArrayList(allocator, result);
-        }
-    }
-
-    fn parseNodeToHtml(self: *TupleParser, html_writer: anytype) !void {
-        self.skipWhitespace();
-
-        if (self.peek() == '"') {
-            // Text node - just a quoted string
-            const text = try self.parseString();
-            try html_writer.writeAll(text);
-        } else if (self.peek() == '{') {
-            _ = self.advance(); // Skip '{'
-            self.skipWhitespace();
-
-            // Parse first element (tag name or "comment")
-            const first_elem = try self.parseString();
-
-            if (std.mem.eql(u8, first_elem, "comment")) {
-                // Comment node: {"comment", "text"}
-                try self.expectChar(',');
-                const comment_text = try self.parseString();
-                try html_writer.writeAll("<!--");
-                try html_writer.writeAll(comment_text);
-                try html_writer.writeAll("-->");
-                try self.expectChar('}');
-            } else {
-                // Element node: {"TAG", [attrs], [children]}
-                const tag_name = first_elem;
-
-                try self.expectChar(',');
-
-                // Parse attributes array
-                try self.expectChar('[');
-                try html_writer.writeByte('<');
-                try html_writer.writeAll(tag_name);
-
-                // Parse each attribute
-                var first_attr = true;
-                self.skipWhitespace();
-                while (self.peek() != ']') {
-                    if (!first_attr) {
-                        try self.expectChar(',');
-                    }
-
-                    // Parse attribute: {"name", "value"}
-                    try self.expectChar('{');
-                    const attr_name = try self.parseString();
-                    try self.expectChar(',');
-                    const attr_value = try self.parseString();
-                    try self.expectChar('}');
-
-                    try html_writer.writeByte(' ');
-                    try html_writer.writeAll(attr_name);
-                    try html_writer.writeAll("=\"");
-                    try html_writer.writeAll(attr_value);
-                    try html_writer.writeByte('"');
-
-                    first_attr = false;
-                    self.skipWhitespace();
-                }
-                _ = self.advance(); // Skip ']'
-
-                try self.expectChar(',');
-
-                // Parse children array
-                try self.expectChar('[');
-                try html_writer.writeByte('>');
-
-                var first_child = true;
-                self.skipWhitespace();
-                while (self.peek() != ']') {
-                    if (!first_child) {
-                        try self.expectChar(',');
-                    }
-                    try self.parseNodeToHtml(html_writer);
-                    first_child = false;
-                    self.skipWhitespace();
-                }
-                _ = self.advance(); // Skip ']'
-
-                // Close tag
-                try html_writer.writeAll("</");
-                try html_writer.writeAll(tag_name);
-                try html_writer.writeByte('>');
-
-                try self.expectChar('}');
-            }
-        } else {
-            return error.UnexpectedChar;
-        }
-    }
-
-    fn parseNodeToHtmlArrayList(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
+    fn parseNodeToHtml(self: *TupleParser, allocator: std.mem.Allocator, result: *std.ArrayList(u8)) !void {
         self.skipWhitespace();
 
         if (self.peek() == '"') {
@@ -681,7 +574,7 @@ const TupleParser = struct {
                     if (!first_child) {
                         try self.expectChar(',');
                     }
-                    try self.parseNodeToHtmlArrayList(allocator, result);
+                    try self.parseNodeToHtml(allocator, result);
                     first_child = false;
                     self.skipWhitespace();
                 }
@@ -798,9 +691,9 @@ test "simplified API functions" {
 }
 
 test "performance benchmark: comprehensive DOM operations" {
-    const allocator = testing.allocator;
+    const allocator = std.heap.c_allocator;
 
-    // Create ~20KB HTML document by building it dynamically
+    // Create ~100KB HTML document by building it dynamically
     var html_builder: std.ArrayList(u8) = .empty;
     defer html_builder.deinit(allocator);
 
@@ -909,8 +802,8 @@ test "performance benchmark: comprehensive DOM operations" {
         \\    </main>
     ;
 
-    // Add 20 sections to reach ~20KB
-    for (1..21) |_| {
+    // Add 100 sections to reach ~100KB
+    for (1..101) |_| {
         try html_builder.appendSlice(allocator, section_template);
     }
 

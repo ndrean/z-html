@@ -102,12 +102,21 @@ const Context = struct {
     template_nodes: std.ArrayList(*z.DomNode),
 
     fn init(alloc: std.mem.Allocator, opts: NormalizeOptions) @This() {
+        var nodes_to_remove: std.ArrayList(*z.DomNode) = .empty;
+        var text_merges: std.ArrayList(TextMerge) = .empty;
+        var template_nodes: std.ArrayList(*z.DomNode) = .empty;
+        
+        // Pre-allocate capacity for normalization operations (estimates based on typical usage)
+        nodes_to_remove.ensureTotalCapacity(alloc, 20) catch {}; // ~20 nodes to remove
+        text_merges.ensureTotalCapacity(alloc, 50) catch {}; // ~50 text merge operations  
+        template_nodes.ensureTotalCapacity(alloc, 5) catch {}; // ~5 template nodes
+        
         return .{
             .allocator = alloc,
             .options = opts,
-            .nodes_to_remove = .empty,
-            .text_merges = .empty,
-            .template_nodes = .empty,
+            .nodes_to_remove = nodes_to_remove,
+            .text_merges = text_merges,
+            .template_nodes = template_nodes,
         };
     }
 
@@ -479,11 +488,14 @@ test "escape" {
 }
 
 test "normalize performance benchmark" {
-    const allocator = testing.allocator;
+    const allocator = std.heap.c_allocator;
 
     // Create large HTML document with lots of whitespace for normalization
     var html_builder: std.ArrayList(u8) = .empty;
     defer html_builder.deinit(allocator);
+    
+    // Pre-allocate capacity for the HTML builder (estimate ~25KB for this test)
+    try html_builder.ensureTotalCapacity(allocator, 25_000);
 
     try html_builder.appendSlice(allocator,
         \\<html>
