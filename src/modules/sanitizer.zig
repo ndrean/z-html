@@ -2,7 +2,7 @@
 //! It works with _whitelists_ on accepted elements and attributes.
 //!
 //! It provides functions to
-//! - remove unwanted elements
+//! - remove unwanted elements, comments
 //! - validate and sanitize attributes
 //! - ensure safe URI usage
 const std = @import("std");
@@ -12,32 +12,22 @@ const print = std.debug.print;
 
 const testing = std.testing;
 
-// extern "c" fn lxb_dom_node_simple_walk(
-//     root: *z.DomNode,
-//     walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.c) c_int,
-//     ctx: ?*anyopaque,
-// ) void;
-
-/// Cast the context back to the defined type
-fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
-    return @as(*T, @ptrCast(@alignCast(ctx.?)));
-}
-
 // Whitelist definitions
 pub const AttrSet = std.StaticStringMap(void);
+const special_common = AttrSet.initComptime(.{ .{"phx-"}, .{":if"}, .{":for"}, .{":let"}, .{"data-"} });
 
-pub const allowed_a = AttrSet.initComptime(.{ .{ "href", {} }, .{ "title", {} }, .{ "target", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "role", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
+pub const allowed_a = AttrSet.initComptime(.{ .{"href"}, .{"title"}, .{"target"}, .{"id"}, .{"aria"}, .{"role"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 
-pub const allowed_img = AttrSet.initComptime(.{ .{ "src", {} }, .{ "alt", {} }, .{ "title", {} }, .{ "sizes", {} }, .{ "height", {} }, .{ "width", {} }, .{ "lazy", {} }, .{ "loading", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
+pub const allowed_img = AttrSet.initComptime(.{ .{"src"}, .{"alt"}, .{"title"}, .{"sizes"}, .{"height"}, .{"width"}, .{"lazy"}, .{"loading"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 
-pub const allowed_common = AttrSet.initComptime(.{ .{ "aria", {} }, .{ "hidden", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
+pub const allowed_common = AttrSet.initComptime(.{ .{"aria"}, .{"hidden"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 
-pub const allowed_meta = AttrSet.initComptime(.{ .{ "charset", {} }, .{ "name", {} }, .{ "content", {} } });
-pub const allowed_link = AttrSet.initComptime(.{ .{ "rel", {} }, .{ "href", {} }, .{ "type", {} }, .{ "sizes", {} }, .{ "media", {} }, .{ "as", {} }, .{ "crossorigin", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
-pub const allowed_input = AttrSet.initComptime(.{ .{ "type", {} }, .{ "name", {} }, .{ "value", {} }, .{ "placeholder", {} }, .{ "required", {} }, .{ "minlength", {} }, .{ "maxlength", {} }, .{ "form", {} }, .{ "autocomplete", {} }, .{ "list", {} }, .{ "max", {} }, .{ "min", {} }, .{ "readonly", {} }, .{ "step", {} }, .{ "accept", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
-pub const allowed_label = AttrSet.initComptime(.{.{ "for", {} }});
-pub const allowed_form = AttrSet.initComptime(.{ .{ "action", {} }, .{ "method", {} }, .{ "enctype", {} }, .{ "target", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
-pub const allowed_button = AttrSet.initComptime(.{ .{ "type", {} }, .{ "name", {} }, .{ "value", {} }, .{ "disabled", {} }, .{ "class", {} }, .{ "id", {} }, .{ "aria", {} }, .{ "hidden", {} }, .{ "data-", {} }, .{ "phx-", {} } });
+pub const allowed_meta = AttrSet.initComptime(.{ .{"charset"}, .{"name"}, .{"content"} });
+pub const allowed_link = AttrSet.initComptime(.{ .{"rel"}, .{"href"}, .{"type"}, .{"sizes"}, .{"media"}, .{"as"}, .{"crossorigin"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+pub const allowed_input = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"placeholder"}, .{"required"}, .{"minlength"}, .{"maxlength"}, .{"form"}, .{"autocomplete"}, .{"list"}, .{"max"}, .{"min"}, .{"readonly"}, .{"step"}, .{"accept"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+pub const allowed_label = AttrSet.initComptime(.{.{"for"}});
+pub const allowed_form = AttrSet.initComptime(.{ .{"action"}, .{"method"}, .{"enctype"}, .{"target"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"disabled"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
 
@@ -224,7 +214,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     return z._CONTINUE;
 }
 
-fn shouldRemoveTag(options: SanitizerOptions, tag: z.HtmlTag) bool {
+inline fn shouldRemoveTag(options: SanitizerOptions, tag: z.HtmlTag) bool {
     return switch (tag) {
         .script => options.remove_scripts,
         .style => options.remove_styles,
@@ -239,8 +229,7 @@ fn shouldRemoveTag(options: SanitizerOptions, tag: z.HtmlTag) bool {
 
 fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_name: []const u8) !void {
     const allowed_attrs = ALLOWED_TAGS.get(tag_name) orelse return;
-
-    // Use stack-buffered attribute collection (much faster!)
+    // uses buffer collected attributes
     const attrs = z.getAttributes_bf(context.allocator, element) catch return;
 
     defer {
@@ -254,7 +243,15 @@ fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement
     for (attrs) |attr_pair| {
         var should_remove = false;
 
-        if (!allowed_attrs.has(attr_pair.name)) {
+        if (std.mem.startsWith(u8, attr_pair.name, "phx-") or
+            std.mem.startsWith(u8, attr_pair.name, "data-") or
+            std.mem.startsWith(u8, attr_pair.name, ":if") or
+            std.mem.startsWith(u8, attr_pair.name, ":for") or
+            std.mem.startsWith(u8, attr_pair.name, ":let"))
+        {
+            // Always allow special attributes
+            continue;
+        } else if (!allowed_attrs.has(attr_pair.name)) {
             should_remove = true;
         } else {
             // Check for dangerous schemes in ANY attribute value first
@@ -297,31 +294,26 @@ fn isValidTarget(value: []const u8) bool {
         std.mem.eql(u8, value, "_top");
 }
 
-/// Post-walk operations - follows your PostWalkOperations pattern
 fn sanitizePostWalkOperations(allocator: std.mem.Allocator, context: *SanitizeContext, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
-    // Remove dangerous attributes using your removeAttribute function
     for (context.attributes_to_remove[0..context.attrs_count]) |action| {
         try z.removeAttribute(action.element, action.attr_name);
     }
 
-    // Remove dangerous nodes
     for (context.nodes_to_remove[0..context.nodes_count]) |node| {
         z.removeNode(node);
         z.destroyNode(node);
     }
 
-    // Process templates (following your template handling pattern)
     for (context.template_nodes[0..context.templates_count]) |template_node| {
-        try sanitizeTemplateContent(allocator, template_node, options);
+        try sanitizeTemplateContent(
+            allocator,
+            template_node,
+            options,
+        );
     }
 }
 
-/// Template sanitization - follows your normalizeTemplateContent pattern
-fn sanitizeTemplateContent(
-    allocator: std.mem.Allocator,
-    template_node: *z.DomNode,
-    options: SanitizerOptions,
-) (std.mem.Allocator.Error || z.Err)!void {
+fn sanitizeTemplateContent(allocator: std.mem.Allocator, template_node: *z.DomNode, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
     const template = z.nodeToTemplate(template_node) orelse return;
     const content = z.templateContent(template);
     const content_node = z.fragmentToNode(content);
@@ -338,12 +330,7 @@ fn sanitizeTemplateContent(
     try sanitizePostWalkOperations(allocator, &template_context, options);
 }
 
-/// Main sanitization function - follows your normalizeWithOptions pattern
-pub fn sanitizeWithOptions(
-    allocator: std.mem.Allocator,
-    root_node: *z.DomNode,
-    options: SanitizerOptions,
-) (std.mem.Allocator.Error || z.Err)!void {
+pub fn sanitizeWithOptions(allocator: std.mem.Allocator, root_node: *z.DomNode, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
     var context = SanitizeContext.init(allocator, options);
     defer context.deinit();
 
@@ -353,70 +340,70 @@ pub fn sanitizeWithOptions(
         &context,
     );
 
-    try sanitizePostWalkOperations(allocator, &context, options);
+    try sanitizePostWalkOperations(
+        allocator,
+        &context,
+        options,
+    );
 }
 
-/// Default sanitization function
-pub fn sanitizeNode(
-    allocator: std.mem.Allocator,
-    root_node: *z.DomNode,
-) (std.mem.Allocator.Error || z.Err)!void {
+pub fn sanitizeNode(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
     return sanitizeWithOptions(allocator, root_node, .{});
 }
 
-// test "comprehensive sanitization" {
-//     const allocator = testing.allocator;
+test "comprehensive sanitization" {
+    const allocator = testing.allocator;
 
-//     const malicious_html =
-//         \\<div onclick="alert('xss')" style="background: url(javascript:alert('css'))">
-//         \\  <script>alert('xss')</script>
-//         \\  <p onmouseover="steal_data()" class="safe-class">Safe text</p>
-//         \\  <a href="javascript:alert('href')" title="Bad link">Bad link</a>
-//         \\  <a href="https://example.com" class="link">Good link</a>
-//         \\  <!-- malicious comment -->
-//         \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
-//         \\  <iframe src="evil.html"></iframe>
-//         \\  <form><input type="text" name="evil"></form>
-//         \\</div>
-//     ;
+    const malicious_html =
+        \\<div onclick="alert('xss')" style="background: url(javascript:alert('css'))">
+        \\  <script>alert('xss')</script>
+        \\  <p onmouseover="steal_data()" class="safe-class">Safe text</p>
+        \\  <a href="javascript:alert('href')" title="Bad link">Bad link</a>
+        \\  <a href="https://example.com" class="link">Good link</a>
+        \\  <!-- malicious comment -->
+        \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
+        \\  <iframe src="evil.html"></iframe>
+        \\  <form><input type="text" name="evil"></form>
+        \\</div>
+    ;
 
-//     const doc = try z.parseFromString(malicious_html);
-//     defer z.destroyDocument(doc);
+    const doc = try z.parseFromString(malicious_html);
+    defer z.destroyDocument(doc);
 
-//     const body = try z.bodyNode(doc);
+    const body = try z.bodyNode(doc);
 
-//     try sanitizeWithOptions(allocator, body, .{
-//         .skip_comments = true,
-//         .remove_scripts = true,
-//         .strict_uri_validation = true,
-//     });
+    try sanitizeWithOptions(allocator, body, .{
+        .skip_comments = true,
+        .remove_scripts = true,
+        .strict_uri_validation = true,
+    });
 
-//     const result = try z.outerNodeHTML(allocator, body);
-//     defer allocator.free(result);
+    const result = try z.outerNodeHTML(allocator, body);
+    defer allocator.free(result);
 
-//     // print("Sanitized HTML: {s}\n", .{result});
+    // print("Sanitized HTML: {s}\n", .{result});
 
-//     // Should remove dangerous elements
-//     try testing.expect(std.mem.indexOf(u8, result, "script") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "iframe") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "form") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "input") == null);
+    // Should remove dangerous elements
+    try testing.expect(std.mem.indexOf(u8, result, "script") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "iframe") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "form") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "input") == null);
 
-//     // Should remove dangerous attributes
-//     try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "onmouseover") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "onerror") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "style") == null);
-//     try testing.expect(std.mem.indexOf(u8, result, "javascript:") == null);
+    // Should remove dangerous attributes
+    try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "onmouseover") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "onerror") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "style") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "javascript:") == null);
 
-//     // Should remove comments
-//     try testing.expect(std.mem.indexOf(u8, result, "comment") == null);
+    // Should remove comments
+    try testing.expect(std.mem.indexOf(u8, result, "comment") == null);
 
-//     // Should preserve safe content and attributes
-//     try testing.expect(std.mem.indexOf(u8, result, "Safe text") != null);
-//     try testing.expect(std.mem.indexOf(u8, result, "Good link") != null);
-//     try testing.expect(std.mem.indexOf(u8, result, "Safe image") != null);
-//     try testing.expect(std.mem.indexOf(u8, result, "safe-class") != null);
-//     try testing.expect(std.mem.indexOf(u8, result, "class=\"link\"") != null);
-//     try testing.expect(std.mem.indexOf(u8, result, "https://example.com") != null);
-// }
+    // Should preserve safe content and attributes
+    try testing.expect(std.mem.indexOf(u8, result, "Safe text") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Good link") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Safe image") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "safe-class") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "class=\"link\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "https://example.com") != null);
+}

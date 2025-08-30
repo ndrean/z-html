@@ -279,7 +279,7 @@ pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
     }
 }
 
-/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum (inline)
+/// [HtmlTag] Convert qualified name (lowercase) to HtmlTag enum
 pub inline fn tagFromQualifiedName(qualified_name: []const u8) ?HtmlTag {
     // Fast path: try direct enum lookup (most common case - lowercase)
     if (stringToEnum(HtmlTag, qualified_name)) |tag| {
@@ -313,7 +313,7 @@ test "tagFromQualifiedName" {
     try testing.expect(tagFromQualifiedName("svg:circle") == null);
 }
 
-/// [HtmlTag] Convert element to HtmlTag enum (inline)
+/// [HtmlTag] Convert element to HtmlTag enum
 pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
     const qualified_name = z.qualifiedName_zc(element);
     return tagFromQualifiedName(qualified_name);

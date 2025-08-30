@@ -434,7 +434,7 @@ test "sanitized HTML into a fragment" {
     defer z.destroyDocument(doc);
 
     // const fragment = try z.createDocumentFragment(doc);
-    const malicious_content = "<div><!-- a comment --><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
+    const malicious_content = "<div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
 
     // const fragment_node = z.fragmentToNode(fragment);
     const fragment_root = try z.parseFragmentSimple(
@@ -448,7 +448,7 @@ test "sanitized HTML into a fragment" {
     defer allocator.free(fragment_txt);
     // try prettyPrint(fragment_root);
 
-    try testing.expectEqualStrings("<html><div><!-- a comment --><button onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></html>", fragment_txt);
+    try testing.expectEqualStrings("<html><div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></html>", fragment_txt);
 
     try z.sanitizeNode(allocator, fragment_root); // <- second sanitation pass
     // try prettyPrint(fragment_root); // <- first check what lexbor sanitzed
@@ -458,12 +458,10 @@ test "sanitized HTML into a fragment" {
     const html_string = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html_string);
 
-    try testing.expectEqualStrings("<body><div><button>Become rich</button><img alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></body>", html_string);
+    try testing.expectEqualStrings("<body><div><button phx-click=\"go\">Become rich</button><img alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></body>", html_string);
 
-    // try prettyPrint(body2);
-
-    // try z.printDocStruct(doc2);
-    // try z.prettyPrint(body2);
+    // try z.printDocStruct(doc);
+    // try z.prettyPrint(body);
 }
 
 pub fn setSafeInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, context: z.FragmentContext, content: []const u8) !void {

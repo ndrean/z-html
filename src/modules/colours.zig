@@ -130,7 +130,7 @@ pub const Style = struct {
 /// Default colour styles for HTML elements
 pub const ElementStyles = struct {
     pub const html = Style.BOLD_CYAN;
-    pub const head = Style.CYAN;
+    pub const head = Style.INVERSE_CYAN;
     pub const body = Style.BODY;
     pub const title = Style.BOLD_BLUE;
     pub const meta = Style.BLUE;
@@ -176,7 +176,7 @@ pub const ElementStyles = struct {
     pub const option = Style.WHITE;
     pub const label = Style.GREEN;
 
-    pub const header = Style.BOLD_BLUE;
+    pub const header = Style.INVERSE_BLUE;
     pub const footer = Style.BOLD_BLUE;
     pub const main = Style.BOLD_BLUE;
     pub const section = Style.BLUE;
@@ -262,11 +262,34 @@ pub fn isKnownAttribute(attr: []const u8) bool {
 }
 
 pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, element_name, "html")) return ElementStyles.html;
+    if (std.mem.eql(u8, element_name, "head")) return ElementStyles.head;
     if (std.mem.eql(u8, element_name, "body")) return ElementStyles.body;
-    if (std.mem.eql(u8, element_name, "div")) return ElementStyles.div;
-    if (std.mem.eql(u8, element_name, "p")) return ElementStyles.p;
-    if (std.mem.eql(u8, element_name, "h1")) return ElementStyles.h1;
-    if (std.mem.eql(u8, element_name, "h2")) return ElementStyles.h2;
+    if (std.mem.eql(u8, element_name, "title")) return ElementStyles.title;
+    if (std.mem.eql(u8, element_name, "meta")) return ElementStyles.meta;
+    if (std.mem.eql(u8, element_name, "link")) return ElementStyles.link;
+    if (std.mem.eql(u8, element_name, "script")) return ElementStyles.script;
+    if (std.mem.eql(u8, element_name, "style")) return ElementStyles.style;
+    if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
+    if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;
+    if (std.mem.eql(u8, element_name, "h6")) return ElementStyles.h6;
+    if (std.mem.eql(u8, element_name, "span")) return ElementStyles.span;
+    if (std.mem.eql(u8, element_name, "img")) return ElementStyles.img;
+    if (std.mem.eql(u8, element_name, "br")) return ElementStyles.br;
+    if (std.mem.eql(u8, element_name, "hr")) return ElementStyles.hr;
+    if (std.mem.eql(u8, element_name, "form")) return ElementStyles.form;
+    if (std.mem.eql(u8, element_name, "input")) return ElementStyles.input;
+    if (std.mem.eql(u8, element_name, "textarea")) return ElementStyles.textarea;
+    if (std.mem.eql(u8, element_name, "button")) return ElementStyles.button;
+    if (std.mem.eql(u8, element_name, "select")) return ElementStyles.select;
+    if (std.mem.eql(u8, element_name, "option")) return ElementStyles.option;
+    if (std.mem.eql(u8, element_name, "label")) return ElementStyles.label;
+    if (std.mem.eql(u8, element_name, "nav")) return ElementStyles.nav;
+    if (std.mem.eql(u8, element_name, "header")) return ElementStyles.header;
+    if (std.mem.eql(u8, element_name, "footer")) return ElementStyles.footer;
+    if (std.mem.eql(u8, element_name, "main")) return ElementStyles.main;
+    if (std.mem.eql(u8, element_name, "section")) return ElementStyles.section;
+    if (std.mem.eql(u8, element_name, "article")) return ElementStyles.article;
     if (std.mem.eql(u8, element_name, "h3")) return ElementStyles.h3;
     if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
     if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;

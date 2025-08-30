@@ -641,7 +641,10 @@ pub fn roundTripConversion(allocator: std.mem.Allocator, html: []const u8) ![]u8
 pub fn walkTree(node: *z.DomNode, depth: u8) void {
     var child = z.firstChild(node);
     while (child != null) {
-        const name = z.nodeName_zc(child.?);
+        const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
+
+        const ansi_colour = z.getStyleForElement(name) orelse z.Style.DIM_WHITE;
+        const ansi_reset = z.Style.RESET;
         const indent = switch (@min(depth, 10)) {
             0 => "",
             1 => "  ",
@@ -651,7 +654,7 @@ pub fn walkTree(node: *z.DomNode, depth: u8) void {
             5 => "          ",
             else => "            ", // For deeper levels
         };
-        print("{s}{s}\n", .{ indent, name });
+        print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
 
         walkTree(child.?, depth + 1);
         child = z.nextSibling(child.?);
@@ -660,7 +663,7 @@ pub fn walkTree(node: *z.DomNode, depth: u8) void {
 
 /// [tree] Debug: print document structure (for debugging)
 pub fn printDocStruct(doc: *z.HTMLDocument) !void {
-    const root = try z.bodyNode(doc);
+    const root = z.documentRoot(doc).?;
     walkTree(root, 0);
 }
 
@@ -1062,7 +1065,8 @@ test "exact target format" {
 
 test "complex HTML structure" {
     const html =
-        \\<!-- Top comment --><html><head>
+        \\<!-- Top comment is ignored-->
+        \\<html><head>
         \\     <meta charset="UTF-8"/>
         \\    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
         \\    <title>Page</title>
@@ -1106,14 +1110,16 @@ test "complex HTML structure" {
     defer freeHtmlNode(allocator, full_tree);
 
     const body_node = try z.bodyNode(doc);
+    // try z.printDocStruct(doc);
     try z.cleanDomTree(
         allocator,
-        body_node,
+        z.documentRoot(doc).?,
         .{
             .remove_empty_elements = true,
             .remove_comments = true,
         },
     );
+    try z.printDocStruct(doc);
     const txt = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
     defer allocator.free(txt);
 
