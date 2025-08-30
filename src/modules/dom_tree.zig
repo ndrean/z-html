@@ -652,7 +652,7 @@ pub fn walkTree(node: *z.DomNode, depth: u8) void {
             3 => "      ",
             4 => "        ",
             5 => "          ",
-            else => "            ", // For deeper levels
+            else => "            ",
         };
         print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
 
