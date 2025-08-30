@@ -218,7 +218,435 @@ test "HTML to tuple" {
 }
 
 //=============================================================================
-// REVERSE OPERATION: Tree → HTML
+// FAST TUPLE SERIALIZATION
+//=============================================================================
+
+/// [tree] Fast serialize DOM node to tuple string using stack buffers
+/// 
+/// Usage:
+/// ```zig
+/// var buffer: [8192]u8 = undefined; // HTML length * 2 estimate  
+/// const result = try domToTupleString(doc, &buffer);
+/// ```
+pub fn domToTupleString(doc: *z.HTMLDocument, buffer: []u8) ![]const u8 {
+    const root = z.documentRoot(doc).?;
+    
+    // Split buffer: first half for attributes, second half for output
+    const mid = buffer.len / 2;
+    var attr_fba = std.heap.FixedBufferAllocator.init(buffer[0..mid]);
+    var output_stream = std.io.fixedBufferStream(buffer[mid..]);
+    const output_writer = output_stream.writer();
+    
+    try output_writer.writeByte('[');
+    
+    var first = true;
+    var child = z.firstChild(root);
+    while (child != null) {
+        if (!first) try output_writer.writeAll(", ");
+        try serializeNodeFast(attr_fba.allocator(), output_writer, child.?);
+        first = false;
+        child = z.nextSibling(child.?);
+        
+        // Reset the attr allocator for the next node
+        attr_fba.reset();
+    }
+    
+    try output_writer.writeByte(']');
+    return output_stream.getWritten();
+}
+
+/// [tree] Fast serialize single DOM node to tuple string
+pub fn nodeToTupleString(node: *z.DomNode, buffer: []u8) ![]const u8 {
+    // Split buffer: first half for attributes, second half for output
+    const mid = buffer.len / 2;
+    var attr_fba = std.heap.FixedBufferAllocator.init(buffer[0..mid]);
+    var output_stream = std.io.fixedBufferStream(buffer[mid..]);
+    const output_writer = output_stream.writer();
+    
+    try serializeNodeFast(attr_fba.allocator(), output_writer, node);
+    return output_stream.getWritten();
+}
+
+/// Internal fast serialization using zero-copy lexbor strings
+fn serializeNodeFast(attr_allocator: std.mem.Allocator, output_writer: anytype, node: *z.DomNode) !void {
+    const node_type = z.nodeType(node);
+    
+    switch (node_type) {
+        .element => {
+            const element = z.nodeToElement(node).?;
+            
+            // Get tag name (zero-copy)
+            const tag_name = z.nodeName_zc(node);
+            
+            try output_writer.writeAll("{\"");
+            try output_writer.writeAll(tag_name);
+            try output_writer.writeAll("\", [");
+            
+            // Serialize attributes using getAttributes_bf for stack optimization
+            const attrs = try z.getAttributes_bf(attr_allocator, element);
+            defer {
+                for (attrs) |attr| {
+                    attr_allocator.free(attr.name);
+                    attr_allocator.free(attr.value);
+                }
+                attr_allocator.free(attrs);
+            }
+            
+            for (attrs, 0..) |attr, i| {
+                if (i > 0) try output_writer.writeAll(", ");
+                try output_writer.writeAll("{\"");
+                try output_writer.writeAll(attr.name);
+                try output_writer.writeAll("\", \"");
+                try output_writer.writeAll(attr.value);
+                try output_writer.writeAll("\"}");
+            }
+            
+            try output_writer.writeAll("], [");
+            
+            // Serialize children
+            var first = true;
+            var child = z.firstChild(node);
+            while (child != null) {
+                if (!first) try output_writer.writeAll(", ");
+                try serializeNodeFast(attr_allocator, output_writer, child.?);
+                first = false;
+                child = z.nextSibling(child.?);
+            }
+            
+            try output_writer.writeAll("]}");
+        },
+        
+        .text => {
+            // Get text content (zero-copy)
+            const text_content = z.textContent_zc(node);
+            try output_writer.writeByte('"');
+            try writeEscapedString(output_writer, text_content);
+            try output_writer.writeByte('"');
+        },
+        
+        .comment => {
+            const comment_content = z.textContent_zc(node);
+            try output_writer.writeAll("{\"comment\", \"");
+            try writeEscapedString(output_writer, comment_content);
+            try output_writer.writeAll("\"}");
+        },
+        
+        else => {
+            // Skip other node types - serialize as empty text
+            try output_writer.writeAll("\"\"");
+        }
+    }
+}
+
+/// Write string with JSON escaping
+fn writeEscapedString(json_writer: anytype, text: []const u8) !void {
+    for (text) |ch| {
+        switch (ch) {
+            '"' => try json_writer.writeAll("\\\""),
+            '\\' => try json_writer.writeAll("\\\\"),
+            '\n' => try json_writer.writeAll("\\n"),
+            '\r' => try json_writer.writeAll("\\r"),
+            '\t' => try json_writer.writeAll("\\t"),
+            else => try json_writer.writeByte(ch),
+        }
+    }
+}
+
+test "fast tuple serialization" {
+    const html = "<html><body id=\"main\" class=\"container\">Hello world<!-- Comment --><div><button phx-click=\"increment\">{@counter}</button></div></body></html>";
+    
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    
+    // Single buffer - automatically split in half
+    var buffer: [8192]u8 = undefined;
+    const result = try domToTupleString(doc, &buffer);
+    
+    print("\nFast serialization result:\n{s}\n", .{result});
+    
+    // Should contain the expected elements
+    try testing.expect(std.mem.indexOf(u8, result, "\"BODY\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"id\", \"main\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"container\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"comment\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Hello world") != null);
+}
+
+test "single node tuple serialization" {
+    const html = "<div class=\"test\">Hello <strong>world</strong>!</div>";
+    
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    
+    const body_node = try z.bodyNode(doc);
+    const div_node = z.firstChild(body_node).?;
+    
+    var buffer: [2048]u8 = undefined;
+    const result = try nodeToTupleString(div_node, &buffer);
+    
+    print("\nSingle node result:\n{s}\n", .{result});
+    
+    try testing.expect(std.mem.indexOf(u8, result, "\"DIV\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"test\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "\"STRONG\"") != null);
+}
+
+//=============================================================================
+// REVERSE OPERATION: Tuple String → HTML
+//=============================================================================
+
+/// [tree] Convert tuple string back to HTML using FixedBufferAllocator
+/// 
+/// Usage:
+/// ```zig
+/// const tuple_str = "[{\"DIV\", [{\"class\", \"test\"}], [\"Hello\"]}]";
+/// var buffer: [4096]u8 = undefined;
+/// const html = try tupleStringToHtml(tuple_str, &buffer);
+/// // Result: "<div class=\"test\">Hello</div>"
+/// ```
+pub fn tupleStringToHtml(tuple_str: []const u8, buffer: []u8) ![]const u8 {
+    var output_stream = std.io.fixedBufferStream(buffer);
+    const output_writer = output_stream.writer();
+    
+    // Parse the tuple string and convert to HTML
+    var parser = TupleParser.init(tuple_str);
+    try parser.parseToHtml(output_writer);
+    
+    return output_stream.getWritten();
+}
+
+/// Simple tuple string parser
+const TupleParser = struct {
+    input: []const u8,
+    pos: usize,
+    
+    fn init(input: []const u8) TupleParser {
+        return TupleParser{ .input = input, .pos = 0 };
+    }
+    
+    fn peek(self: *TupleParser) ?u8 {
+        if (self.pos >= self.input.len) return null;
+        return self.input[self.pos];
+    }
+    
+    fn advance(self: *TupleParser) ?u8 {
+        if (self.pos >= self.input.len) return null;
+        const ch = self.input[self.pos];
+        self.pos += 1;
+        return ch;
+    }
+    
+    fn skipWhitespace(self: *TupleParser) void {
+        while (self.pos < self.input.len and std.ascii.isWhitespace(self.input[self.pos])) {
+            self.pos += 1;
+        }
+    }
+    
+    fn parseString(self: *TupleParser) ![]const u8 {
+        self.skipWhitespace();
+        
+        if (self.advance() != '"') return error.ExpectedQuote;
+        
+        const start = self.pos;
+        while (self.pos < self.input.len and self.input[self.pos] != '"') {
+            if (self.input[self.pos] == '\\') self.pos += 1; // Skip escaped char
+            self.pos += 1;
+        }
+        
+        if (self.pos >= self.input.len) return error.UnterminatedString;
+        const end = self.pos;
+        self.pos += 1; // Skip closing quote
+        
+        return self.input[start..end];
+    }
+    
+    fn expectChar(self: *TupleParser, expected: u8) !void {
+        self.skipWhitespace();
+        if (self.advance() != expected) {
+            return error.UnexpectedChar;
+        }
+    }
+    
+    fn parseToHtml(self: *TupleParser, html_writer: anytype) !void {
+        self.skipWhitespace();
+        
+        // Handle array of nodes
+        if (self.peek() == '[') {
+            _ = self.advance(); // Skip '['
+            
+            var first = true;
+            while (self.peek() != ']') {
+                if (!first) {
+                    try self.expectChar(',');
+                }
+                try self.parseNodeToHtml(html_writer);
+                first = false;
+                self.skipWhitespace();
+            }
+            _ = self.advance(); // Skip ']'
+        } else {
+            try self.parseNodeToHtml(html_writer);
+        }
+    }
+    
+    fn parseNodeToHtml(self: *TupleParser, html_writer: anytype) !void {
+        self.skipWhitespace();
+        
+        if (self.peek() == '"') {
+            // Text node - just a quoted string
+            const text = try self.parseString();
+            try html_writer.writeAll(text);
+        } else if (self.peek() == '{') {
+            _ = self.advance(); // Skip '{'
+            self.skipWhitespace();
+            
+            // Parse first element (tag name or "comment")
+            const first_elem = try self.parseString();
+            
+            if (std.mem.eql(u8, first_elem, "comment")) {
+                // Comment node: {"comment", "text"}
+                try self.expectChar(',');
+                const comment_text = try self.parseString();
+                try html_writer.writeAll("<!--");
+                try html_writer.writeAll(comment_text);
+                try html_writer.writeAll("-->");
+                try self.expectChar('}');
+            } else {
+                // Element node: {"TAG", [attrs], [children]}
+                const tag_name = first_elem;
+                
+                try self.expectChar(',');
+                
+                // Parse attributes array
+                try self.expectChar('[');
+                try html_writer.writeByte('<');
+                try html_writer.writeAll(tag_name);
+                
+                // Parse each attribute
+                var first_attr = true;
+                self.skipWhitespace();
+                while (self.peek() != ']') {
+                    if (!first_attr) {
+                        try self.expectChar(',');
+                    }
+                    
+                    // Parse attribute: {"name", "value"}
+                    try self.expectChar('{');
+                    const attr_name = try self.parseString();
+                    try self.expectChar(',');
+                    const attr_value = try self.parseString();
+                    try self.expectChar('}');
+                    
+                    try html_writer.writeByte(' ');
+                    try html_writer.writeAll(attr_name);
+                    try html_writer.writeAll("=\"");
+                    try html_writer.writeAll(attr_value);
+                    try html_writer.writeByte('"');
+                    
+                    first_attr = false;
+                    self.skipWhitespace();
+                }
+                _ = self.advance(); // Skip ']'
+                
+                try self.expectChar(',');
+                
+                // Parse children array
+                try self.expectChar('[');
+                try html_writer.writeByte('>');
+                
+                var first_child = true;
+                self.skipWhitespace();
+                while (self.peek() != ']') {
+                    if (!first_child) {
+                        try self.expectChar(',');
+                    }
+                    try self.parseNodeToHtml(html_writer);
+                    first_child = false;
+                    self.skipWhitespace();
+                }
+                _ = self.advance(); // Skip ']'
+                
+                // Close tag
+                try html_writer.writeAll("</");
+                try html_writer.writeAll(tag_name);
+                try html_writer.writeByte('>');
+                
+                try self.expectChar('}');
+            }
+        } else {
+            return error.UnexpectedChar;
+        }
+    }
+};
+
+test "tuple string to HTML conversion" {
+    // Simple element
+    const tuple1 = "{\"DIV\", [{\"class\", \"test\"}], [\"Hello World\"]}";
+    var buffer1: [256]u8 = undefined;
+    const html1 = try tupleStringToHtml(tuple1, &buffer1);
+    
+    print("\nTuple to HTML test 1:\n", .{});
+    print("Input:  {s}\n", .{tuple1});
+    print("Output: {s}\n", .{html1});
+    
+    try testing.expectEqualStrings("<DIV class=\"test\">Hello World</DIV>", html1);
+    
+    // Nested elements
+    const tuple2 = "[{\"DIV\", [], [\"Hello \", {\"STRONG\", [], [\"world\"]}, \"!\"]}]";
+    var buffer2: [512]u8 = undefined;
+    const html2 = try tupleStringToHtml(tuple2, &buffer2);
+    
+    print("\nTuple to HTML test 2:\n", .{});
+    print("Input:  {s}\n", .{tuple2});
+    print("Output: {s}\n", .{html2});
+    
+    try testing.expectEqualStrings("<DIV>Hello <STRONG>world</STRONG>!</DIV>", html2);
+    
+    // With comment
+    const tuple3 = "[{\"P\", [], [\"Text\"]}, {\"comment\", \" A comment \"}]";
+    var buffer3: [512]u8 = undefined;
+    const html3 = try tupleStringToHtml(tuple3, &buffer3);
+    
+    print("\nTuple to HTML test 3:\n", .{});
+    print("Input:  {s}\n", .{tuple3});
+    print("Output: {s}\n", .{html3});
+    
+    try testing.expectEqualStrings("<P>Text</P><!-- A comment -->", html3);
+}
+
+test "round-trip: HTML → Tuple → HTML" {
+    const original_html = "<div class=\"container\"><p>Hello <em>world</em>!</p><!-- comment --></div>";
+    
+    // Parse to DOM
+    const doc = try z.parseFromString(original_html);
+    defer z.destroyDocument(doc);
+    
+    const body_node = try z.bodyNode(doc);
+    const div_node = z.firstChild(body_node).?;
+    
+    // Convert to tuple string
+    var buffer1: [2048]u8 = undefined;
+    const tuple_str = try nodeToTupleString(div_node, &buffer1);
+    
+    print("\nRound-trip test:\n", .{});
+    print("Original: {s}\n", .{original_html});
+    print("Tuple:    {s}\n", .{tuple_str});
+    
+    // Convert back to HTML
+    var buffer2: [1024]u8 = undefined;
+    const reconstructed_html = try tupleStringToHtml(tuple_str, &buffer2);
+    
+    print("Result:   {s}\n", .{reconstructed_html});
+    
+    // Should contain the same content (tags might be uppercase)
+    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "class=\"container\"") != null);
+    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "Hello") != null);
+    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "world") != null);
+    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "comment") != null);
+}
+
+//=============================================================================
+// REVERSE OPERATION: Tree → HTML  
 //=============================================================================
 
 // /// [tree] Convert TupleNode back to HTML string
