@@ -86,19 +86,56 @@ pub const NormalizeOptions = struct {
 
 const TextMerge = struct {
     target_node: *z.DomNode,
+    new_content: []u8,
+};
+
+// Optimized version that avoids dupe() operations
+const TextMergeOptimized = struct {
+    target_node: *z.DomNode,
     original_content: []const u8, // Zero-copy reference to original text
     trim_start: usize,
     trim_end: usize,
 };
 
 // Context for the callback normalization walk
-const Context = struct {
+const Context =
+    struct {
+        allocator: std.mem.Allocator,
+        options: NormalizeOptions,
+
+        // post-walk cleanup
+        nodes_to_remove: std.ArrayList(*z.DomNode),
+        text_merges: std.ArrayList(TextMerge),
+        template_nodes: std.ArrayList(*z.DomNode),
+
+        fn init(alloc: std.mem.Allocator, opts: NormalizeOptions) @This() {
+            return .{
+                .allocator = alloc,
+                .options = opts,
+                .nodes_to_remove = .empty,
+                .text_merges = .empty,
+                .template_nodes = .empty,
+            };
+        }
+
+        fn deinit(self: *@This()) void {
+            for (self.text_merges.items) |merge| {
+                self.allocator.free(merge.new_content);
+            }
+            self.text_merges.deinit(self.allocator);
+            self.nodes_to_remove.deinit(self.allocator);
+            self.template_nodes.deinit(self.allocator);
+        }
+    };
+
+// Optimized context that avoids dupe() operations
+const ContextOptimized = struct {
     allocator: std.mem.Allocator,
     options: NormalizeOptions,
 
     // post-walk cleanup - no manual string cleanup needed!
     nodes_to_remove: std.ArrayList(*z.DomNode),
-    text_merges: std.ArrayList(TextMerge),
+    text_merges_optimized: std.ArrayList(TextMergeOptimized),
     template_nodes: std.ArrayList(*z.DomNode),
 
     fn init(alloc: std.mem.Allocator, opts: NormalizeOptions) @This() {
@@ -106,14 +143,14 @@ const Context = struct {
             .allocator = alloc,
             .options = opts,
             .nodes_to_remove = .empty,
-            .text_merges = .empty,
+            .text_merges_optimized = .empty,
             .template_nodes = .empty,
         };
     }
 
     fn deinit(self: *@This()) void {
         // No string cleanup needed - we're using zero-copy slices!
-        self.text_merges.deinit(self.allocator);
+        self.text_merges_optimized.deinit(self.allocator);
         self.nodes_to_remove.deinit(self.allocator);
         self.template_nodes.deinit(self.allocator);
     }
@@ -196,6 +233,76 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             }
 
             if (context_ptr.options.trim_text or context_ptr.options.remove_whitespace_text_nodes) {
+                const text_content = z.textContent_zc(node);
+                const trimmed = std.mem.trim(
+                    u8,
+                    text_content,
+                    &std.ascii.whitespace,
+                );
+
+                if (context_ptr.options.remove_whitespace_text_nodes) {
+                    if (trimmed.len == 0) {
+                        // collect for post-processing
+                        context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                            return z._STOP;
+                        };
+                    }
+                }
+
+                if (std.mem.eql(u8, text_content, trimmed)) return z._CONTINUE;
+
+                if (context_ptr.options.trim_text and trimmed.len > 0) {
+                    const trimmed_copy = context_ptr.allocator.dupe(u8, trimmed) catch {
+                        return z._STOP;
+                    };
+                    // collect for post-processing
+                    context_ptr.text_merges.append(
+                        context_ptr.allocator,
+                        .{
+                            .target_node = node,
+                            .new_content = trimmed_copy,
+                        },
+                    ) catch {
+                        return z._STOP;
+                    };
+                }
+            }
+        },
+
+        else => {},
+    }
+
+    return z._CONTINUE;
+}
+
+// Optimized collector - uses slice references instead of dupe()
+fn collectorCallBackOptimized(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
+    const context_ptr: *ContextOptimized = castContext(ContextOptimized, ctx);
+
+    switch (z.nodeType(node)) {
+        .comment => {
+            if (context_ptr.options.skip_comments) {
+                // collect comments for post-processing
+                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
+                };
+            }
+        },
+        .element => {
+            if (z.isTemplate(node)) {
+                // Collect template nodes for post-processing
+                context_ptr.template_nodes.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
+                };
+                return z._CONTINUE;
+            }
+        },
+        .text => {
+            if (context_ptr.shouldPreserveWhitespace(node)) {
+                return z._CONTINUE;
+            }
+
+            if (context_ptr.options.trim_text or context_ptr.options.remove_whitespace_text_nodes) {
                 const original_content = z.textContent_zc(node);
 
                 // Calculate trim indices without creating new strings
@@ -224,14 +331,14 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
                 // Only collect if trimming is needed
                 if (trim_start > 0 or trim_end > 0) {
                     if (context_ptr.options.trim_text) {
-                        const merge = TextMerge{
+                        const merge = TextMergeOptimized{
                             .target_node = node,
                             .original_content = original_content,
                             .trim_start = trim_start,
                             .trim_end = trim_end,
                         };
 
-                        context_ptr.text_merges.append(context_ptr.allocator, merge) catch {
+                        context_ptr.text_merges_optimized.append(context_ptr.allocator, merge) catch {
                             return z._STOP;
                         };
                     }
@@ -245,13 +352,14 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     return z._CONTINUE;
 }
 
-fn PostWalkOperations(
+// Optimized operations - apply trim operations using slice indices
+fn PostWalkOperationsOptimized(
     allocator: std.mem.Allocator,
-    context: *Context,
+    context: *ContextOptimized,
     options: NormalizeOptions,
 ) (std.mem.Allocator.Error || z.Err)!void {
     // trim text nodes using zero-copy slices
-    for (context.text_merges.items) |merge| {
+    for (context.text_merges_optimized.items) |merge| {
         const content = merge.original_content;
         const trimmed_len = content.len - merge.trim_start - merge.trim_end;
 
@@ -272,6 +380,86 @@ fn PostWalkOperations(
                 .{},
             );
         }
+    }
+
+    // Remove empty text nodes and comments if selected
+    for (context.nodes_to_remove.items) |node| {
+        z.removeNode(node);
+        z.destroyNode(node);
+    }
+
+    // Process template content with its own "simple_walk" on the document fragment content
+    for (context.template_nodes.items) |template_node| {
+        try normalizeTemplateContentOptimized(
+            allocator,
+            template_node,
+            options,
+        );
+    }
+}
+
+// Optimized version for template normalization
+pub fn normalizeWithOptionsOptimized(
+    allocator: std.mem.Allocator,
+    root_elt: *z.HTMLElement,
+    options: NormalizeOptions,
+) (std.mem.Allocator.Error || z.Err)!void {
+    var context = ContextOptimized.init(allocator, options);
+    defer context.deinit();
+
+    lxb_dom_node_simple_walk(
+        z.elementToNode(root_elt),
+        collectorCallBackOptimized,
+        &context,
+    );
+
+    try PostWalkOperationsOptimized(
+        allocator,
+        &context,
+        options,
+    );
+}
+
+/// simple_walk in the template _content_ (#document-fragment) - optimized version
+fn normalizeTemplateContentOptimized(
+    allocator: std.mem.Allocator,
+    template_node: *z.DomNode,
+    options: NormalizeOptions,
+) (std.mem.Allocator.Error || z.Err)!void {
+    const template = z.nodeToTemplate(template_node) orelse return;
+
+    const content = z.templateContent(template);
+    const content_node = z.fragmentToNode(content);
+
+    var template_context = ContextOptimized.init(allocator, options);
+    defer template_context.deinit();
+
+    lxb_dom_node_simple_walk(
+        content_node,
+        collectorCallBackOptimized,
+        &template_context,
+    );
+
+    try PostWalkOperationsOptimized(
+        allocator,
+        &template_context,
+        options,
+    );
+}
+
+fn PostWalkOperations(
+    allocator: std.mem.Allocator,
+    context: *Context,
+    options: NormalizeOptions,
+) (std.mem.Allocator.Error || z.Err)!void {
+    // trim text nodes
+    for (context.text_merges.items) |merge| {
+        try z.replaceText(
+            allocator,
+            merge.target_node,
+            merge.new_content,
+            .{},
+        );
     }
 
     // Remove empty text nodes and comments if selected
@@ -444,9 +632,6 @@ test "template normalize" {
         const child_nodes_after = try z.childNodes(allocator, template_content_node_after);
         defer allocator.free(child_nodes_after);
         try testing.expect(child_nodes_after.len == 3);
-        try z.printDocStruct(doc); // only sees the template element
-        // try z.prettyPrint(root); // sees everything
-        // try z.printDocStruct(doc); // only sees the template element
     }
 }
 
@@ -547,7 +732,7 @@ test "normalize performance benchmark" {
 
     var timer = try std.time.Timer.start();
 
-    // Test optimized normalize approach
+    // Test current approach with buffer collections
     timer.reset();
     for (0..iterations) |_| {
         const doc = try z.parseFromString(large_html);
@@ -564,17 +749,49 @@ test "normalize performance benchmark" {
             },
         );
     }
-    const normalize_time = timer.read();
+    const current_time = timer.read();
+
+    // Test optimized approach with zero-copy slices
+    timer.reset();
+    for (0..iterations) |_| {
+        const doc = try z.parseFromString(large_html);
+        defer z.destroyDocument(doc);
+
+        const body_elt = try z.bodyElement(doc);
+        try normalizeWithOptionsOptimized(
+            allocator,
+            body_elt,
+            .{
+                .trim_text = true,
+                .remove_whitespace_text_nodes = true,
+                .skip_comments = true,
+            },
+        );
+    }
+    const optimized_time = timer.read();
 
     const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
-    const normalize_ms = @as(f64, @floatFromInt(normalize_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
+    const current_ms = @as(f64, @floatFromInt(current_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
+    const optimized_ms = @as(f64, @floatFromInt(optimized_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
 
     print("\n--- Results ---\n", .{});
-    print("Normalize (zero-copy): {d:.3} ms/op\n", .{normalize_ms});
+    print("Current approach (dupe): {d:.3} ms/op\n", .{current_ms});
+    print("Optimized approach (zero-copy): {d:.3} ms/op\n", .{optimized_ms});
+
+    if (optimized_ms < current_ms) {
+        const improvement = current_ms / optimized_ms;
+        print("🚀 Optimized is {d:.2}x faster!\n", .{improvement});
+    } else if (current_ms < optimized_ms) {
+        const slower = optimized_ms / current_ms;
+        print("⚠️  Optimized is {d:.2}x slower\n", .{slower});
+    } else {
+        print("📊 Performance is equivalent\n", .{});
+    }
 
     // BEAM Scheduler compliance check
     print("\n--- BEAM Scheduler Compliance ---\n", .{});
-    print("Normalize: {s} (limit: 1ms)\n", .{if (normalize_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+    print("Current: {s} (limit: 1ms)\n", .{if (current_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+    print("Optimized: {s} (limit: 1ms)\n", .{if (optimized_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
 
     print("\n✅ Normalize benchmark completed!\n", .{});
 }

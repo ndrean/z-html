@@ -255,7 +255,6 @@ pub fn domToTupleString(allocator: std.mem.Allocator, doc: *z.HTMLDocument) ![]u
     return allocator.dupe(u8, result.items);
 }
 
-
 /// [tree] Serialize single DOM node to tuple string
 pub fn nodeToTupleString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     // Use arena allocator for all intermediate allocations
@@ -364,7 +363,6 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
         },
     }
 }
-
 
 test "fast tuple serialization" {
     const html = "<html><body id=\"main\" class=\"container\">Hello world<!-- Comment --><div><button phx-click=\"increment\">{@counter}</button></div></body></html>";
