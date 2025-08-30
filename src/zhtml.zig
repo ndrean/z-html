@@ -7,7 +7,6 @@ const chunks = @import("modules/chunks.zig");
 const fragments = @import("modules/fragments.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
-const traverse = @import("modules/traverse.zig");
 const tree = @import("modules/dom_tree.zig");
 const collection = @import("modules/collection.zig");
 const serialize = @import("modules/serializer.zig");
@@ -280,17 +279,23 @@ pub const useTemplate = template.useTemplate;
 //=====================================
 // DOM Tree representation utilities
 //=====================================
-pub const DomTreeNode = tree.HtmlNode;
-pub const DomTreeArray = tree.HtmlTree;
+pub const TupleNode = tree.TupleNode;
+pub const nodeTuple = tree.nodeTuple;
+pub const toTuple = tree.toTuple;
+pub const freeTupleTree = tree.freeTupleTree;
+pub const freeTupleNode = tree.freeTupleNode;
+
+// pub const DomTreeNode = tree.HtmlNode;
+// pub const DomTreeArray = tree.HtmlTree;
 // pub const JsonTreeNode = tree.JsonNode;
 // pub const JsonTreeArray = tree.JsonTree;
 // pub const JsonAttribute = tree.JsonAttribute;
 
 // conversion functions
-pub const freeHtmlTree = tree.freeHtmlTree;
+// pub const freeHtmlTree = tree.freeHtmlTree;
 // pub const freeJsonTree = tree.freeJsonTree;
 // pub const documentToJsonTree = tree.documentToJsonTree;
-pub const documentToTupleTree = tree.documentToTupleTree;
+// pub const documentToTupleTree = tree.documentToTupleTree;
 
 pub const printNode = tree.printNode;
 // pub const jsonNodeToString = tree.jsonNodeToString;
@@ -298,10 +303,10 @@ pub const printNode = tree.printNode;
 // pub const parseJsonString = tree.parseJsonString;
 // pub const parseJsonTreeString = tree.parseJsonTreeString;
 
-pub const nodeToHtml = tree.nodeToHtml;
-pub const treeToHtml = tree.treeToHtml;
-pub const freeDomTreeArray = tree.freeHtmlTree;
-pub const freeDomTreeNode = tree.freeHtmlNode;
+// pub const nodeToHtml = tree.nodeToHtml;
+// pub const treeToHtml = tree.treeToHtml;
+// pub const freeDomTreeArray = tree.freeHtmlTree;
+// pub const freeDomTreeNode = tree.freeHtmlNode;
 
 //=====================================
 // Sanitation / Serialization / Inner / outer HTML manipulation

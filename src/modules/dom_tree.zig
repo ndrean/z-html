@@ -12,6 +12,40 @@ const print = std.debug.print;
 const testing = std.testing;
 const writer = std.io.getStdOut().writer();
 
+// Structure ====================================================================
+
+/// [tree] Debug: Walk and print DOM tree
+pub fn walkTree(node: *z.DomNode, depth: u8) void {
+    var child = z.firstChild(node);
+    while (child != null) {
+        const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
+
+        const ansi_colour = z.getStyleForElement(name) orelse z.Style.DIM_WHITE;
+        const ansi_reset = z.Style.RESET;
+        const indent = switch (@min(depth, 10)) {
+            0 => "",
+            1 => "  ",
+            2 => "    ",
+            3 => "      ",
+            4 => "        ",
+            5 => "          ",
+            else => "            ",
+        };
+        print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
+
+        walkTree(child.?, depth + 1);
+        child = z.nextSibling(child.?);
+    }
+}
+
+/// [tree] Debug: print document structure (for debugging)
+pub fn printDocStruct(doc: *z.HTMLDocument) !void {
+    const root = z.documentRoot(doc).?;
+    walkTree(root, 0);
+}
+
+// Tuple Tree ===================================================================
+
 /// Represents different types of HTML nodes as tuples
 ///
 /// - Elements are in the form `{tag_name, attributes, children}`
@@ -19,12 +53,12 @@ const writer = std.io.getStdOut().writer();
 /// - Text nodes such are in the form `{text_content}`
 ///
 /// - Comment nodes are in the form `{"comment", text_content}`
-pub const HtmlNode = union(enum) {
+pub const TupleNode = union(enum) {
     /// Element: {tag_name, attributes, children}
     element: struct {
         tag: []const u8,
         attributes: []z.AttributePair,
-        children: []HtmlNode,
+        children: []TupleNode,
     },
     /// Text content: "text content"
     text: []const u8,
@@ -32,7 +66,256 @@ pub const HtmlNode = union(enum) {
     comment: []const u8,
 };
 
-// /// Attribute for JSON DOM representation
+/// [tree] Convert DOM to []TupleNode
+pub fn nodeTuple(allocator: std.mem.Allocator, node: *z.DomNode) !TupleNode {
+    const node_type = z.nodeType(node);
+
+    switch (node_type) {
+        .element => {
+            const element = z.nodeToElement(node).?;
+            const tag_name = try z.nodeName(allocator, node);
+            const elt_attrs = try z.getAttributes(allocator, element);
+
+            // Convert child nodes recursively
+            var children_list: std.ArrayList(TupleNode) = .empty;
+            defer children_list.deinit(allocator);
+
+            // Traverse child nodes
+
+            var child = z.firstChild(node);
+            while (child != null) {
+                const child_tree = try nodeTuple(allocator, child.?);
+                try children_list.append(allocator, child_tree);
+                child = z.nextSibling(child.?);
+            }
+
+            return TupleNode{
+                .element = .{
+                    .tag = tag_name,
+                    .attributes = elt_attrs,
+                    .children = try children_list.toOwnedSlice(allocator),
+                },
+            };
+        },
+
+        .text => {
+            const text_content = try z.textContent(
+                allocator,
+                node,
+            );
+            return TupleNode{ .text = text_content };
+        },
+
+        .comment => {
+            const comment: *z.Comment = @ptrCast(node);
+            const comment_content = try z.commentContent(allocator, comment);
+            return TupleNode{ .comment = comment_content };
+        },
+
+        else => {
+            // Skip other node types (return empty text)
+            return TupleNode{ .text = try allocator.dupe(u8, "") };
+        },
+    }
+}
+
+/// [tree] Free memory allocated for HtmlTree
+pub fn freeTupleTree(allocator: std.mem.Allocator, tree: []TupleNode) void {
+    for (tree) |node| {
+        freeTupleNode(allocator, node);
+    }
+    allocator.free(tree);
+}
+
+// Free memory allocated for a single TupleNode
+pub fn freeTupleNode(allocator: std.mem.Allocator, node: TupleNode) void {
+    switch (node) {
+        .element => |elem| {
+            allocator.free(elem.tag);
+
+            // Free attributes
+            for (elem.attributes) |attr| {
+                allocator.free(attr.name);
+                allocator.free(attr.value);
+            }
+            allocator.free(elem.attributes);
+
+            // Free children recursively
+            for (elem.children) |child| {
+                freeTupleNode(allocator, child);
+            }
+            allocator.free(elem.children);
+        },
+        .text => |text| allocator.free(text),
+        .comment => |comment| allocator.free(comment),
+    }
+}
+
+/// [tree] Convert entire DOM document to tuple tree
+///
+/// Caller must free the returned HtmlTree slice
+pub fn toTuple(allocator: std.mem.Allocator, node: *z.DomNode) ![]TupleNode {
+    // const root = z.documentRoot(doc).?;
+
+    var tree_list: std.ArrayList(TupleNode) = .empty;
+    defer tree_list.deinit(allocator);
+
+    var child = z.firstChild(node);
+    while (child != null) {
+        const child_tree = try nodeTuple(allocator, child.?);
+        try tree_list.append(allocator, child_tree);
+        child = z.nextSibling(child.?);
+    }
+
+    return try tree_list.toOwnedSlice(allocator);
+}
+
+/// Pretty print an TupleNode with proper formatting
+pub fn printNode(node: TupleNode, indent: usize) void {
+    switch (node) {
+        .element => |elem| {
+            print("{{\"{s}\", [", .{elem.tag});
+            for (elem.attributes, 0..) |attr, i| {
+                if (i > 0) print(", ", .{});
+                print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
+            }
+            print("], [", .{});
+            for (elem.children, 0..) |child, i| {
+                if (i > 0) print(", ", .{});
+                printNode(child, indent + 1);
+            }
+            print("]}}", .{});
+        },
+        .text => |text| print("\"{s}\"", .{text}),
+        .comment => |comment| print(
+            "{{\"comment\", \"{s}\"}}",
+            .{comment},
+        ),
+    }
+    if (indent == 0) print("\n", .{});
+}
+
+test "HTML to tuple" {
+    const allocator = testing.allocator;
+
+    const html = "<html><head><title>Page</title></head><body id=\"main\" class=\"container\">Hello world<!-- Link --><div><button phx-click=\"increment\">{@counter}</button></div><!-- Link --><a href=\"https://elixir-lang.org\">Elixir</a></body></html>";
+
+    const doc = try z.parseFromString(html);
+    defer z.destroyDocument(doc);
+    const root = z.documentRoot(doc).?;
+
+    // Get body since HTML element access isn't directly available
+    const tree = try toTuple(allocator, root);
+    defer freeTupleTree(allocator, tree);
+
+    for (tree) |node| {
+        printNode(node, 0);
+
+        // expect to see:
+        // {"HEAD", [], [{"TITLE", [], ["Page"]}]}
+        // {"BODY", [{"id", "main"}, {"class", "container"}], ["Hello world", {"comment", " Link "}, {"DIV", [], [{"BUTTON", [{"phx-click", "increment"}], ["{@counter}"]}]}, {"comment", " Link "}, {"A", [{"href", "https://elixir-lang.org"}], ["Elixir"]}]}
+    }
+}
+
+//=============================================================================
+// REVERSE OPERATION: Tree → HTML
+//=============================================================================
+
+// /// [tree] Convert TupleNode back to HTML string
+// pub fn nodeToHtml(allocator: std.mem.Allocator, node: TupleNode) ![]u8 {
+//     var result: std.ArrayList(u8) = .empty;
+
+//     nodeToHtmlWriter(node);
+//     return try result.toOwnedSlice(allocator);
+// }
+
+// /// [tree] Convert HtmlTree (array of nodes) back to HTML string
+// pub fn treeToHtml(allocator: std.mem.Allocator, tree: []TupleNode) ![]u8 {
+//     var result: std.ArrayList(u8) = .empty;
+
+//     for (tree) |node| {
+//         nodeToHtmlWriter(node);
+//     }
+
+//     return try result.toOwnedSlice(allocator);
+// }
+
+// /// [tree] Internal writer function for converting nodes to HTML
+// fn nodeToHtmlWriter(node: TupleNode) void {
+//     switch (node) {
+//         .element => |elem| {
+//             print("<{s}", .{elem.tag});
+
+//             for (elem.attributes) |attr| {
+//                 print(" {s}=\"{s}\"", .{ attr.name, attr.value });
+//             }
+
+//             print(">", .{});
+
+//             for (elem.children) |child| {
+//                 nodeToHtmlWriter(child);
+//             }
+//         },
+
+//         .text => |text| {
+//             print("{s}", .{text});
+//         },
+
+//         .comment => |comment| {
+//             print("<!--{s}-->", .{comment});
+//         },
+//     }
+// }
+
+// /// [json] Convert DOM node to JSON-friendly format
+// pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
+//     const node_type = z.nodeType(node);
+
+//     switch (node_type) {
+//         .element => {
+//             const element = z.nodeToElement(node).?;
+//             const tag_name = try z.nodeName(allocator, node);
+
+//             // Convert attributes to proper format for JSON
+//             const elt_attrs = try z.getAttributes(allocator, element);
+//             var attributes_list = std.ArrayList(JsonAttribute).init(allocator);
+//             defer attributes_list.deinit();
+
+//             for (elt_attrs) |attr| {
+//                 try attributes_list.append(.{
+//                     .name = try allocator.dupe(u8, attr.name),
+//                     .value = try allocator.dupe(u8, attr.value),
+//                 });
+//             }
+
+//             // Free the original attributes array
+//             for (elt_attrs) |attr| {
+//                 allocator.free(attr.name);
+//                 allocator.free(attr.value);
+//             }
+//             allocator.free(elt_attrs);
+
+//             // Convert child nodes recursively
+//             var children_list = std.ArrayList(JsonNode).init(allocator);
+//             defer children_list.deinit();
+
+//             var child = z.firstChild(node);
+//             while (child != null) {
+//                 const child_json = try domNodeToJson(allocator, child.?);
+//                 try children_list.append(child_json);
+//                 child = z.nextSibling(child.?);
+//             }
+
+//             return JsonNode{
+//                 .element = .{
+//                     .nodeType = 1, // ELEMENT_NODE
+//                     .tagName = tag_name,
+//                     .attributes = try attributes_list.toOwnedSlice(),
+//                     .children = try children_list.toOwnedSlice(),
+//                 },
+//             };
+// }
+
 // pub const JsonAttribute = struct {
 //     name: []const u8,
 //     value: []const u8,
@@ -67,65 +350,8 @@ pub const HtmlNode = union(enum) {
 //     },
 // };
 
-/// Top-level tree (array of nodes)
-pub const HtmlTree = []HtmlNode;
-
 // /// Top-level JSON tree (array of JSON nodes)
 // pub const JsonTree = []JsonNode;
-
-/// [tree] Convert DOM node to HtmlNode recursively
-pub fn dom_toTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
-    const node_type = z.nodeType(node);
-
-    switch (node_type) {
-        .element => {
-            const element = z.nodeToElement(node).?;
-            const tag_name = try z.nodeName(allocator, node);
-            const elt_attrs = try z.getAttributes(allocator, element);
-
-            // Convert child nodes recursively
-            var children_list: std.ArrayList(HtmlNode) = .empty;
-            defer children_list.deinit(allocator);
-
-            // Traverse child nodes
-
-            var child = z.firstChild(node);
-            while (child != null) {
-                const child_tree = try dom_toTree(allocator, child.?);
-                try children_list.append(allocator, child_tree);
-                child = z.nextSibling(child.?);
-            }
-
-            return HtmlNode{
-                .element = .{
-                    .tag = tag_name,
-                    .attributes = elt_attrs,
-                    .children = try children_list.toOwnedSlice(allocator),
-                },
-            };
-        },
-
-        .text => {
-            const text_content = try z.textContent(
-                allocator,
-                node,
-            );
-            return HtmlNode{ .text = text_content };
-        },
-
-        .comment => {
-            const comment: *z.Comment = @ptrCast(node);
-            const comment_content = try z.commentContent(allocator, comment);
-            return HtmlNode{ .comment = comment_content };
-        },
-
-        else => {
-            // Skip other node types (return empty text)
-            return HtmlNode{ .text = try allocator.dupe(u8, "") };
-        },
-    }
-}
-
 // /// [json] Convert DOM node to JSON-friendly format
 // pub fn domNodeToJson(allocator: std.mem.Allocator, node: *z.DomNode) !JsonNode {
 //     const node_type = z.nodeType(node);
@@ -211,38 +437,6 @@ pub fn dom_toTree(allocator: std.mem.Allocator, node: *z.DomNode) !HtmlNode {
 //     }
 // }
 
-/// [tree] Free memory allocated for HtmlTree
-pub fn freeHtmlTree(allocator: std.mem.Allocator, tree: HtmlTree) void {
-    for (tree) |node| {
-        freeHtmlNode(allocator, node);
-    }
-    allocator.free(tree);
-}
-
-// Free memory allocated for a single HtmlNode
-pub fn freeHtmlNode(allocator: std.mem.Allocator, node: HtmlNode) void {
-    switch (node) {
-        .element => |elem| {
-            allocator.free(elem.tag);
-
-            // Free attributes
-            for (elem.attributes) |attr| {
-                allocator.free(attr.name);
-                allocator.free(attr.value);
-            }
-            allocator.free(elem.attributes);
-
-            // Free children recursively
-            for (elem.children) |child| {
-                freeHtmlNode(allocator, child);
-            }
-            allocator.free(elem.children);
-        },
-        .text => |text| allocator.free(text),
-        .comment => |comment| allocator.free(comment),
-    }
-}
-
 // /// [json] Free memory allocated for JsonTree
 // pub fn freeJsonTree(allocator: std.mem.Allocator, tree: JsonTree) void {
 //     for (tree) |node| {
@@ -274,102 +468,6 @@ pub fn freeHtmlNode(allocator: std.mem.Allocator, node: HtmlNode) void {
 //         .comment => |comment_node| allocator.free(comment_node.data),
 //     }
 // }
-
-/// Pretty print an HtmlNode with proper formatting
-pub fn printNode(node: HtmlNode, indent: usize) void {
-    switch (node) {
-        .element => |elem| {
-            print("{{\"{s}\", [", .{elem.tag});
-            for (elem.attributes, 0..) |attr, i| {
-                if (i > 0) print(", ", .{});
-                print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
-            }
-            print("], [", .{});
-            for (elem.children, 0..) |child, i| {
-                if (i > 0) print(", ", .{});
-                printNode(child, indent + 1);
-            }
-            print("]}}", .{});
-        },
-        .text => |text| print(
-            "\"{s}\"",
-            .{text},
-        ),
-        .comment => |comment| print(
-            "{{\"comment\", \"{s}\"}}",
-            .{comment},
-        ),
-    }
-    if (indent == 0) print("\n", .{});
-}
-
-/// [tree] Convert entire DOM document to HtmlTree
-///
-/// Caller must free the returned HtmlTree slice
-pub fn documentToTupleTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !HtmlTree {
-    const body_node = try z.bodyNode(doc);
-
-    var tree_list: std.ArrayList(HtmlNode) = .empty;
-    defer tree_list.deinit(allocator);
-
-    // Simple loop approach - collectChildNodes doesn't handle allocator errors well
-    var child = z.firstChild(body_node);
-    while (child != null) {
-        const child_tree = try dom_toTree(allocator, child.?);
-        try tree_list.append(allocator, child_tree);
-        child = z.nextSibling(child.?);
-    }
-
-    return try tree_list.toOwnedSlice(allocator);
-}
-
-/// [tree] Convert entire document including HTML element (for full document structure)
-pub fn doc_toTupleTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !HtmlNode {
-    const html = z.documentRoot(doc) orelse {
-        // Fallback to body if no HTML element found
-        const body_node = try z.bodyNode(doc);
-        return try dom_toTree(allocator, body_node);
-    };
-
-    return try dom_toTree(allocator, html);
-}
-
-// /// [json] Convert entire DOM document to JsonTree
-// pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonTree {
-//     const body_node = try z.bodyNode(doc);
-
-//     var tree_list = std.ArrayList(JsonNode){ .allocator = allocator };
-//     defer tree_list.deinit();
-
-//     var child = z.firstChild(body_node);
-//     while (child != null) {
-//         const child_json = try domNodeToJson(allocator, child.?);
-//         try tree_list.append(child_json);
-//         child = z.nextSibling(child.?);
-//     }
-
-//     return try tree_list.toOwnedSlice();
-// }
-
-// /// [json] Convert entire document including HTML element to JSON format
-// pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonNode {
-//     // Try to get HTML element if it exists
-//     const html_element = z.bodyElement(doc) catch {
-//         // Fallback to body if no HTML element found
-//         const body_node = try z.bodyNode(doc);
-//         return try domNodeToJson(allocator, body_node);
-//     };
-
-//     // Get parent of body (should be HTML element)
-//     const body_node = z.elementToNode(html_element);
-//     const html_node = z.parentNode(body_node) orelse body_node;
-
-//     return try domNodeToJson(allocator, html_node);
-// }
-
-//=============================================================================
-// JSON SERIALIZATION AND PARSING
-//=============================================================================
 
 // /// [json] Serialize JsonNode to JSON string
 // pub fn jsonNodeToString(allocator: std.mem.Allocator, node: JsonNode) ![]u8 {
@@ -542,150 +640,260 @@ pub fn doc_toTupleTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !Html
 //     }
 // }
 
-//=============================================================================
-// REVERSE OPERATION: Tree → HTML
-//=============================================================================
+// /// [json] Convert entire DOM document to JsonTree
+// pub fn documentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonTree {
+//     const body_node = try z.bodyNode(doc);
 
-/// [tree] Convert HtmlNode back to HTML string
-pub fn nodeToHtml(allocator: std.mem.Allocator, node: HtmlNode) ![]u8 {
-    var result: std.ArrayList(u8) = .empty;
+//     var tree_list = std.ArrayList(JsonNode){ .allocator = allocator };
+//     defer tree_list.deinit();
 
-    nodeToHtmlWriter(node);
-    return try result.toOwnedSlice(allocator);
-}
+//     var child = z.firstChild(body_node);
+//     while (child != null) {
+//         const child_json = try domNodeToJson(allocator, child.?);
+//         try tree_list.append(child_json);
+//         child = z.nextSibling(child.?);
+//     }
 
-/// [tree] Convert HtmlTree (array of nodes) back to HTML string
-pub fn treeToHtml(allocator: std.mem.Allocator, tree: HtmlTree) ![]u8 {
-    var result: std.ArrayList(u8) = .empty;
+//     return try tree_list.toOwnedSlice();
+// }
 
-    for (tree) |node| {
-        nodeToHtmlWriter(node);
-    }
+// /// [json] Convert entire document including HTML element to JSON format
+// pub fn fullDocumentToJsonTree(allocator: std.mem.Allocator, doc: *z.HTMLDocument) !JsonNode {
+//     // Try to get HTML element if it exists
+//     const html_element = z.bodyElement(doc) catch {
+//         // Fallback to body if no HTML element found
+//         const body_node = try z.bodyNode(doc);
+//         return try domNodeToJson(allocator, body_node);
+//     };
 
-    return try result.toOwnedSlice(allocator);
-}
+//     // Get parent of body (should be HTML element)
+//     const body_node = z.elementToNode(html_element);
+//     const html_node = z.parentNode(body_node) orelse body_node;
 
-/// [tree] Internal writer function for converting nodes to HTML
-fn nodeToHtmlWriter(node: HtmlNode) void {
-    switch (node) {
-        .element => |elem| {
-            // Opening tag
-            print("<{s}", .{elem.tag});
+//     return try domNodeToJson(allocator, html_node);
+// }
 
-            // Attributes
-            for (elem.attributes) |attr| {
-                print(" {s}=\"{s}\"", .{ attr.name, attr.value });
-            }
+// /// [tree] Write text with HTML escaping
+// fn writeEscapedText(text: []const u8) void {
+//     for (text) |ch| {
+//         switch (ch) {
+//             '<' => print("&lt;", .{}),
+//             '>' => print("&gt;", .{}),
+//             '&' => print("&amp;", .{}),
+//             '"' => print("&quot;", .{}),
+//             '\'' => print("&#39;", .{}),
+//             else => print("{d}", .{ch}),
+//         }
+//     }
+// }
 
-            // Check if it's a void element - OPTIMIZED: Use enum-based lookup
-            const is_void = z.isVoidName(elem.tag);
+// /// [tree] Round-trip conversion: HTML → Tree → HTML
+// pub fn roundTripConversion(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
+//     // Parse HTML to document
+//     const doc = try z.parseFromString(html);
+//     defer z.destroyDocument(doc);
 
-            if (is_void and elem.children.len == 0) {
-                print(" />", .{});
-            } else {
-                print(">", .{});
+//     // Convert to tree
+//     const tree = try documentToTupleTree(allocator, doc);
+//     defer freeHtmlTree(allocator, tree);
 
-                // Children
-                for (elem.children) |child| {
-                    nodeToHtmlWriter(child);
-                }
+//     // Convert back to HTML
+//     return try treeToHtml(allocator, tree);
+// }
 
-                // Closing tag (skip for void elements)
-                if (!is_void) {
-                    print("</{s}>", .{elem.tag});
-                }
-            }
-        },
+// test "complex HTML structure" {
+//     const html =
+//         \\<!-- Top comment is ignored-->
+//         \\<html><head>
+//         \\     <meta charset="UTF-8"/>
+//         \\    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+//         \\    <title>Page</title>
+//         \\  </head>
+//         \\  <body>
+//         \\   <div id="root" class="layout">
+//         \\      Hello world
+//         \\     <!-- Inner comment -->
+//         \\     <p>
+//         \\       <span data-id="1">Hello</span>
+//         \\       <span data-id="2">world</span>
+//         \\     </p>
+//         \\     <img src="/assets/image.jpeg" alt="image">
+//         \\     <form>
+//         \\       <input class="input" value="" name="name">
+//         \\     </form>
+//         \\     <script>
+//         \\       console.log(1 && 2);
+//         \\     </script>
+//         \\     <style>
+//         \\       .parent > .child {
+//         \\         &:hover {
+//         \\            display: none;
+//         \\         }
+//         \\        }
+//         \\      </style>
+//         \\      &amp; &lt; &gt; &quot; &#39; € 🔥 🐈
+//         \\      <div class="&amp; &lt; &gt; &quot; &#39; € 🔥 🐈"></div>
+//         \\     </div>
+//         \\  </body></html>
+//     ;
 
-        .text => |text| {
-            // Escape HTML special characters in text
-            writeEscapedText(text);
-        },
+//     const allocator = testing.allocator;
+//     const doc = try z.parseFromString(html);
+//     defer z.destroyDocument(doc);
 
-        .comment => |comment| {
-            print("<!--{s}-->", .{comment});
-        },
-    }
-}
+//     const full_tree = try doc_toTuple(
+//         allocator,
+//         doc,
+//     );
+//     defer freeTupleNode(allocator, full_tree);
 
-/// [tree] Write text with HTML escaping
-fn writeEscapedText(text: []const u8) void {
-    for (text) |ch| {
-        switch (ch) {
-            '<' => print("&lt;", .{}),
-            '>' => print("&gt;", .{}),
-            '&' => print("&amp;", .{}),
-            '"' => print("&quot;", .{}),
-            '\'' => print("&#39;", .{}),
-            else => print("{d}", .{ch}),
-        }
-    }
-}
+//     const body_node = try z.bodyNode(doc);
+//     // try z.printDocStruct(doc);
+//     try z.cleanDomTree(
+//         allocator,
+//         z.documentRoot(doc).?,
+//         .{
+//             .remove_empty_elements = true,
+//             .remove_comments = true,
+//         },
+//     );
+//     const txt = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
+//     defer allocator.free(txt);
 
-/// [tree] Round-trip conversion: HTML → Tree → HTML
-pub fn roundTripConversion(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
-    // Parse HTML to document
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
+//     // print("\nActual: ----------\n{s}\n\n", .{html});
+//     // try z.printDocumentStructure(doc);
+//     // print("\n\n Serialized: \n {s}\n\n", .{txt});
+//     // printNode(full_tree, 0);
+// }
+// test "exact target format" {
+//     const allocator = testing.allocator;
 
-    // Convert to tree
-    const tree = try documentToTupleTree(allocator, doc);
-    defer freeHtmlTree(allocator, tree);
+//     const html = "<html><head><title>Page</title></head><body>Hello world<!-- Link --></body></html>";
 
-    // Convert back to HTML
-    return try treeToHtml(allocator, tree);
-}
+//     const doc = try z.parseFromString(html);
+//     defer z.destroyDocument(doc);
 
-// -----------------------------------------------------------------------------
-// [tree] Debug: Walk and print DOM tree
-pub fn walkTree(node: *z.DomNode, depth: u8) void {
-    var child = z.firstChild(node);
-    while (child != null) {
-        const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
+//     // Try to get the full document tree starting from HTML
+//     const full_tree = try doc_toTuple(allocator, doc);
+//     defer freeTupleNode(allocator, full_tree);
 
-        const ansi_colour = z.getStyleForElement(name) orelse z.Style.DIM_WHITE;
-        const ansi_reset = z.Style.RESET;
-        const indent = switch (@min(depth, 10)) {
-            0 => "",
-            1 => "  ",
-            2 => "    ",
-            3 => "      ",
-            4 => "        ",
-            5 => "          ",
-            else => "            ",
-        };
-        print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
+//     // printNode(full_tree, 0);
 
-        walkTree(child.?, depth + 1);
-        child = z.nextSibling(child.?);
-    }
-}
+//     // Verify it's an HTML element with children
+//     switch (full_tree) {
+//         .element => |elem| {
+//             try testing.expectEqualStrings("HTML", elem.tag);
+//             try testing.expect(elem.children.len > 0);
+//         },
+//         else => try testing.expect(false),
+//     }
+// }
 
-/// [tree] Debug: print document structure (for debugging)
-pub fn printDocStruct(doc: *z.HTMLDocument) !void {
-    const root = z.documentRoot(doc).?;
-    walkTree(root, 0);
-}
+// test "reverse operation: tree to HTML" {
+//     const allocator = testing.allocator;
 
-test "DOM tree conversion existing primitives" {
-    const allocator = testing.allocator;
+//     const simple_html = "<div><p>Hello</p><span>World</span></div>";
 
-    const html = "<div></div><!-- Link --><a href=\"https://elixir-lang.org\">Elixir</a>";
+//     const doc = try z.parseFromString(simple_html);
+//     defer z.destroyDocument(doc);
 
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
+//     const tree = try documentToTupleTree(allocator, doc);
+//     defer freeHtmlTree(allocator, tree);
 
-    const tree = try documentToTupleTree(allocator, doc);
-    defer freeHtmlTree(allocator, tree);
+//     const reconstructed = try treeToHtml(allocator, tree);
+//     defer allocator.free(reconstructed);
 
-    // print("Tree structure:\n", .{});
-    // for (tree, 0..) |node, i| {
-    //     print("[{}]: ", .{i});
-    //     printNode(node, 0);
-    // }
+//     try testing.expect(
+//         std.mem.indexOf(u8, reconstructed, "<DIV>") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, reconstructed, "<P>Hello</P>") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, reconstructed, "<SPAN>World</SPAN>") != null,
+//     );
+// }
 
-    try testing.expect(tree.len >= 2);
-}
+// test "round trip conversion" {
+//     const allocator = testing.allocator;
+
+//     const original_html = "<div class=\"test\"><p>Hello &amp; world</p><!-- comment --><br></div>";
+
+//     const result = try roundTripConversion(allocator, original_html);
+//     defer allocator.free(result);
+
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "DIV") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "class=\"test\"") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "Hello &amp; world") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "<!-- comment -->") != null,
+//     );
+// }
+
+// test "void elements handling" {
+//     const allocator = testing.allocator;
+
+//     const html_with_void = "<div><br><img src=\"test.jpg\" alt=\"test\"><p>Text</p></div>";
+
+//     const doc = try z.parseFromString(html_with_void);
+//     defer z.destroyDocument(doc);
+
+//     const tree = try documentToTupleTree(allocator, doc);
+//     defer freeHtmlTree(allocator, tree);
+
+//     const result = try treeToHtml(allocator, tree);
+//     defer allocator.free(result);
+
+//     // Debug: Print the result to see what we're getting
+//     // std.debug.print("DOM tree HTML result: {s}\n", .{result});
+
+//     // Should not have closing tags for void elements (they should be self-closing)
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "<br>") == null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "<img>") == null,
+//     );
+//     // Should have self-closing syntax for void elements
+//     // try testing.expect(
+//     // std.mem.indexOf(u8, result, "<BR />") != null,
+//     // );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "<IMG src=\"test.jpg\" alt=\"test\" >") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "</P>") != null,
+//     ); // P should have closing tag
+// }
+
+// test "HTML escaping in reverse operation" {
+//     const allocator = testing.allocator;
+
+//     const html_with_entities = "<div>&lt;script&gt;alert('test')&lt;/script&gt;</div>";
+
+//     const doc = try z.parseFromString(html_with_entities);
+//     defer z.destroyDocument(doc);
+
+//     const tree = try documentToTupleTree(allocator, doc);
+//     defer freeHtmlTree(allocator, tree);
+
+//     const result = try treeToHtml(allocator, tree);
+//     defer allocator.free(result);
+
+//     // Should properly escape dangerous content
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "&lt;") != null,
+//     );
+//     try testing.expect(
+//         std.mem.indexOf(u8, result, "&gt;") != null,
+//     );
+// }
 
 // test "JSON format conversion" {
 //     const allocator = testing.allocator;
@@ -913,218 +1121,3 @@ test "DOM tree conversion existing primitives" {
 
 //     // print(" Complete usage example finished!\n", .{});
 // }
-
-test "complex HTML structure conversion" {
-    const allocator = testing.allocator;
-
-    const html = "<html><head><title>Page</title></head><body>Hello world<!-- Link --></body></html>";
-
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-
-    // Get body since HTML element access isn't directly available
-    const tree = try documentToTupleTree(allocator, doc);
-    defer freeHtmlTree(allocator, tree);
-
-    // print("Full tree structure:\n", .{});
-    // for (tree, 0..) |node, i| {
-    //     print("[{}]: ", .{i});
-    //     printNode(node, 0);
-    // }
-}
-
-test "exact target format" {
-    const allocator = testing.allocator;
-
-    const html = "<html><head><title>Page</title></head><body>Hello world<!-- Link --></body></html>";
-
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-
-    // Try to get the full document tree starting from HTML
-    const full_tree = try doc_toTupleTree(allocator, doc);
-    defer freeHtmlNode(allocator, full_tree);
-
-    // printNode(full_tree, 0);
-
-    // Verify it's an HTML element with children
-    switch (full_tree) {
-        .element => |elem| {
-            try testing.expectEqualStrings("HTML", elem.tag);
-            try testing.expect(elem.children.len > 0);
-        },
-        else => try testing.expect(false),
-    }
-}
-
-// test "reverse operation: tree to HTML" {
-//     const allocator = testing.allocator;
-
-//     const simple_html = "<div><p>Hello</p><span>World</span></div>";
-
-//     const doc = try z.parseFromString(simple_html);
-//     defer z.destroyDocument(doc);
-
-//     const tree = try documentToTupleTree(allocator, doc);
-//     defer freeHtmlTree(allocator, tree);
-
-//     const reconstructed = try treeToHtml(allocator, tree);
-//     defer allocator.free(reconstructed);
-
-//     try testing.expect(
-//         std.mem.indexOf(u8, reconstructed, "<DIV>") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, reconstructed, "<P>Hello</P>") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, reconstructed, "<SPAN>World</SPAN>") != null,
-//     );
-// }
-
-// test "round trip conversion" {
-//     const allocator = testing.allocator;
-
-//     const original_html = "<div class=\"test\"><p>Hello &amp; world</p><!-- comment --><br></div>";
-
-//     const result = try roundTripConversion(allocator, original_html);
-//     defer allocator.free(result);
-
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "DIV") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "class=\"test\"") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "Hello &amp; world") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "<!-- comment -->") != null,
-//     );
-// }
-
-// test "void elements handling" {
-//     const allocator = testing.allocator;
-
-//     const html_with_void = "<div><br><img src=\"test.jpg\" alt=\"test\"><p>Text</p></div>";
-
-//     const doc = try z.parseFromString(html_with_void);
-//     defer z.destroyDocument(doc);
-
-//     const tree = try documentToTupleTree(allocator, doc);
-//     defer freeHtmlTree(allocator, tree);
-
-//     const result = try treeToHtml(allocator, tree);
-//     defer allocator.free(result);
-
-//     // Debug: Print the result to see what we're getting
-//     // std.debug.print("DOM tree HTML result: {s}\n", .{result});
-
-//     // Should not have closing tags for void elements (they should be self-closing)
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "<br>") == null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "<img>") == null,
-//     );
-//     // Should have self-closing syntax for void elements
-//     // try testing.expect(
-//     // std.mem.indexOf(u8, result, "<BR />") != null,
-//     // );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "<IMG src=\"test.jpg\" alt=\"test\" >") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "</P>") != null,
-//     ); // P should have closing tag
-// }
-
-// test "HTML escaping in reverse operation" {
-//     const allocator = testing.allocator;
-
-//     const html_with_entities = "<div>&lt;script&gt;alert('test')&lt;/script&gt;</div>";
-
-//     const doc = try z.parseFromString(html_with_entities);
-//     defer z.destroyDocument(doc);
-
-//     const tree = try documentToTupleTree(allocator, doc);
-//     defer freeHtmlTree(allocator, tree);
-
-//     const result = try treeToHtml(allocator, tree);
-//     defer allocator.free(result);
-
-//     // Should properly escape dangerous content
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "&lt;") != null,
-//     );
-//     try testing.expect(
-//         std.mem.indexOf(u8, result, "&gt;") != null,
-//     );
-// }
-
-test "complex HTML structure" {
-    const html =
-        \\<!-- Top comment is ignored-->
-        \\<html><head>
-        \\     <meta charset="UTF-8"/>
-        \\    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-        \\    <title>Page</title>
-        \\  </head>
-        \\  <body>
-        \\   <div id="root" class="layout">
-        \\      Hello world
-        \\     <!-- Inner comment -->
-        \\     <p>
-        \\       <span data-id="1">Hello</span>
-        \\       <span data-id="2">world</span>
-        \\     </p>
-        \\     <img src="/assets/image.jpeg" alt="image">
-        \\     <form>
-        \\       <input class="input" value="" name="name">
-        \\     </form>
-        \\     <script>
-        \\       console.log(1 && 2);
-        \\     </script>
-        \\     <style>
-        \\       .parent > .child {
-        \\         &:hover {
-        \\            display: none;
-        \\         }
-        \\        }
-        \\      </style>
-        \\      &amp; &lt; &gt; &quot; &#39; € 🔥 🐈
-        \\      <div class="&amp; &lt; &gt; &quot; &#39; € 🔥 🐈"></div>
-        \\     </div>
-        \\  </body></html>
-    ;
-
-    const allocator = testing.allocator;
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-
-    const full_tree = try doc_toTupleTree(
-        allocator,
-        doc,
-    );
-    defer freeHtmlNode(allocator, full_tree);
-
-    const body_node = try z.bodyNode(doc);
-    // try z.printDocStruct(doc);
-    try z.cleanDomTree(
-        allocator,
-        z.documentRoot(doc).?,
-        .{
-            .remove_empty_elements = true,
-            .remove_comments = true,
-        },
-    );
-    try z.printDocStruct(doc);
-    const txt = try z.outerHTML(allocator, z.nodeToElement(body_node).?);
-    defer allocator.free(txt);
-
-    // print("\nActual: ----------\n{s}\n\n", .{html});
-    // try z.printDocumentStructure(doc);
-    // print("\n\n Serialized: \n {s}\n\n", .{txt});
-    // printNode(full_tree, 0);
-}
