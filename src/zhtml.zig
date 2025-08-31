@@ -8,7 +8,7 @@ const fragments = @import("modules/fragments.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
 const tree = @import("modules/dom_tree.zig");
-const collection = @import("modules/collection.zig");
+// const collection = @import("modules/collection.zig");
 const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
@@ -199,6 +199,8 @@ pub const escapeHtml = text.escapeHtml;
 // ====================================
 pub const normalize = norm.normalize;
 pub const normalizeWithOptions = norm.normalizeWithOptions;
+pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
+pub const normalizeText = cleaner.normalizeText;
 
 //=====================================
 // DOM navigation
@@ -245,8 +247,9 @@ pub const HtmlParser = chunks.HtmlParser;
 pub const FragmentContext = tag.FragmentContext;
 
 pub const FragmentResult = fragments.FragmentResult;
-pub const fragmentToNode = fragments.fragmentToNode;
+pub const fragmentNode = fragments.fragmentNode;
 pub const createDocumentFragment = fragments.createDocumentFragment;
+pub const destroyDocumentFragment = fragments.destroyDocumentFragment;
 pub const appendFragment = fragments.appendFragment;
 
 pub const parseFragment = fragments.parseFragment;
@@ -286,6 +289,8 @@ pub const nodeTuple = tree.nodeTuple;
 pub const toTuple = tree.toTuple;
 pub const freeTupleTree = tree.freeTupleTree;
 pub const freeTupleNode = tree.freeTupleNode;
+pub const tupleStringToHtml = tree.tupleStringToHtml;
+pub const domToTupleString = tree.domToTupleString;
 
 // pub const DomTreeNode = tree.HtmlNode;
 // pub const DomTreeArray = tree.HtmlTree;
@@ -323,8 +328,7 @@ pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
 pub const printDocStruct = tree.printDocStruct;
 pub const prettyPrint = serialize.prettyPrint;
 
-pub const cleanDomTree = cleaner.cleanDomTree;
-pub const normalizeText = cleaner.normalizeText;
+// pub const cleanDomTree = cleaner.cleanDomTree;
 
 //=========================================
 // CSS selectors
@@ -393,37 +397,37 @@ pub const getElementsById = attrs.getElementsById; // multiple
 //=====================================
 // Collection management
 //=====================================
-pub const DomCollection = opaque {};
-pub const createCollection = collection.createCollection;
-pub const createDefaultCollection = collection.createDefaultCollection;
-pub const createSingleElementCollection = collection.createSingleElementCollection;
-pub const destroyCollection = collection.destroyCollection;
-pub const clearCollection = collection.clearCollection;
-pub const collectionLength = collection.collectionLength;
-pub const getCollectionElementAt = collection.getCollectionElementAt;
-pub const getFirstCollectionElement = collection.getCollectionFirstElement;
-pub const getLastCollectionElement = collection.getCollectionLastElement;
-pub const isCollectionEmpty = collection.isCollectionEmpty;
-pub const appendElementToCollection = collection.appendElementToCollection;
-pub const collectionIterator = collection.iterator;
-pub const debugPrint = collection.debugPrint;
-pub const collectionToSlice = collection.collectionToSlice;
-pub const CollectionIterator = collection.CollectionIterator;
+// pub const DomCollection = opaque {};
+// pub const createCollection = collection.createCollection;
+// pub const createDefaultCollection = collection.createDefaultCollection;
+// pub const createSingleElementCollection = collection.createSingleElementCollection;
+// pub const destroyCollection = collection.destroyCollection;
+// pub const clearCollection = collection.clearCollection;
+// pub const collectionLength = collection.collectionLength;
+// pub const getCollectionElementAt = collection.getCollectionElementAt;
+// pub const getFirstCollectionElement = collection.getCollectionFirstElement;
+// pub const getLastCollectionElement = collection.getCollectionLastElement;
+// pub const isCollectionEmpty = collection.isCollectionEmpty;
+// pub const appendElementToCollection = collection.appendElementToCollection;
+// pub const collectionIterator = collection.iterator;
+// pub const debugPrint = collection.debugPrint;
+// pub const collectionToSlice = collection.collectionToSlice;
+// pub const CollectionIterator = collection.CollectionIterator;
 
-// Collection configuration
-pub const setDefaultCapacity = collection.setDefaultCapacity;
-pub const getDefaultCapacity = collection.getDefaultCapacity;
-pub const resetDefaultCapacity = collection.resetDefaultCapacity;
+// // Collection configuration
+// pub const setDefaultCapacity = collection.setDefaultCapacity;
+// pub const getDefaultCapacity = collection.getDefaultCapacity;
+// pub const resetDefaultCapacity = collection.resetDefaultCapacity;
 
-//=========================================
-// Collection based Elements Search
-//=========================================
-pub const getElementsByAttributePair = collection.getElementsByAttributePair;
+// //=========================================
+// // Collection based Elements Search
+// //=========================================
+// pub const getElementsByAttributePair = collection.getElementsByAttributePair;
 
-pub const getElementsByClassName = collection.getElementsByClassName;
-pub const getElementsByAttributeName = collection.getElementsByAttributeName;
-pub const getElementsByTagName = collection.getElementsByTagName;
-pub const getElementsByName = collection.getElementsByName;
+// pub const getElementsByClassName = collection.getElementsByClassName;
+// pub const getElementsByAttributeName = collection.getElementsByAttributeName;
+// pub const getElementsByTagName = collection.getElementsByTagName;
+// pub const getElementsByName = collection.getElementsByName;
 
 // ***************************************************************************
 // ***************************************************************************

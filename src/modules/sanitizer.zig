@@ -316,7 +316,7 @@ fn sanitizePostWalkOperations(allocator: std.mem.Allocator, context: *SanitizeCo
 fn sanitizeTemplateContent(allocator: std.mem.Allocator, template_node: *z.DomNode, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
     const template = z.nodeToTemplate(template_node) orelse return;
     const content = z.templateContent(template);
-    const content_node = z.fragmentToNode(content);
+    const content_node = z.fragmentNode(content);
 
     var template_context = SanitizeContext.init(allocator, options);
     defer template_context.deinit();

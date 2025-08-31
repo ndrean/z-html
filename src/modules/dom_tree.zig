@@ -270,6 +270,7 @@ pub fn nodeToTupleString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return allocator.dupe(u8, result.items);
 }
 
+
 /// Internal arena-based serialization using ArrayList for dynamic growth
 fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.ArrayList(u8), node: *z.DomNode) !void {
     const node_type = z.nodeType(node);

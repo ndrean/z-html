@@ -429,7 +429,7 @@ fn normalizeTemplateContentOptimized(
     const template = z.nodeToTemplate(template_node) orelse return;
 
     const content = z.templateContent(template);
-    const content_node = z.fragmentToNode(content);
+    const content_node = z.fragmentNode(content);
 
     var template_context = ContextOptimized.init(allocator, options);
     defer template_context.deinit();
@@ -487,7 +487,7 @@ fn normalizeTemplateContent(
     const template = z.nodeToTemplate(template_node) orelse return;
 
     const content = z.templateContent(template);
-    const content_node = z.fragmentToNode(content);
+    const content_node = z.fragmentNode(content);
 
     var template_context = Context.init(allocator, options);
     defer template_context.deinit();
@@ -601,7 +601,7 @@ test "template normalize" {
         // template access is only via its `templateContent()`: check the number of nodes
         const template_before = z.elementToTemplate(template_elt_before).?;
         const template_content_before = z.templateContent(template_before);
-        const template_content_node_before = z.fragmentToNode(template_content_before);
+        const template_content_node_before = z.fragmentNode(template_content_before);
         const child_nodes_before = try z.childNodes(allocator, template_content_node_before);
         defer allocator.free(child_nodes_before);
         try testing.expect(child_nodes_before.len == 8);
@@ -628,7 +628,7 @@ test "template normalize" {
         // inspect the template content after: the number of nodes went down
         const template_after = z.elementToTemplate(template_elt_after).?;
         const template_content_after = z.templateContent(template_after);
-        const template_content_node_after = z.fragmentToNode(template_content_after);
+        const template_content_node_after = z.fragmentNode(template_content_after);
         const child_nodes_after = try z.childNodes(allocator, template_content_node_after);
         defer allocator.free(child_nodes_after);
         try testing.expect(child_nodes_after.len == 3);

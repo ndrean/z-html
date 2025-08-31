@@ -103,7 +103,7 @@ test "type / name checking" {
     const body_node = try z.bodyNode(doc);
     const fragment = try z.createDocumentFragment(doc);
     const p_elt = try z.createElement(doc, "p");
-    const frag_node = z.fragmentToNode(fragment);
+    const frag_node = z.fragmentNode(fragment);
     z.appendChild(frag_node, z.elementToNode(p_elt));
 
     const div = z.firstChild(body_node);

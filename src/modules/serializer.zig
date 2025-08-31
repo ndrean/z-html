@@ -37,7 +37,7 @@ test "lexbor string functions" {
     try testing.expect(!stringEquals("hello", "world"));
     try testing.expect(!stringEquals("hello", "hello2"));
     try testing.expect(stringEquals("", ""));
-    
+
     // TODO: Fix stringEndsWith - the function signature or logic might be wrong
     // try testing.expect(stringEndsWith("hello world", "world"));
 }
@@ -49,8 +49,6 @@ const lxbString = extern struct {
     length: usize, // String length
     size: usize, // lexbor Allocated size
 };
-
-// extern "c" fn lxb_html_serialize_str(node: *z.DomNode, str: *lxbString) c_int;
 
 // innerHTML
 extern "c" fn lxb_html_serialize_deep_str(node: *z.DomNode, str: *lxbString) c_int;
@@ -467,7 +465,7 @@ test "sanitized HTML into a fragment" {
     // const fragment = try z.createDocumentFragment(doc);
     const malicious_content = "<div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
 
-    // const fragment_node = z.fragmentToNode(fragment);
+    // const fragment_node = z.fragmentNode(fragment);
     const fragment_root = try z.parseFragmentSimple(
         body,
         malicious_content,
@@ -532,7 +530,7 @@ test "Serializer sanitation" {
     defer z.destroyDocument(doc);
 
     const fragment = try z.createDocumentFragment(doc);
-    const fragment_node = z.fragmentToNode(fragment);
+    const fragment_node = z.fragmentNode(fragment);
     defer z.destroyNode(fragment_node);
     const new_node = try z.parseFragmentSimple(
         body,

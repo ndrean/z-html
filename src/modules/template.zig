@@ -66,7 +66,7 @@ pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
 
 pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
     const template_content = templateContent(template);
-    const content_node = z.fragmentToNode(template_content);
+    const content_node = z.fragmentNode(template_content);
 
     const template_doc = z.ownerDocument(z.templateToNode(template).?);
     // same document => cloneNode()

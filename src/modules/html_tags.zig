@@ -540,6 +540,7 @@ pub fn isNoEscapeElementExtended(element: *z.HTMLElement, custom_no_escape_tags:
 
 /// [HtmlTag] Fragment parsing context - defines how the fragment should be interpreted
 pub const FragmentContext = enum {
+    fragment,
     /// Parse as if inside <body> (default for most cases)
     body,
     /// Parse as if inside <div> (for general content)
@@ -584,6 +585,7 @@ pub const FragmentContext = enum {
     /// Inlined for zero function call overhead in fragment parsing
     pub inline fn toTagName(self: FragmentContext) []const u8 {
         return switch (self) {
+            .fragment => "html", // default root
             .body => "body",
             .div => "div",
             .template => "template",

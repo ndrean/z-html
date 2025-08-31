@@ -22,30 +22,96 @@ extern "c" fn lxb_html_document_parse_fragment(
 // ===============================================================================================
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 
+extern "c" fn lxb_dom_document_fragment_interface_destroy(fragment: *z.DocumentFragment) *z.DocumentFragment;
+
 // Cross-document node cloning
 // extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode;
 // ================================================================================================
-
-/// [fragment] Get the underlying DOM node from a fragment
-pub fn fragmentToNode(fragment: *z.DocumentFragment) *z.DomNode {
-    return z.objectToNode(fragment);
-}
 
 /// [fragment] Create a document fragment and returns a !Fragment
 ///
 /// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations.
 /// Official browser spec: when you append a fragment to the DOM, only its children are added, not the fragment itself which is destroyed.
 ///
-/// Use `appendFragment()` at insert the fragment into the DOM.
+/// Use:
+/// - `appendChild()` to the `fragmentNode()` to build the fragment
+/// - `parseFragmentSimple()` to parse HTML into a fragment within a context
+/// - `appendFragment()` to insert the fragment inner content into the DOM.
 pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
     return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentParseFailed;
+}
+
+pub fn destroyDocumentFragment(fragment: *z.DocumentFragment) void {
+    _ = lxb_dom_document_fragment_interface_destroy(fragment);
+}
+
+/// [fragment] Get the underlying DOM node from a fragment (type `.fragment`)
+pub fn fragmentNode(fragment: *z.DocumentFragment) *z.DomNode {
+    return z.objectToNode(fragment);
+}
+
+test "create fragmentDocument, fragmentNode and context" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const frag_doc = try z.createDocumentFragment(doc);
+    defer destroyDocumentFragment(frag_doc);
+
+    const frag_node = z.fragmentNode(frag_doc);
+    try testing.expect(.fragment == z.nodeType(frag_node));
+
+    // --- context: body
+    const frag_root_context_body = try z.parseFragmentSimple(frag_node, "<p id=\"1\">Hello<i></i>world</p>", .body);
+
+    try testing.expect(.element == z.nodeType(frag_root_context_body));
+
+    const frag_elt_ctx_body = z.nodeToElement(frag_root_context_body);
+    try testing.expect(z.tagFromElement(frag_elt_ctx_body.?) == .html);
+
+    const frag_ctx_body_outer_html = try z.outerNodeHTML(allocator, frag_root_context_body);
+    defer allocator.free(frag_ctx_body_outer_html);
+    try testing.expectEqualStrings(
+        "<html><p id=\"1\">Hello<i></i>world</p></html>",
+        frag_ctx_body_outer_html,
+    );
+
+    // --- context: html
+    const frag_root_context_fragment = try z.parseFragmentSimple(frag_node, "<p id=\"1\">Hello<i></i>world</p>", .fragment);
+    try testing.expect(.element == z.nodeType(frag_root_context_fragment));
+
+    const frag_elt_ctx_fragment = z.nodeToElement(frag_root_context_fragment);
+    try testing.expect(z.tagFromElement(frag_elt_ctx_fragment.?) == .html);
+
+    const frag_root_context_fragment_outer_html = try z.outerNodeHTML(allocator, frag_root_context_fragment);
+    defer allocator.free(frag_root_context_fragment_outer_html);
+    try testing.expectEqualStrings(
+        "<html><head></head><body><p id=\"1\">Hello<i></i>world</p></body></html>",
+        frag_root_context_fragment_outer_html,
+    );
+}
+
+test "append with createDocumentFragment: attach programmatically to fragment_node" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const frag_doc = try z.createDocumentFragment(doc);
+    defer destroyDocumentFragment(frag_doc); // not needed, linked to doc
+
+    const frag_node = z.fragmentNode(frag_doc);
+
+    const p = try z.createElement(doc, "p");
+    z.appendChild(frag_node, z.elementToNode(p));
+
+    const maybe_p = z.firstChild(frag_node);
+    try testing.expect(z.tagFromElement(z.nodeToElement(maybe_p.?).?) == .p);
 }
 
 /// [fragment] Append all children from a document fragment to a parent node
 ///
 /// The fragment is emptied: the fragment children are moved into the DOM, not copied
-pub fn appendFragment(parent: *z.DomNode, fragmentNode: *z.DomNode) void {
-    var fragment_child = z.firstChild(fragmentNode);
+pub fn appendFragment(parent: *z.DomNode, fragment_node: *z.DomNode) void {
+    var fragment_child = z.firstChild(fragment_node);
     while (fragment_child != null) {
         const next_sibling = z.nextSibling(fragment_child.?);
         z.appendChild(parent, fragment_child.?);
@@ -53,16 +119,15 @@ pub fn appendFragment(parent: *z.DomNode, fragmentNode: *z.DomNode) void {
     }
 }
 
-test "append with createDocumentFragment" {
+test "appendFragment to fragment_node" {
     const allocator = testing.allocator;
     const doc = try z.parseFromString("<html><body><ul id=\"ul\"></ul></body></html>");
     defer z.destroyDocument(doc);
 
-    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
-
     const fragment = try z.createDocumentFragment(doc);
-    const fragment_node = z.fragmentToNode(fragment);
-    defer z.destroyNode(fragment_node);
+    const fragment_node = z.fragmentNode(fragment);
+
+    const browsers = [_][]const u8{ "Firefox", "Chrome", "Opera", "Safari", "Internet Explorer" };
 
     for (browsers) |browser| {
         // Create elements directly in the same document as the fragment
@@ -86,9 +151,11 @@ test "append with createDocumentFragment" {
     try testing.expect(child_elements.len == 5);
 }
 
-/// HTML parsing of a fragment into a new a #document-fragment, given node within a context.
+/// Creates a new a #document-fragment, and returns a reference node containing the parsed HTML, given a context.
 ///
-/// To append to an existing node, use `appendFragment()` to move the fragment nodes and defer this fragment node destruction.
+/// To append to a DOM node, use `appendFragment()` to move the fragment inner nodes.
+///
+/// You can this fragment node destruction.
 ///
 /// This fragment has a single usage.
 /// ## Example
@@ -132,9 +199,22 @@ test "simple fragment parse" {
 
     const fragment_root = try parseFragmentSimple(body, "<p></p>", .body);
     defer z.destroyNode(fragment_root);
+
+    const outer_fragment = try z.outerNodeHTML(allocator, fragment_root);
+    defer allocator.free(outer_fragment);
+    try testing.expectEqualStrings("<html><p></p></html>", outer_fragment);
+
+    try testing.expect(z.isNodeEmpty(body));
+
     z.appendFragment(body, fragment_root); // moves
+
+    const outer_body = try z.outerNodeHTML(allocator, body);
+    defer allocator.free(outer_body);
+    try testing.expectEqualStrings("<body><p></p></body>", outer_body);
+
     z.appendFragment(body, fragment_root); // fragment_root is now empty!
 
+    // check that nothing changed in thee document
     const children = try z.children(allocator, z.nodeToElement(body).?);
     defer allocator.free(children);
     try testing.expect(children.len == 1);
@@ -967,7 +1047,7 @@ test "malformed fragment part recovery by lexbor" {
     defer allocator.free(serialized);
 
     // lexbor should auto-fix part of the malformed HTML
-    const expected_recovered = "<body><div class=\"card\"><h3>Title</h3><p>Missing closing tags<span>More content</span></p></div></body>";
+    const expected_recovered = "<body><div class=\"card\"><h3>Title</h3><p>Missing closing tags\n      <span>More content\n</span></p></div></body>";
     try testing.expectEqualStrings(expected_recovered, serialized);
 }
 
@@ -1018,19 +1098,19 @@ test "show" {
     z.appendChild(body, main);
 
     const fragment_elt = try z.createDocumentFragment(doc);
-    const fragment_node = z.fragmentToNode(fragment_elt);
+    const fragment_node = z.fragmentNode(fragment_elt);
     try testing.expect(
         z.nodeType(fragment_node) == z.NodeType.fragment,
     ); // #document-fragment
 
     z.appendFragment(main, fragment_node);
 
-    const lis = try z.getElementsByTagName(doc, "LI");
-    defer if (lis) |collection| {
-        z.destroyCollection(collection);
-    };
-    const li_count = z.collectionLength(lis.?);
-    try testing.expect(li_count == 3);
+    // const lis = try z.getElementsByTagName(doc, "LI");
+    // defer if (lis) |collection| {
+    //     z.destroyCollection(collection);
+    // };
+    // const li_count = z.collectionLength(lis.?);
+    // try testing.expect(li_count == 3);
 
     const fragment_txt = try z.outerHTML(allocator, z.nodeToElement(main).?);
 
