@@ -60,7 +60,9 @@ pub fn build(b: *std.Build) void {
     // SINGLE TEST TARGET - this runs ALL tests from all modules
     const lib_test = b.step("test", "Run units tests");
 
-    const unit_tests = b.addTest(.{
+    const coverage = b.option(bool, "test-coverage", "Generate test coverage") orelse false;
+
+    var unit_tests = b.addTest(.{
         // .name = "unit_tests",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/zhtml.zig"),
@@ -78,6 +80,16 @@ pub fn build(b: *std.Build) void {
     unit_tests.addObjectFile(lexbor_static_lib_path);
     unit_tests.linkLibrary(wrapper_lib);
     unit_tests.linkLibC();
+
+    if (coverage) {
+        // with kcov
+        unit_tests.setExecCmd(&[_]?[]const u8{
+            "kcov",
+            //"--path-strip-level=3", // any kcov flags can be specified here
+            "kcov-output", // output dir for kcov
+            null, // to get zig to use the --test-cmd-bin flag
+        });
+    }
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     run_unit_tests.skip_foreign_checks = true;

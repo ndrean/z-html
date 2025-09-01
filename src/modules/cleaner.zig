@@ -37,9 +37,9 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
 
 test "removeOuterWhitespaceTextNodes" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p> Hello   <strong> World    </strong> \nand  <em> \twelcome   \nback</em></p>");
+    const doc = try z.createDocFromString("<p> Hello   <strong> World    </strong> \nand  <em> \twelcome   \nback</em></p>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     try removeOuterWhitespaceTextNodes(testing.allocator, z.nodeToElement(body).?);
     const inner = try z.innerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(inner);
@@ -165,9 +165,9 @@ test "isWhitespaceOnlyNode behavior with comments" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(html_with_comments);
+    const doc = try z.createDocFromString(html_with_comments);
     defer z.destroyDocument(doc);
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node).?;
     const txt = try z.textContent(allocator, div_node);
     defer allocator.free(txt);
@@ -202,9 +202,9 @@ test "escape option works correctly for text insertion (not cleaning)" {
     const allocator = testing.allocator;
 
     // Create a simple document
-    const doc = try z.parseFromString("<div><p></p></div>");
+    const doc = try z.createDocFromString("<div><p></p></div>");
     defer z.destroyDocument(doc);
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node).?;
     const p_node = z.firstChild(div_node).?;
     try z.setContentAsText(p_node, "");

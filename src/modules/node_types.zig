@@ -97,13 +97,13 @@ test "type / name checking" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(frag);
+    const doc = try z.createDocFromString(frag);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const fragment = try z.createDocumentFragment(doc);
     const p_elt = try z.createElement(doc, "p");
-    const frag_node = z.fragmentNode(fragment);
+    const frag_node = z.fragmentToNode(fragment);
     z.appendChild(frag_node, z.elementToNode(p_elt));
 
     const div = z.firstChild(body_node);

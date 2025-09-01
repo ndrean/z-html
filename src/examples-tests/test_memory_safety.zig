@@ -9,7 +9,7 @@ test "Memory safety demonstration: lexbor ownership vs Zig ownership" {
     const doc = try z.printDocStruct("<div><span>content</span></div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.firstElementChild(body).?;
 
     // ❌ UNSAFE: Borrowing lexbor's memory
@@ -44,7 +44,7 @@ test "Practical usage patterns" {
     const doc = try z.printDocStruct("<div><p>para</p><span>text</span></div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.firstElementChild(body).?;
 
     std.debug.print("\n=== Practical Usage Patterns ===\n", .{});

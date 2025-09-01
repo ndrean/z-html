@@ -3,3 +3,6 @@
 /zig-out/
 /.vscode/
 .DS_Store
+/kcov-output/
+/.vscode/
+/.lexical/

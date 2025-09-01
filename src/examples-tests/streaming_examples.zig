@@ -79,7 +79,7 @@ test "large file chunk processing simulation" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    _ = try z.bodyElement(doc); // Verify body exists
+    _ = z.bodyElement(doc).?; // Verify body exists
 
     const all_divs = try z.getElementsByTagName(doc, "DIV");
     defer z.destroyCollection(all_divs);

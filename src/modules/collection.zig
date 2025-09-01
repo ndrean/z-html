@@ -220,7 +220,7 @@
 // /// Caller is responsible for freeing the collection with `destroyCollection`
 // pub fn getElementsByTagName(doc: *z.HTMLDocument, tag_name: []const u8) !?*z.DomCollection {
 //     // Start from the body element but also check the body itself
-//     const root = try z.bodyElement(doc);
+//     const root = z.bodyElement(doc).?;
 //     const collection = createDefaultCollection(doc) orelse return Err.CollectionFailed;
 
 //     if (collectElementsByTagName(root, collection, tag_name)) {
@@ -272,7 +272,7 @@
 // ///
 // /// If you want to detect multiple IDs, use `getElementsByAttributePair`.
 // pub fn getElementById(doc: *z.HTMLDocument, id: []const u8) !?*z.HTMLElement {
-//     const root = try z.bodyElement(doc);
+//     const root = z.bodyElement(doc).?;
 
 //     const collection = createSingleElementCollection(doc) orelse return Err.CollectionFailed;
 //     defer destroyCollection(collection);
@@ -306,7 +306,7 @@
 // ///
 // /// Caller is responsible for freeing the return collection with `destroyCollection`
 // pub fn getElementsByAttributePair(doc: *z.HTMLDocument, attr: z.AttributePair, case_insensitive: bool) !?*z.DomCollection {
-//     const root = try z.bodyElement(doc);
+//     const root = z.bodyElement(doc).?;
 //     const collection = createDefaultCollection(doc) orelse return null;
 //     const name = attr.name;
 //     const value = attr.value;
@@ -371,7 +371,7 @@
 // /// ```
 // ///
 // pub fn getElementsByAttributeName(doc: *z.HTMLDocument, attr_name: []const u8, capacity: CapacityOpt) !?*z.DomCollection {
-//     const root = try z.bodyElement(doc);
+//     const root = z.bodyElement(doc).?;
 //     const collection = createCollection(doc, capacity) orelse return Err.CollectionFailed;
 
 //     if (collectElementsWithAttribute(root, collection, attr_name)) {
@@ -440,7 +440,7 @@
 
 // test "collection basic operations" {
 //     // Create a test document
-//     const doc = try z.parseFromString("<div><p id='test'>Hello</p><span>World</span></div>");
+//     const doc = try z.createDocFromString("<div><p id='test'>Hello</p><span>World</span></div>");
 //     defer z.destroyDocument(doc);
 
 //     // Create collection
@@ -460,7 +460,7 @@
 // // test "collection with CSS selector results" {
 // //     const allocator = testing.allocator;
 
-// //     const doc = try z.parseFromString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
+// //     const doc = try z.createDocFromString("<div><p class='test'>Hello</p><p class='test'>World</p></div>");
 // //     defer z.destroyDocument(doc);
 
 // //     // Use CSS selector to populate collection
@@ -474,7 +474,7 @@
 // // test "collection iterator" {
 // //     const allocator = testing.allocator;
 
-// //     const doc = try z.parseFromString("<div><p>1</p><p>2</p><p>3</p></div>");
+// //     const doc = try z.createDocFromString("<div><p>1</p><p>2</p><p>3</p></div>");
 // //     defer z.destroyDocument(doc);
 
 // //     const elements = try z.querySelectorAll(allocator, doc, "p");
@@ -500,7 +500,7 @@
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test finding by class
@@ -526,7 +526,7 @@
 //         \\</form>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test 1: Find by type attribute
@@ -597,7 +597,7 @@
 //         \\</ul>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     const items = try getElementsByAttributePair(
@@ -705,7 +705,7 @@
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     const buttons = try getElementsByAttributePair(
@@ -840,7 +840,7 @@
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // print("\n=== Performance Comparison: Lexbor Native vs Custom Zig Traversal ===\n", .{});
@@ -900,10 +900,10 @@
 //         \\</div>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
-//     const body = try z.bodyElement(doc);
+//     const body = z.bodyElement(doc).?;
 //     const first_child = z.firstChild(z.elementToNode(body)) orelse return error.NoChild;
 //     const div_element = z.nodeToElement(first_child) orelse return error.NotElement;
 
@@ -963,7 +963,7 @@
 //         \\</html>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test that getElementsByAttributeName still works correctly with the optimization
@@ -1003,7 +1003,7 @@
 //         \\</html>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 //     // try z.printDocumentStructure(doc);
 
@@ -1128,7 +1128,7 @@
 //         \\</html>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test 1: Find all paragraphs (note: Lexbor returns uppercase tag names)
@@ -1191,7 +1191,7 @@
 //         \\</html>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
 //     // Test 1: Find elements with name="gender" (radio buttons)
@@ -1241,7 +1241,7 @@
 // //         \\</html>
 // //     ;
 
-// //     const doc = try z.parseFromString(html);
+// //     const doc = try z.createDocFromString(html);
 // //     defer z.destroyDocument(doc);
 
 // //     // Test 1: Check initial default capacity
@@ -1305,7 +1305,7 @@
 // //         \\</html>
 // //     ;
 
-// //     const doc = try z.parseFromString(html);
+// //     const doc = try z.createDocFromString(html);
 // //     defer z.destroyDocument(doc);
 
 // //     // 4. Create collections with different capacity options
@@ -1375,7 +1375,7 @@
 // //         \\  <div class="bold text">reversed
 // //     ;
 
-// //     const doc = try z.parseFromString(html);
+// //     const doc = try z.createDocFromString(html);
 // //     defer z.destroyDocument(doc);
 
 // //     // Test different class searches
@@ -1415,7 +1415,7 @@
 // //         _ = collection_count;
 // //         // 4. Manual hasClass check on all elements (for reference)
 // //         var manual_count: usize = 0;
-// //         const body = try z.bodyElement(doc);
+// //         const body = z.bodyElement(doc).?;
 // //         var element_walker = z.firstElementChild(body);
 // //         while (element_walker) |elem| {
 // //             if (z.hasClass(elem, class_name)) {

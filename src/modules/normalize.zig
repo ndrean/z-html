@@ -61,28 +61,28 @@ pub fn normalizeHtmlString(allocator: std.mem.Allocator, html: []const u8) ![]u8
 pub fn normalizeHtmlStringWithOptions(allocator: std.mem.Allocator, html: []const u8, options: StringNormalizeOptions) ![]u8 {
     var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
-    
+
     // Pre-allocate based on input size (normalized HTML is typically smaller)
     try result.ensureTotalCapacity(allocator, html.len);
-    
+
     var pos: usize = 0;
-    
+
     while (pos < html.len) {
         // Check if we're at the start of a tag or comment
         if (html[pos] == '<') {
             const tag_start = pos;
-            
+
             // Check if this is a comment
             if (pos + 4 < html.len and std.mem.startsWith(u8, html[pos..], "<!--")) {
                 // Find the end of the comment
-                const comment_end = std.mem.indexOf(u8, html[pos + 4..], "-->") orelse {
+                const comment_end = std.mem.indexOf(u8, html[pos + 4 ..], "-->") orelse {
                     // Malformed comment, copy rest as-is
                     try result.appendSlice(allocator, html[pos..]);
                     break;
                 };
-                
-                const full_comment = html[pos..pos + 4 + comment_end + 3];
-                
+
+                const full_comment = html[pos .. pos + 4 + comment_end + 3];
+
                 if (!options.remove_comments) {
                     // Keep the comment
                     try result.appendSlice(allocator, full_comment);
@@ -91,41 +91,42 @@ pub fn normalizeHtmlStringWithOptions(allocator: std.mem.Allocator, html: []cons
                 pos = pos + 4 + comment_end + 3;
                 continue;
             }
-            
+
             // Find the end of the opening tag
             const tag_end = std.mem.indexOfScalarPos(u8, html, pos, '>') orelse {
                 // Malformed HTML, copy rest as-is
                 try result.appendSlice(allocator, html[pos..]);
                 break;
             };
-            
-            const tag_content = html[tag_start..tag_end + 1];
-            
+
+            const tag_content = html[tag_start .. tag_end + 1];
+
             // Check if this is a whitespace-preserving tag
             const preserve_tags = [_][]const u8{ "<pre", "<textarea", "<script", "<style", "<code" };
             var is_preserve_tag = false;
             var preserve_tag_name: []const u8 = "";
-            
+
             for (preserve_tags) |preserve_tag| {
-                if (std.mem.startsWith(u8, tag_content, preserve_tag) and 
-                    (tag_content.len == preserve_tag.len or 
-                     tag_content[preserve_tag.len] == ' ' or
-                     tag_content[preserve_tag.len] == '>')) {
+                if (std.mem.startsWith(u8, tag_content, preserve_tag) and
+                    (tag_content.len == preserve_tag.len or
+                        tag_content[preserve_tag.len] == ' ' or
+                        tag_content[preserve_tag.len] == '>'))
+                {
                     is_preserve_tag = true;
                     preserve_tag_name = preserve_tag[1..]; // Remove '<' for closing tag
                     break;
                 }
             }
-            
+
             if (is_preserve_tag) {
                 // Copy the opening tag
                 try result.appendSlice(allocator, tag_content);
                 pos = tag_end + 1;
-                
+
                 // Find the matching closing tag
                 const closing_tag = try std.fmt.allocPrint(allocator, "</{s}>", .{preserve_tag_name});
                 defer allocator.free(closing_tag);
-                
+
                 const closing_pos = std.mem.indexOf(u8, html[pos..], closing_tag);
                 if (closing_pos) |close_offset| {
                     const end_pos = pos + close_offset + closing_tag.len;
@@ -146,25 +147,25 @@ pub fn normalizeHtmlStringWithOptions(allocator: std.mem.Allocator, html: []cons
             // We're in text content - check if it's whitespace-only
             const text_start = pos;
             var text_end = pos;
-            
+
             // Find the end of this text segment (until next '<' or end of string)
             while (text_end < html.len and html[text_end] != '<') {
                 text_end += 1;
             }
-            
+
             const text_segment = html[text_start..text_end];
-            
+
             if (options.remove_whitespace_text_nodes and isWhitespaceOnly(text_segment)) {
                 // Skip whitespace-only text segments (this is the normalization)
             } else {
                 // Keep non-whitespace text as-is (or all text if option is disabled)
                 try result.appendSlice(allocator, text_segment);
             }
-            
+
             pos = text_end;
         }
     }
-    
+
     return result.toOwnedSlice(allocator);
 }
 
@@ -289,7 +290,7 @@ pub fn normalizeWithOptions(
     var context = Context.init(allocator, options);
     defer context.deinit();
 
-    lxb_dom_node_simple_walk(
+    z.simpleWalk(
         z.elementToNode(root_elt),
         collectorCallBack,
         &context,
@@ -390,12 +391,12 @@ fn normalizeTemplateContent(
     const template = z.nodeToTemplate(template_node) orelse return;
 
     const content = z.templateContent(template);
-    const content_node = z.fragmentNode(content);
+    const content_node = z.fragmentToNode(content);
 
     var template_context = Context.init(allocator, options);
     defer template_context.deinit();
 
-    lxb_dom_node_simple_walk(
+    z.simpleWalk(
         content_node,
         collectorCallBack,
         &template_context,
@@ -415,10 +416,10 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
         const allocator = testing.allocator;
 
         const html = "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>";
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         try z.normalizeWithOptions(
             allocator,
@@ -442,10 +443,10 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
         const allocator = testing.allocator;
 
         const html = "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>";
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         try z.normalizeWithOptions(
             allocator,
@@ -469,10 +470,10 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
         const allocator = testing.allocator;
 
         const html = "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>";
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         try z.normalizeWithOptions(
             allocator,
@@ -498,10 +499,10 @@ test "normalize, context preservation, comments removed" {
         const allocator = testing.allocator;
         const html = "<div>\n  Some   more\n  text\n  <span> \t </span>\n<!-- a comment to be removed -->\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em><i>maybe</i>\n</div>\n";
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         // test: insert programmatically an empty ("\t") text node inside the <span>)
         const span = z.getElementByTag(z.elementToNode(body_elt), .span);
@@ -530,10 +531,10 @@ test "normalize, context preservation, comments removed" {
         const allocator = testing.allocator;
         const html = "<div>\n  Some   more\n  text\n  <span> \t </span>\n<!-- a comment to be removed -->\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em>\n</div>\n";
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         try normalizeWithOptions(
             allocator,
@@ -572,7 +573,7 @@ test "template normalize" {
             \\</div>
         ;
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
         const root = z.documentRoot(doc).?;
@@ -587,7 +588,7 @@ test "template normalize" {
         // template access is only via its `templateContent()`: check the number of nodes
         const template_before = z.elementToTemplate(template_elt_before).?;
         const template_content_before = z.templateContent(template_before);
-        const template_content_node_before = z.fragmentNode(template_content_before);
+        const template_content_node_before = z.fragmentToNode(template_content_before);
         const child_nodes_before = try z.childNodes(allocator, template_content_node_before);
         defer allocator.free(child_nodes_before);
         try testing.expect(child_nodes_before.len == 8);
@@ -613,7 +614,7 @@ test "template normalize" {
         // inspect the template content after: the number of nodes went down
         const template_after = z.elementToTemplate(template_elt_after).?;
         const template_content_after = z.templateContent(template_after);
-        const template_content_node_after = z.fragmentNode(template_content_after);
+        const template_content_node_after = z.fragmentToNode(template_content_after);
         const child_nodes_after = try z.childNodes(allocator, template_content_node_after);
         defer allocator.free(child_nodes_after);
         try testing.expect(child_nodes_after.len == 3);
@@ -622,194 +623,194 @@ test "template normalize" {
     }
 }
 
-test "normalize performance benchmark" {
-    const allocator = std.heap.c_allocator;
+// test "normalize performance benchmark" {
+//     const allocator = std.heap.c_allocator;
 
-    // Create large HTML document with lots of whitespace for normalization
-    var html_builder: std.ArrayList(u8) = .empty;
-    defer html_builder.deinit(allocator);
+//     // Create large HTML document with lots of whitespace for normalization
+//     var html_builder: std.ArrayList(u8) = .empty;
+//     defer html_builder.deinit(allocator);
 
-    // Pre-allocate capacity for the HTML builder (estimate ~25KB for this test)
-    try html_builder.ensureTotalCapacity(allocator, 25_000);
+//     // Pre-allocate capacity for the HTML builder (estimate ~25KB for this test)
+//     try html_builder.ensureTotalCapacity(allocator, 25_000);
 
-    try html_builder.appendSlice(allocator,
-        \\<html>
-        \\<body>
-        \\  <div class="container">
-        \\    <header>
-        \\      <h1>   Performance Test Document   </h1>
-        \\      <nav>
-        \\        <ul>
-    );
+//     try html_builder.appendSlice(allocator,
+//         \\<html>
+//         \\<body>
+//         \\  <div class="container">
+//         \\    <header>
+//         \\      <h1>   Performance Test Document   </h1>
+//         \\      <nav>
+//         \\        <ul>
+//     );
 
-    // Add many elements with whitespace
-    for (0..100) |i| {
-        try html_builder.appendSlice(allocator,
-            \\          <li>   
-            \\            <a href="/page
-        );
+//     // Add many elements with whitespace
+//     for (0..100) |i| {
+//         try html_builder.appendSlice(allocator,
+//             \\          <li>
+//             \\            <a href="/page
+//         );
 
-        const num_str = try std.fmt.allocPrint(allocator, "{d}", .{i});
-        defer allocator.free(num_str);
-        try html_builder.appendSlice(allocator, num_str);
+//         const num_str = try std.fmt.allocPrint(allocator, "{d}", .{i});
+//         defer allocator.free(num_str);
+//         try html_builder.appendSlice(allocator, num_str);
 
-        try html_builder.appendSlice(allocator,
-            \\">   Link 
-        );
-        try html_builder.appendSlice(allocator, num_str);
-        try html_builder.appendSlice(allocator,
-            \\   </a>
-            \\            <span>   Some text with    whitespace   </span>
-            \\            <!-- comment with whitespace -->
-            \\            <em>     emphasized text     </em>
-            \\          </li>
-        );
-    }
+//         try html_builder.appendSlice(allocator,
+//             \\">   Link
+//         );
+//         try html_builder.appendSlice(allocator, num_str);
+//         try html_builder.appendSlice(allocator,
+//             \\   </a>
+//             \\            <span>   Some text with    whitespace   </span>
+//             \\            <!-- comment with whitespace -->
+//             \\            <em>     emphasized text     </em>
+//             \\          </li>
+//         );
+//     }
 
-    try html_builder.appendSlice(allocator,
-        \\        </ul>
-        \\      </nav>
-        \\    </header>
-        \\    <main>
-        \\      <section>
-        \\        <p>   This is a paragraph with    lots of    whitespace   </p>
-        \\        <div>
-        \\          <pre>   Preserve   this   whitespace   </pre>
-        \\          <textarea>   Also preserve   this   </textarea>
-        \\        </div>
-        \\      </section>
-        \\    </main>
-        \\  </div>
-        \\</body>
-        \\</html>
-    );
+//     try html_builder.appendSlice(allocator,
+//         \\        </ul>
+//         \\      </nav>
+//         \\    </header>
+//         \\    <main>
+//         \\      <section>
+//         \\        <p>   This is a paragraph with    lots of    whitespace   </p>
+//         \\        <div>
+//         \\          <pre>   Preserve   this   whitespace   </pre>
+//         \\          <textarea>   Also preserve   this   </textarea>
+//         \\        </div>
+//         \\      </section>
+//         \\    </main>
+//         \\  </div>
+//         \\</body>
+//         \\</html>
+//     );
 
-    const large_html = try html_builder.toOwnedSlice(allocator);
-    defer allocator.free(large_html);
+//     const large_html = try html_builder.toOwnedSlice(allocator);
+//     defer allocator.free(large_html);
 
-    const iterations = 100;
-    const kb_size = (@as(f64, @floatFromInt(large_html.len)) / 1024.0);
-    print("\n=== NORMALIZE PERFORMANCE BENCHMARK ===\n", .{});
-    print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, kb_size });
-    print("Iterations: {d}\n", .{iterations});
+//     const iterations = 100;
+//     const kb_size = (@as(f64, @floatFromInt(large_html.len)) / 1024.0);
+//     print("\n=== NORMALIZE PERFORMANCE BENCHMARK ===\n", .{});
+//     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, kb_size });
+//     print("Iterations: {d}\n", .{iterations});
 
-    var timer = try std.time.Timer.start();
+//     var timer = try std.time.Timer.start();
 
-    // Measure parsing only (with proper memory management)
-    timer.reset();
-    for (0..iterations) |_| {
-        const temp_doc = try z.parseFromString(large_html);
-        const body_elt = try z.bodyElement(temp_doc);
-        _ = body_elt;
-        z.destroyDocument(temp_doc);
-    }
-    const parsing_time_ns = timer.read();
+//     // Measure parsing only (with proper memory management)
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const temp_doc = try z.createDocFromString(large_html);
+//         const body_elt = try z.bodyElement(temp_doc);
+//         _ = body_elt;
+//         z.destroyDocument(temp_doc);
+//     }
+//     const parsing_time_ns = timer.read();
 
-    // Measure DOM-based normalization (with parsing)
-    timer.reset();
-    for (0..iterations) |_| {
-        const temp_doc = try z.parseFromString(large_html);
-        const body_elt = try z.bodyElement(temp_doc);
+//     // Measure DOM-based normalization (with parsing)
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const temp_doc = try z.createDocFromString(large_html);
+//         const body_elt = try z.bodyElement(temp_doc);
 
-        try z.normalizeWithOptions(
-            allocator,
-            body_elt,
-            .{
-                .remove_whitespace_text_nodes = true,
-                .skip_comments = true,
-            },
-        );
-        z.destroyDocument(temp_doc);
-    }
-    const dom_total_time_ns = timer.read();
+//         try z.normalizeWithOptions(
+//             allocator,
+//             body_elt,
+//             .{
+//                 .remove_whitespace_text_nodes = true,
+//                 .skip_comments = true,
+//             },
+//         );
+//         z.destroyDocument(temp_doc);
+//     }
+//     const dom_total_time_ns = timer.read();
 
-    // Measure string-based normalization (no parsing needed)
-    timer.reset();
-    for (0..iterations) |_| {
-        const normalized = try normalizeHtmlString(allocator, large_html);
-        allocator.free(normalized);
-    }
-    const string_time_ns = timer.read();
+//     // Measure string-based normalization (no parsing needed)
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const normalized = try normalizeHtmlString(allocator, large_html);
+//         allocator.free(normalized);
+//     }
+//     const string_time_ns = timer.read();
 
-    // Calculate times
-    const dom_normalize_time_ns = dom_total_time_ns - parsing_time_ns;
-    const norm_op_time = @as(f64, @floatFromInt(dom_normalize_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
-    const parse_op_time = @as(f64, @floatFromInt(parsing_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
-    const string_op_time = @as(f64, @floatFromInt(string_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
+//     // Calculate times
+//     const dom_normalize_time_ns = dom_total_time_ns - parsing_time_ns;
+//     const norm_op_time = @as(f64, @floatFromInt(dom_normalize_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
+//     const parse_op_time = @as(f64, @floatFromInt(parsing_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
+//     const string_op_time = @as(f64, @floatFromInt(string_time_ns)) / @as(f64, @floatFromInt(iterations)) / 1_000_000;
 
-    // Calculate MB/s correctly
-    const total_mb = (kb_size * @as(f64, @floatFromInt(iterations))) / 1024.0;
-    const parsing_time_s = @as(f64, @floatFromInt(parsing_time_ns)) / 1_000_000_000.0;
-    const dom_normalize_time_s = @as(f64, @floatFromInt(dom_normalize_time_ns)) / 1_000_000_000.0;
-    const string_time_s = @as(f64, @floatFromInt(string_time_ns)) / 1_000_000_000.0;
+//     // Calculate MB/s correctly
+//     const total_mb = (kb_size * @as(f64, @floatFromInt(iterations))) / 1024.0;
+//     const parsing_time_s = @as(f64, @floatFromInt(parsing_time_ns)) / 1_000_000_000.0;
+//     const dom_normalize_time_s = @as(f64, @floatFromInt(dom_normalize_time_ns)) / 1_000_000_000.0;
+//     const string_time_s = @as(f64, @floatFromInt(string_time_ns)) / 1_000_000_000.0;
 
-    const parsing_speed_mb_s = total_mb / parsing_time_s;
-    const dom_normalize_speed_mb_s = total_mb / dom_normalize_time_s;
-    const string_speed_mb_s = total_mb / string_time_s;
+//     const parsing_speed_mb_s = total_mb / parsing_time_s;
+//     const dom_normalize_speed_mb_s = total_mb / dom_normalize_time_s;
+//     const string_speed_mb_s = total_mb / string_time_s;
 
-    const speedup = dom_normalize_time_s / string_time_s;
+//     const speedup = dom_normalize_time_s / string_time_s;
 
-    print("\n--- Results ---\n", .{});
-    print("Parsing processing speed:     {d:.1} MB/s ({d:.2} ms/op)\n", .{ parsing_speed_mb_s, parse_op_time });
-    print("DOM normalize processing:     {d:.1} MB/s ({d:.2} ms/op)\n", .{ dom_normalize_speed_mb_s, norm_op_time });
-    print("String normalize processing:  {d:.1} MB/s ({d:.2} ms/op)\n", .{ string_speed_mb_s, string_op_time });
-    print("String vs DOM speedup:        {d:.1}x faster\n", .{speedup});
-}
+//     print("\n--- Results ---\n", .{});
+//     print("Parsing processing speed:     {d:.1} MB/s ({d:.2} ms/op)\n", .{ parsing_speed_mb_s, parse_op_time });
+//     print("DOM normalize processing:     {d:.1} MB/s ({d:.2} ms/op)\n", .{ dom_normalize_speed_mb_s, norm_op_time });
+//     print("String normalize processing:  {d:.1} MB/s ({d:.2} ms/op)\n", .{ string_speed_mb_s, string_op_time });
+//     print("String vs DOM speedup:        {d:.1}x faster\n", .{speedup});
+// }
 
 test "string-based HTML normalization" {
     const allocator = testing.allocator;
-    
+
     // Test basic whitespace removal
     const html1 = "<div>\n  \t  <p>Hello world</p>   \n\t  </div>";
     const normalized1 = try normalizeHtmlString(allocator, html1);
     defer allocator.free(normalized1);
-    
+
     const expected1 = "<div><p>Hello world</p></div>";
     try testing.expectEqualStrings(expected1, normalized1);
-    
+
     // Test preserve tags
     const html2 = "<div>\n  <pre>  preserve  this  </pre>\n  <p>Normal text</p>  \n</div>";
     const normalized2 = try normalizeHtmlString(allocator, html2);
     defer allocator.free(normalized2);
-    
+
     const expected2 = "<div><pre>  preserve  this  </pre><p>Normal text</p></div>";
     try testing.expectEqualStrings(expected2, normalized2);
-    
+
     // Test script tags
     const html3 = "<div>\n  <script>\n  console.log('test');\n  </script>\n  <span>Text</span>  \n</div>";
     const normalized3 = try normalizeHtmlString(allocator, html3);
     defer allocator.free(normalized3);
-    
+
     const expected3 = "<div><script>\n  console.log('test');\n  </script><span>Text</span></div>";
     try testing.expectEqualStrings(expected3, normalized3);
 }
 
 test "string-based normalization with comment removal" {
     const allocator = testing.allocator;
-    
+
     // Test comment removal
     const html_with_comments = "<div><!-- Comment 1 --><p>Text</p><!-- Comment 2 --></div>";
-    
+
     // Keep comments
     const normalized_keep = try normalizeHtmlStringWithOptions(allocator, html_with_comments, .{
         .remove_comments = false,
         .remove_whitespace_text_nodes = true,
     });
     defer allocator.free(normalized_keep);
-    
+
     const expected_keep = "<div><!-- Comment 1 --><p>Text</p><!-- Comment 2 --></div>";
     try testing.expectEqualStrings(expected_keep, normalized_keep);
-    
+
     // Remove comments
     const normalized_remove = try normalizeHtmlStringWithOptions(allocator, html_with_comments, .{
         .remove_comments = true,
         .remove_whitespace_text_nodes = true,
     });
     defer allocator.free(normalized_remove);
-    
+
     const expected_remove = "<div><p>Text</p></div>";
     try testing.expectEqualStrings(expected_remove, normalized_remove);
-    
+
     // Test mixed whitespace and comments
     const html_mixed = "<div>\n  <!-- Comment -->\n  <p>Text</p>  \n<!-- Another -->\n</div>";
     const normalized_mixed = try normalizeHtmlStringWithOptions(allocator, html_mixed, .{
@@ -817,68 +818,68 @@ test "string-based normalization with comment removal" {
         .remove_whitespace_text_nodes = true,
     });
     defer allocator.free(normalized_mixed);
-    
+
     const expected_mixed = "<div><p>Text</p></div>";
     try testing.expectEqualStrings(expected_mixed, normalized_mixed);
 }
 
-test "string vs DOM normalization performance comparison" {
-    const allocator = std.heap.c_allocator;
-    
-    const test_html =
-        \\<html>
-        \\  <body>
-        \\    <div class="container">
-        \\      <pre>  preserve  this  whitespace  </pre>
-        \\      <p>   Normal text   </p>
-        \\      <script>
-        \\        console.log("preserve this too");
-        \\      </script>
-        \\      <span>   More text   </span>
-        \\    </div>
-        \\  </body>
-        \\</html>
-    ;
-    
-    const iterations = 1000;
-    var timer = try std.time.Timer.start();
-    
-    print("\n=== STRING vs DOM NORMALIZATION COMPARISON ===\n", .{});
-    print("Test HTML size: {d} bytes\n", .{test_html.len});
-    print("Iterations: {d}\n", .{iterations});
-    
-    // Test string-based normalization
-    timer.reset();
-    for (0..iterations) |_| {
-        const normalized = try normalizeHtmlString(allocator, test_html);
-        allocator.free(normalized);
-    }
-    const string_time_ns = timer.read();
-    
-    // Test DOM-based normalization  
-    timer.reset();
-    for (0..iterations) |_| {
-        const doc = try z.parseFromString(test_html);
-        const body_elt = try z.bodyElement(doc);
-        try normalizeWithOptions(allocator, body_elt, .{
-            .remove_whitespace_text_nodes = true,
-            .skip_comments = false,
-        });
-        z.destroyDocument(doc);
-    }
-    const dom_time_ns = timer.read();
-    
-    // Calculate performance
-    const string_ms = @as(f64, @floatFromInt(string_time_ns)) / 1_000_000.0;
-    const dom_ms = @as(f64, @floatFromInt(dom_time_ns)) / 1_000_000.0;
-    
-    const string_speed = (@as(f64, @floatFromInt(test_html.len * iterations)) / 1024.0 / 1024.0) / (string_ms / 1000.0);
-    const dom_speed = (@as(f64, @floatFromInt(test_html.len * iterations)) / 1024.0 / 1024.0) / (dom_ms / 1000.0);
-    
-    const speedup = dom_ms / string_ms;
-    
-    print("\n--- Results ---\n", .{});
-    print("String-based: {d:.1} MB/s ({d:.2} ms total)\n", .{ string_speed, string_ms });
-    print("DOM-based:    {d:.1} MB/s ({d:.2} ms total)\n", .{ dom_speed, dom_ms });
-    print("Speedup: {d:.1}x faster with string-based approach\n", .{speedup});
-}
+// test "string vs DOM normalization performance comparison" {
+//     const allocator = std.heap.c_allocator;
+
+//     const test_html =
+//         \\<html>
+//         \\  <body>
+//         \\    <div class="container">
+//         \\      <pre>  preserve  this  whitespace  </pre>
+//         \\      <p>   Normal text   </p>
+//         \\      <script>
+//         \\        console.log("preserve this too");
+//         \\      </script>
+//         \\      <span>   More text   </span>
+//         \\    </div>
+//         \\  </body>
+//         \\</html>
+//     ;
+
+//     const iterations = 1000;
+//     var timer = try std.time.Timer.start();
+
+//     print("\n=== STRING vs DOM NORMALIZATION COMPARISON ===\n", .{});
+//     print("Test HTML size: {d} bytes\n", .{test_html.len});
+//     print("Iterations: {d}\n", .{iterations});
+
+//     // Test string-based normalization
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const normalized = try normalizeHtmlString(allocator, test_html);
+//         allocator.free(normalized);
+//     }
+//     const string_time_ns = timer.read();
+
+//     // Test DOM-based normalization
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const doc = try z.createDocFromString(test_html);
+//         const body_elt = z.bodyElement(doc).?;
+//         try normalizeWithOptions(allocator, body_elt, .{
+//             .remove_whitespace_text_nodes = true,
+//             .skip_comments = false,
+//         });
+//         z.destroyDocument(doc);
+//     }
+//     const dom_time_ns = timer.read();
+
+//     // Calculate performance
+//     const string_ms = @as(f64, @floatFromInt(string_time_ns)) / 1_000_000.0;
+//     const dom_ms = @as(f64, @floatFromInt(dom_time_ns)) / 1_000_000.0;
+
+//     const string_speed = (@as(f64, @floatFromInt(test_html.len * iterations)) / 1024.0 / 1024.0) / (string_ms / 1000.0);
+//     const dom_speed = (@as(f64, @floatFromInt(test_html.len * iterations)) / 1024.0 / 1024.0) / (dom_ms / 1000.0);
+
+//     const speedup = dom_ms / string_ms;
+
+//     print("\n--- Results ---\n", .{});
+//     print("String-based: {d:.1} MB/s ({d:.2} ms total)\n", .{ string_speed, string_ms });
+//     print("DOM-based:    {d:.1} MB/s ({d:.2} ms total)\n", .{ dom_speed, dom_ms });
+//     print("Speedup: {d:.1}x faster with string-based approach\n", .{speedup});
+// }

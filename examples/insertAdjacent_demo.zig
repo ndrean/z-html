@@ -32,7 +32,7 @@ pub fn main() !void {
     try z.insertAdjacentElement(target_node, .afterend, z.elementToNode(after_elem));
 
     // Show result after insertAdjacentElement
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const html1 = try z.outerHTML(allocator, body);
     defer allocator.free(html1);
     std.debug.print("After insertAdjacentElement:\n{s}\n\n", .{html1});

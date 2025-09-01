@@ -113,7 +113,7 @@ test "chunks1" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const children = try z.children(
         allocator,
         body,
@@ -170,7 +170,7 @@ test "chunk parsing comprehensive" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
 
     const children = try z.children(
         allocator,

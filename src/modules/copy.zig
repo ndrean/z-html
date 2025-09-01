@@ -59,9 +59,9 @@ pub fn removeOuterWhitespaceTextNodes(allocator: std.mem.Allocator, root_elt: *z
 
 test "removeOuterWhitespaceTextNodes" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p> Hello   <strong> World    </strong> \nand  <em> \twelcome   \nback</em></p>");
+    const doc = try z.createDocFromString("<p> Hello   <strong> World    </strong> \nand  <em> \twelcome   \nback</em></p>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     try removeOuterWhitespaceTextNodes(testing.allocator, z.nodeToElement(body).?);
     const inner = try z.innerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(inner);
@@ -510,10 +510,10 @@ test "normalize, context preservation, comments removed" {
         const allocator = testing.allocator;
         const html = "<div>\n  Some   more\n  text\n  <span> \t </span>\n<!-- a comment to be removed -->\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em><i>maybe</i>\n</div>\n";
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         // test: insert programmatically an empty ("\t") text node inside the <span>)
         const span = z.getElementByTag(z.elementToNode(body_elt), .span);
@@ -543,10 +543,10 @@ test "normalize, context preservation, comments removed" {
         const allocator = testing.allocator;
         const html = "<div>\n  Some   more\n  text\n  <span> \t </span>\n<!-- a comment to be removed -->\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em>\n</div>\n";
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
 
         try normalizeWithOptions(
             allocator,
@@ -586,7 +586,7 @@ test "template normalize" {
             \\</div>
         ;
 
-        const doc = try z.parseFromString(html);
+        const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
         const root = z.documentRoot(doc).?;
@@ -639,7 +639,7 @@ test "escape" {
     const allocator = testing.allocator;
 
     const html = "<script> console.log(\"hello\"); </script><div>Some <b>bold</b> text</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
     const root = z.documentRoot(doc).?;
@@ -735,10 +735,10 @@ test "normalize performance benchmark" {
     // Test current approach with buffer collections
     timer.reset();
     for (0..iterations) |_| {
-        const doc = try z.parseFromString(large_html);
+        const doc = try z.createDocFromString(large_html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
         try normalizeWithOptions(
             allocator,
             body_elt,
@@ -754,10 +754,10 @@ test "normalize performance benchmark" {
     // Test optimized approach with zero-copy slices
     timer.reset();
     for (0..iterations) |_| {
-        const doc = try z.parseFromString(large_html);
+        const doc = try z.createDocFromString(large_html);
         defer z.destroyDocument(doc);
 
-        const body_elt = try z.bodyElement(doc);
+        const body_elt = z.bodyElement(doc).?;
         try normalizeWithOptionsOptimized(
             allocator,
             body_elt,

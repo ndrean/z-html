@@ -18,7 +18,7 @@ extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void
 /// Caller owns the slice
 /// ## Example
 /// ```
-/// const doc = try z.parseFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
+/// const doc = try z.createDocFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
 /// const div = z.firstChild(try z.bodyNode(doc));
 /// const text = try textContent(allocator, div.?);
 /// defer allocator.free(text);
@@ -41,8 +41,8 @@ pub fn textContent(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
 
 test "textContent" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
-    const div = z.firstChild(try z.bodyNode(doc));
+    const doc = try z.createDocFromString("<div><p>I am <strong>bold</strong></p><p>and I am <em>italic</em></p></div>");
+    const div = z.firstChild(z.bodyNode(doc).?);
     const p = z.firstChild(div.?);
     const text = try textContent(allocator, p.?);
     defer allocator.free(text);
@@ -67,7 +67,7 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
 /// This **replaces** _any_ existing content, even empty. check `replaceText()` to modify existing text nodes.
 /// ## Example
 /// ```
-/// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+/// const doc = try z.createDocFromString("<p>Hello <strong>world</strong></p>");
 /// defer z.destroyDocument(doc);
 /// const p = firstChild(try bodyNode(doc));
 /// try setContentAsText(p.?, "Hi");
@@ -88,11 +88,11 @@ pub fn setContentAsText(node: *z.DomNode, content: []const u8) !void {
 
 test "setContentAsText" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p>Hello <strong>world</strong></p><p></p>");
+    const doc = try z.createDocFromString("<p>Hello <strong>world</strong></p><p></p>");
     defer z.destroyDocument(doc);
 
     // replace the inner content of an element with a new text node
-    const p1 = z.firstChild(try z.bodyNode(doc)).?;
+    const p1 = z.firstChild(z.bodyNode(doc).?).?;
     try testing.expect(z.isNodeEmpty(p1) == false);
     try testing.expect(z.tagFromElement(z.firstElementChild(z.nodeToElement(p1).?).?) == .strong);
     try setContentAsText(p1, "New text");
@@ -124,7 +124,7 @@ test "setContentAsText" {
 /// If `options.escape = true`, the text will be HTML-escaped before insertion.
 /// ## Example
 /// ```
-/// const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+/// const doc = try z.createDocFromString("<p>Hello <strong>world</strong></p>");
 /// defer z.destroyDocument(doc);
 /// const p = firstChild(try bodyNode(doc));
 /// const inner_text = firstChild(p.?);
@@ -164,10 +164,10 @@ pub fn replaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []cons
 
 test "replaceTextContent" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p>Hello <strong>world</strong></p>");
+    const doc = try z.createDocFromString("<p>Hello <strong>world</strong></p>");
     defer z.destroyDocument(doc);
 
-    const p = z.firstChild(try z.bodyNode(doc));
+    const p = z.firstChild(z.bodyNode(doc).?);
     const inner_text = z.firstChild(p.?);
     try testing.expectEqualStrings(z.textContent_zc(inner_text.?), "Hello ");
     try testing.expectEqualStrings(z.textContent_zc(p.?), "Hello world");
@@ -210,10 +210,10 @@ test "text content" {
     const allocator = testing.allocator;
 
     const html = "<p>Hello <strong>World</strong>!</p>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body);
     const p_node = z.firstChild(body_node).?;
     const text = try z.textContent(
@@ -237,10 +237,10 @@ test "text content" {
 test "getNodeTextContent" {
     const frag = "<p>First<span>Second</span></p><p>Third</p>";
     const allocator = std.testing.allocator;
-    const doc = try z.parseFromString(frag);
+    const doc = try z.createDocFromString(frag);
     defer z.destroyDocument(doc);
 
-    const body_element = try z.bodyElement(doc);
+    const body_element = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body_element);
 
     const first_child = z.firstChild(body_node);
@@ -272,9 +272,9 @@ test "gets all text elements from Fragment" {
     const fragment = "<div><p>First<span>Second</span></p><p>Third</p></div><div><ul><li>Fourth</li><li>Fifth</li></ul></div>";
 
     const allocator = testing.allocator;
-    const doc = try z.parseFromString(fragment);
+    const doc = try z.createDocFromString(fragment);
     defer z.destroyDocument(doc);
-    const body_element = try z.bodyElement(doc);
+    const body_element = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body_element);
     const text_content = try z.textContent(allocator, body_node);
     defer allocator.free(text_content);
@@ -356,10 +356,10 @@ pub fn commentContent_zc(comment: *z.Comment) []const u8 {
 
 test "first text content & comment" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<p>hello <em>italic</em></p><br/><!-- \tcomment -->");
+    const doc = try z.createDocFromString("<p>hello <em>italic</em></p><br/><!-- \tcomment -->");
 
     // text content of the P element
-    const p = z.firstChild(try z.bodyNode(doc));
+    const p = z.firstChild(z.bodyNode(doc).?);
     const p_text = try z.textContent(allocator, p.?);
     defer allocator.free(p_text);
     try testing.expectEqualStrings("hello italic", p_text);
@@ -391,10 +391,10 @@ test "first text content & comment" {
 }
 
 test "first set text content" {
-    const doc = try z.parseFromString("<p></p><span>first</span>");
+    const doc = try z.createDocFromString("<p></p><span>first</span>");
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
 
     const p = z.firstChild(body).?;
     const span = z.nextSibling(p).?;

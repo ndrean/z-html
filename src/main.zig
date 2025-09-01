@@ -83,15 +83,15 @@ fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, kb_size });
     print("Iterations: {d}\n", .{iterations});
 
-    // var  doc = try z.parseFromString(large_html);
+    // var  doc = try z.createDocFromString(large_html);
     var doc: *z.HTMLDocument = undefined;
     defer z.destroyDocument(doc);
 
     var timer = try std.time.Timer.start();
     timer.reset();
     for (0..iterations) |_| {
-        doc = try z.parseFromString(large_html);
-        const body_elt = try z.bodyElement(doc);
+        doc = try z.createDocFromString(large_html);
+        const body_elt = z.bodyElement(doc).?;
         _ = body_elt;
     }
     const parsing_time = @as(f64, @floatFromInt(timer.read()));
@@ -99,8 +99,8 @@ fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
     // Test DOM-based normalization
     timer.reset();
     for (0..iterations) |_| {
-        doc = try z.parseFromString(large_html);
-        const body_elt = try z.bodyElement(doc);
+        doc = try z.createDocFromString(large_html);
+        const body_elt = z.bodyElement(doc).?;
 
         try z.normalizeWithOptions(
             allocator,
@@ -296,7 +296,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
     // Test 1: [HTMLstring → DOM]
     timer.reset();
     for (0..iterations) |_| {
-        const doc = try z.parseFromString(large_html);
+        const doc = try z.createDocFromString(large_html);
         z.destroyDocument(doc);
     }
     const html_to_dom_time = timer.read();
@@ -308,16 +308,16 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
-        const doc = try z.parseFromString(normalized);
+        const doc = try z.createDocFromString(normalized);
         allocator.free(normalized);
         z.destroyDocument(doc);
     }
     _ = timer.read(); // norm_html_to_dom_time unused
 
     // Parse once for other tests
-    const doc = try z.parseFromString(large_html);
+    const doc = try z.createDocFromString(large_html);
     defer z.destroyDocument(doc);
-    const body_element = try z.bodyElement(doc);
+    const body_element = z.bodyElement(doc).?;
 
     // Test 2.b: [DOM -> Tuple]
     var tuple_v2_result: []u8 = undefined;
@@ -334,7 +334,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
     timer.reset();
     for (0..iterations) |i| {
         if (i > 0) allocator.free(tuple_v21_result);
-        const temp_doc = try z.parseFromString(large_html);
+        const temp_doc = try z.createDocFromString(large_html);
         const temp_body_element = try z.bodyElement(temp_doc);
 
         try z.normalizeWithOptions(
@@ -360,7 +360,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
-        const temp_doc = try z.parseFromString(normalized);
+        const temp_doc = try z.createDocFromString(normalized);
         allocator.free(normalized);
 
         tuple_v22_result = try tree.domToTupleString(allocator, temp_doc);
@@ -393,7 +393,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
 
     timer.reset();
     for (0..iterations) |_| {
-        const temp_doc = try z.parseFromString(normalized);
+        const temp_doc = try z.createDocFromString(normalized);
         const temp_body_element = try z.bodyElement(temp_doc);
         const serialized_html = try z.innerHTML(allocator, temp_body_element);
         allocator.free(serialized_html);
@@ -533,7 +533,7 @@ fn newNormalizeBencharmark(allocator: std.mem.Allocator) !void {
             \\          </ul>
             \\          
             \\          <div class="code-example">
-            \\            <pre><code>const html = parseFromString(input);
+            \\            <pre><code>const html = createDocFromString(input);
             \\const normalized = normalize(html);
             \\const tuple = domToTuple(normalized);</code></pre>
             \\          </div>
@@ -611,7 +611,7 @@ fn newNormalizeBencharmark(allocator: std.mem.Allocator) !void {
     timer.reset();
     var tuple_v0: []u8 = undefined;
     for (0..iterations) |i| {
-        const doc = try z.parseFromString(medium_html);
+        const doc = try z.createDocFromString(medium_html);
         defer z.destroyDocument(doc);
 
         if (i > 0) allocator.free(tuple_v0);
@@ -631,7 +631,7 @@ fn newNormalizeBencharmark(allocator: std.mem.Allocator) !void {
         defer allocator.free(normalized);
 
         // 2: Parse
-        const doc = try z.parseFromString(normalized);
+        const doc = try z.createDocFromString(normalized);
         defer z.destroyDocument(doc);
 
         // 3: to Tuple
@@ -646,7 +646,7 @@ fn newNormalizeBencharmark(allocator: std.mem.Allocator) !void {
     for (0..iterations) |i| {
         if (i > 0) allocator.free(final_html);
         final_html = try z.tupleStringToHtml(allocator, tuple_v_norm);
-        const doc = try z.parseFromString(final_html);
+        const doc = try z.createDocFromString(final_html);
         z.destroyDocument(doc);
     }
     const tuple2html2dom = timer.read();

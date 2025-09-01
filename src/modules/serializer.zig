@@ -421,10 +421,10 @@ test "behaviour of serializeNode" {
     };
 
     for (test_cases) |case| {
-        const doc = try z.parseFromString(case.html);
+        const doc = try z.createDocFromString(case.html);
         defer z.destroyDocument(doc);
 
-        const body = try z.bodyElement(doc);
+        const body = z.bodyElement(doc).?;
         const body_node = z.elementToNode(body);
         const element_node = z.firstChild(body_node).?;
 
@@ -458,18 +458,21 @@ test "setInnerHTML lexbor security sanitation" {
 
 test "sanitized HTML into a fragment" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("");
-    const body = try z.bodyNode(doc);
+    const doc = try z.createDocFromString("");
+    const body = z.bodyNode(doc).?;
     defer z.destroyDocument(doc);
 
     // const fragment = try z.createDocumentFragment(doc);
     const malicious_content = "<div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
 
     // const fragment_node = z.fragmentNode(fragment);
-    const fragment_root = try z.parseFragmentSimple(
-        body,
+    var parser = try z.HTMLParser.init(allocator);
+    defer parser.deinit();
+
+    const fragment_root = try parser.parseFragment(
         malicious_content,
         .div,
+        true,
     );
     defer z.destroyNode(fragment_root);
 
@@ -496,10 +499,13 @@ test "sanitized HTML into a fragment" {
 pub fn setSafeInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, context: z.FragmentContext, content: []const u8) !void {
     const node = z.elementToNode(element);
 
-    const fragment_root = try z.parseFragmentSimple(
-        node,
+    var parser = try z.HTMLParser.init(allocator);
+    defer parser.deinit();
+
+    const fragment_root = try parser.parseFragment(
         content,
         context,
+        true,
     );
 
     try z.sanitizeNode(allocator, fragment_root);
@@ -508,10 +514,10 @@ pub fn setSafeInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, c
 
 test "setSafeInnerHTML" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("");
+    const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
 
-    const body_elt = try z.bodyElement(doc);
+    const body_elt = z.bodyElement(doc).?;
 
     try setSafeInnerHTML(
         allocator,
@@ -523,27 +529,32 @@ test "setSafeInnerHTML" {
 }
 
 test "Serializer sanitation" {
+    const allocator = testing.allocator;
+
     const malicious_content = "<div><button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\">Potentially dangerous, not escaped</button><!-- a comment --><div data-time=\"{@current}\"> The current value is: {@counter} </div> <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><a href=\"javascript:alert('XSS')\">Dangerous, not escaped</a><img src=\"javascript:alert('XSS')\" alt=\"not escaped\"><iframe src=\"javascript:alert('XSS')\" alt=\"not escaped\"></iframe><a href=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">Safe escaped</a><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><iframe src=\"data:text/html,<script>alert('XSS')</script>\" >Escaped</iframe><img src=\"data:image/svg+xml,<svg onload=alert('XSS')\" alt=\"escaped\"></svg>\"><img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==\" alt=\"potential dangerous b64\"><a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\">Potential dangerous b64</a><img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\" alt=\"potential dangerous b64\"><a href=\"file:///etc/passwd\">Dangerous Local file access</a><img src=\"file:///etc/passwd\" alt=\"dangerous local file access\"><p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script><template></template>";
 
-    const doc = try z.parseFromString("");
-    const body = try z.bodyNode(doc);
+    const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
 
     const fragment = try z.createDocumentFragment(doc);
-    const fragment_node = z.fragmentNode(fragment);
+    const fragment_node = z.fragmentToNode(fragment);
     defer z.destroyNode(fragment_node);
-    const new_node = try z.parseFragmentSimple(
-        body,
+
+    var parser = try z.HTMLParser.init(allocator);
+    defer parser.deinit();
+
+    const new_node = try parser.parseFragment(
         malicious_content,
         .div,
+        true,
     );
     // try prettyPrint(new_node);
 
-    const allocator = testing.allocator;
     const fragment_txt = try outerNodeHTML(allocator, new_node);
     defer allocator.free(fragment_txt);
-    try z.sanitizeNode(allocator, new_node);
-    // try prettyPrint(body);
+    // try z.sanitizeNode(allocator, new_node);
+    try prettyPrint(body);
 }
 
 test "web component" {

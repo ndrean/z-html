@@ -332,7 +332,7 @@ pub const HtmlParserEngine = struct {
 
         // Sanitize if configured
         if (self.sanitize_on_parse) {
-            try self.sanitizeNode(fragment_root);
+            try z.sanitizeNode(fragment_root);
         }
 
         // Cache the result
@@ -350,24 +350,24 @@ pub const HtmlParserEngine = struct {
         return fragment_root;
     }
 
-    /// Helper to sanitize a node and its children
-    fn sanitizeNode(self: *Self, node: *z.DomNode) !void {
-        if (z.nodeToElement(node)) |element| {
-            try z.sanitizeWithOptions(
-                self.allocator,
-                element,
-                self.sanitizer_options,
-            );
-        }
+    // Helper to sanitize a node and its children
+    // fn sanitizeNode(self: *Self, node: *z.DomNode) !void {
+    //     if (z.nodeToElement(node)) |element| {
+    //         try z.sanitizeWithOptions(
+    //             self.allocator,
+    //             element,
+    //             self.sanitizer_options,
+    //         );
+    //     }
 
-        // Recursively sanitize children
-        var child = z.firstChild(node);
-        while (child != null) {
-            const next = z.nextSibling(child.?);
-            try self.sanitizeNode(child.?);
-            child = next;
-        }
-    }
+    //     // Recursively sanitize children
+    //     var child = z.firstChild(node);
+    //     while (child != null) {
+    //         const next = z.nextSibling(child.?);
+    //         try self.sanitizeNode(child.?);
+    //         child = next;
+    //     }
+    // }
 
     /// High-performance innerHTML using cached fragments
     pub fn setInnerHTMLCached(
@@ -597,7 +597,7 @@ test "security policies comparison" {
         const doc = try strict_engine.parseDocument(dangerous_html);
         defer z.destroyDocument(doc);
 
-        const body = try z.bodyElement(doc);
+        const body = z.bodyElement(doc).?;
         const result = try z.innerHTML(allocator, body);
         defer allocator.free(result);
 
@@ -619,7 +619,7 @@ test "security policies comparison" {
         const doc = try parser_engine.parseDocument(dangerous_html);
         defer z.destroyDocument(doc);
 
-        const body = try z.bodyElement(doc);
+        const body = z.bodyElement(doc).?;
         const result = try z.innerHTML(allocator, body);
         defer allocator.free(result);
 
@@ -642,7 +642,7 @@ test "security policies comparison" {
         const doc = try parser_only_engine.parseDocument(dangerous_html);
         defer z.destroyDocument(doc);
 
-        const body = try z.bodyElement(doc);
+        const body = z.bodyElement(doc).?;
         const result = try z.innerHTML(allocator, body);
         defer allocator.free(result);
 

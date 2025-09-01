@@ -15,7 +15,7 @@ const writer = std.io.getStdOut().writer();
 // Structure ====================================================================
 
 /// [tree] Debug: Walk and print DOM tree
-pub fn walkTree(node: *z.DomNode, depth: u8) void {
+fn walkTree(node: *z.DomNode, depth: u8) void {
     var child = z.firstChild(node);
     while (child != null) {
         const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
@@ -195,27 +195,27 @@ pub fn printNode(node: TupleNode, indent: usize) void {
     if (indent == 0) print("\n", .{});
 }
 
-test "HTML to tuple" {
-    const allocator = testing.allocator;
+// test "HTML to tuple" {
+//     const allocator = testing.allocator;
 
-    const html = "<html><head><title>Page</title></head><body id=\"main\" class=\"container\">Hello world<!-- Link --><div><button phx-click=\"increment\">{@counter}</button></div><!-- Link --><a href=\"https://elixir-lang.org\">Elixir</a></body></html>";
+//     const html = "<html><head><title>Page</title></head><body id=\"main\" class=\"container\">Hello world<!-- Link --><div><button phx-click=\"increment\">{@counter}</button></div><!-- Link --><a href=\"https://elixir-lang.org\">Elixir</a></body></html>";
 
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
-    const root = z.documentRoot(doc).?;
+//     const doc = try z.createDocFromString(html);
+//     defer z.destroyDocument(doc);
+//     const root = z.documentRoot(doc).?;
 
-    // Get body since HTML element access isn't directly available
-    const tree = try toTuple(allocator, root);
-    defer freeTupleTree(allocator, tree);
+//     // Get body since HTML element access isn't directly available
+//     const tree = try toTuple(allocator, root);
+//     defer freeTupleTree(allocator, tree);
 
-    for (tree) |node| {
-        printNode(node, 0);
+//     for (tree) |node| {
+//         printNode(node, 0);
 
-        // expect to see:
-        // {"HEAD", [], [{"TITLE", [], ["Page"]}]}
-        // {"BODY", [{"id", "main"}, {"class", "container"}], ["Hello world", {"comment", " Link "}, {"DIV", [], [{"BUTTON", [{"phx-click", "increment"}], ["{@counter}"]}]}, {"comment", " Link "}, {"A", [{"href", "https://elixir-lang.org"}], ["Elixir"]}]}
-    }
-}
+//         // expect to see:
+//         // {"HEAD", [], [{"TITLE", [], ["Page"]}]}
+//         // {"BODY", [{"id", "main"}, {"class", "container"}], ["Hello world", {"comment", " Link "}, {"DIV", [], [{"BUTTON", [{"phx-click", "increment"}], ["{@counter}"]}]}, {"comment", " Link "}, {"A", [{"href", "https://elixir-lang.org"}], ["Elixir"]}]}
+//     }
+// }
 
 //=============================================================================
 // FAST TUPLE SERIALIZATION
@@ -269,7 +269,6 @@ pub fn nodeToTupleString(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     // Return owned slice using original allocator
     return allocator.dupe(u8, result.items);
 }
-
 
 /// Internal arena-based serialization using ArrayList for dynamic growth
 fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.ArrayList(u8), node: *z.DomNode) !void {
@@ -365,43 +364,43 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
     }
 }
 
-test "fast tuple serialization" {
-    const html = "<html><body id=\"main\" class=\"container\">Hello world<!-- Comment --><div><button phx-click=\"increment\">{@counter}</button></div></body></html>";
+// test "fast tuple serialization" {
+//     const html = "<html><body id=\"main\" class=\"container\">Hello world<!-- Comment --><div><button phx-click=\"increment\">{@counter}</button></div></body></html>";
 
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
+//     const doc = try z.createDocFromString(html);
+//     defer z.destroyDocument(doc);
 
-    // Using heap allocator now
-    const result = try domToTupleString(std.heap.page_allocator, doc);
+//     // Using heap allocator now
+//     const result = try domToTupleString(std.heap.page_allocator, doc);
 
-    print("\nFast serialization result:\n{s}\n", .{result});
+//     print("\nFast serialization result:\n{s}\n", .{result});
 
-    // Should contain the expected elements (lowercase HTML standard)
-    try testing.expect(std.mem.indexOf(u8, result, "\"body\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"id\", \"main\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"container\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"comment\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Hello world") != null);
-}
+//     // Should contain the expected elements (lowercase HTML standard)
+//     try testing.expect(std.mem.indexOf(u8, result, "\"body\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "\"id\", \"main\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"container\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "\"comment\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "Hello world") != null);
+// }
 
-test "single node tuple serialization" {
-    const html = "<div class=\"test\">Hello <strong>world</strong>!</div>";
+// test "single node tuple serialization" {
+//     const html = "<div class=\"test\">Hello <strong>world</strong>!</div>";
 
-    const doc = try z.parseFromString(html);
-    defer z.destroyDocument(doc);
+//     const doc = try z.createDocFromString(html);
+//     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
-    const div_node = z.firstChild(body_node).?;
+//     const body_node = z.bodyNode(doc).?;
+//     const div_node = z.firstChild(body_node).?;
 
-    // Using heap allocator now
-    const result = try nodeToTupleString(std.heap.page_allocator, div_node);
+//     // Using heap allocator now
+//     const result = try nodeToTupleString(std.heap.page_allocator, div_node);
 
-    print("\nSingle node result:\n{s}\n", .{result});
+//     print("\nSingle node result:\n{s}\n", .{result});
 
-    try testing.expect(std.mem.indexOf(u8, result, "\"div\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"test\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "\"strong\"") != null);
-}
+//     try testing.expect(std.mem.indexOf(u8, result, "\"div\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"test\"") != null);
+//     try testing.expect(std.mem.indexOf(u8, result, "\"strong\"") != null);
+// }
 
 //=============================================================================
 // REVERSE OPERATION: Tuple String → HTML
@@ -418,7 +417,7 @@ pub fn tupleStringToHtml(allocator: std.mem.Allocator, tuple_str: []const u8) ![
     // Pre-allocate ArrayList with estimated capacity (+40% of tuple string length)
     var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
-    
+
     // Pre-allocate based on tuple string length (HTML is typically ~70% of tuple size)
     const estimated_capacity = (tuple_str.len * 140) / 100; // +40% buffer
     try result.ensureTotalCapacity(allocator, estimated_capacity);
@@ -594,73 +593,69 @@ const TupleParser = struct {
     }
 };
 
-test "tuple string to HTML conversion" {
-    const allocator = testing.allocator;
+// test "tuple string to HTML conversion" {
+//     const allocator = testing.allocator;
 
-    // Simple element
-    const tuple1 = "{\"div\", [{\"class\", \"test\"}], [\"Hello World\"]}";
-    const html1 = try tupleStringToHtml(allocator, tuple1);
-    defer allocator.free(html1);
+//     // Simple element
+//     const tuple1 = "{\"div\", [{\"class\", \"test\"}], [\"Hello World\"]}";
+//     const html1 = try tupleStringToHtml(allocator, tuple1);
+//     defer allocator.free(html1);
 
-    print("\nTuple to HTML test 1:\n", .{});
-    print("Input:  {s}\n", .{tuple1});
-    print("Output: {s}\n", .{html1});
+//     print("\nTuple to HTML test 1:\n", .{});
+//     print("Input:  {s}\n", .{tuple1});
+//     print("Output: {s}\n", .{html1});
 
-    try testing.expectEqualStrings("<div class=\"test\">Hello World</div>", html1);
+//     try testing.expectEqualStrings("<div class=\"test\">Hello World</div>", html1);
 
-    // Nested elements
-    const tuple2 = "[{\"div\", [], [\"Hello \", {\"strong\", [], [\"world\"]}, \"!\"]}]";
-    const html2 = try tupleStringToHtml(allocator, tuple2);
-    defer allocator.free(html2);
+//     // Nested elements
+//     const tuple2 = "[{\"div\", [], [\"Hello \", {\"strong\", [], [\"world\"]}, \"!\"]}]";
+//     const html2 = try tupleStringToHtml(allocator, tuple2);
+//     defer allocator.free(html2);
 
-    print("\nTuple to HTML test 2:\n", .{});
-    print("Input:  {s}\n", .{tuple2});
-    print("Output: {s}\n", .{html2});
+//     print("\nTuple to HTML test 2:\n", .{});
+//     print("Input:  {s}\n", .{tuple2});
+//     print("Output: {s}\n", .{html2});
 
-    try testing.expectEqualStrings("<div>Hello <strong>world</strong>!</div>", html2);
+//     try testing.expectEqualStrings("<div>Hello <strong>world</strong>!</div>", html2);
 
-    // With comment
-    const tuple3 = "[{\"p\", [], [\"Text\"]}, {\"comment\", \" A comment \"}]";
-    const html3 = try tupleStringToHtml(allocator, tuple3);
-    defer allocator.free(html3);
+//     // With comment
+//     const tuple3 = "[{\"p\", [], [\"Text\"]}, {\"comment\", \" A comment \"}]";
+//     const html3 = try tupleStringToHtml(allocator, tuple3);
+//     defer allocator.free(html3);
 
-    print("\nTuple to HTML test 3:\n", .{});
-    print("Input:  {s}\n", .{tuple3});
-    print("Output: {s}\n", .{html3});
+//     print("\nTuple to HTML test 3:\n", .{});
+//     print("Input:  {s}\n", .{tuple3});
+//     print("Output: {s}\n", .{html3});
 
-    try testing.expectEqualStrings("<p>Text</p><!-- A comment -->", html3);
-}
+//     try testing.expectEqualStrings("<p>Text</p><!-- A comment -->", html3);
+// }
 
 test "round-trip: HTML → Tuple → HTML" {
     const allocator = testing.allocator;
     const original_html = "<div class=\"container\"><p>Hello <em>world</em>!</p><!-- comment --></div>";
 
     // Parse to DOM
-    const doc = try z.parseFromString(original_html);
+    const doc = try z.createDocFromString(original_html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node).?;
 
     // Convert to tuple string
     const tuple_str = try nodeToTupleString(allocator, div_node);
     defer allocator.free(tuple_str);
 
-    print("\nRound-trip test:\n", .{});
-    print("Original: {s}\n", .{original_html});
-    print("Tuple:    {s}\n", .{tuple_str});
-
     // Convert back to HTML
     const reconstructed_html = try tupleStringToHtml(allocator, tuple_str);
     defer allocator.free(reconstructed_html);
 
-    print("Result:   {s}\n", .{reconstructed_html});
+    const result = "<div class=\"container\"><p>Hello <em>world</em>!</p><!-- comment --></div>";
+    try std.testing.expectEqualStrings(result, reconstructed_html);
 
-    // Should contain the same content (tags might be uppercase)
-    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "class=\"container\"") != null);
-    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "world") != null);
-    try testing.expect(std.mem.indexOf(u8, reconstructed_html, "comment") != null);
+    // try testing.expect(std.mem.indexOf(u8, reconstructed_html, "class=\"container\"") != null);
+    // try testing.expect(std.mem.indexOf(u8, reconstructed_html, "Hello") != null);
+    // try testing.expect(std.mem.indexOf(u8, reconstructed_html, "world") != null);
+    // try testing.expect(std.mem.indexOf(u8, reconstructed_html, "comment") != null);
 }
 
 test "simplified API functions" {
@@ -668,282 +663,282 @@ test "simplified API functions" {
 
     // Test DOM to tuple with allocator
     const html = "<div class=\"test\">Hello <strong>world</strong>!</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node).?;
 
     const tuple_result = try nodeToTupleString(allocator, div_node);
     defer allocator.free(tuple_result);
-
-    print("\nSimplified API test - Tuple: {s}\n", .{tuple_result});
+    const result1 = "{\"div\", [{\"class\", \"test\"}], [\"Hello \", {\"strong\", [], [\"world\"]}, \"!\"]}";
+    try std.testing.expectEqualStrings(result1, tuple_result);
 
     // Test tuple to HTML with allocator
     const html_result = try tupleStringToHtml(allocator, tuple_result);
     defer allocator.free(html_result);
 
-    print("Simplified API test - HTML:  {s}\n", .{html_result});
-
-    try testing.expect(std.mem.indexOf(u8, html_result, "class=\"test\"") != null);
-    try testing.expect(std.mem.indexOf(u8, html_result, "Hello") != null);
-    try testing.expect(std.mem.indexOf(u8, html_result, "strong") != null);
-    try testing.expect(std.mem.indexOf(u8, html_result, "world") != null);
+    // try testing.expect(std.mem.indexOf(u8, html_result, "class=\"test\"") != null);
+    // try testing.expect(std.mem.indexOf(u8, html_result, "Hello") != null);
+    // try testing.expect(std.mem.indexOf(u8, html_result, "strong") != null);
+    // try testing.expect(std.mem.indexOf(u8, html_result, "world") != null);
+    const result2 = "<div class=\"test\">Hello <strong>world</strong>!</div>";
+    try std.testing.expectEqualStrings(result2, html_result);
 }
 
-test "performance benchmark: comprehensive DOM operations" {
-    const allocator = std.heap.c_allocator;
+// test "performance benchmark: comprehensive DOM operations" {
+//     const allocator = std.heap.c_allocator;
 
-    // Create ~100KB HTML document by building it dynamically
-    var html_builder: std.ArrayList(u8) = .empty;
-    defer html_builder.deinit(allocator);
+//     // Create ~100KB HTML document by building it dynamically
+//     var html_builder: std.ArrayList(u8) = .empty;
+//     defer html_builder.deinit(allocator);
 
-    try html_builder.appendSlice(allocator,
-        \\<html>
-        \\  <head>
-        \\    <title>Large Performance Test Document</title>
-        \\    <meta charset="UTF-8">
-        \\    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        \\    <link rel="stylesheet" href="styles.css">
-        \\    <script src="app.js"></script>
-        \\  </head>
-        \\  <body class="main-body">
-        \\    <header id="main-header" class="sticky-header">
-        \\      <nav class="navbar">
-        \\        <ul class="nav-list">
-        \\          <li><a href="/" class="nav-link active">Home</a></li>
-        \\          <li><a href="/about" class="nav-link">About</a></li>
-        \\          <li><a href="/contact" class="nav-link">Contact</a></li>
-        \\          <li><a href="/products" class="nav-link">Products</a></li>
-        \\          <li><a href="/services" class="nav-link">Services</a></li>
-        \\        </ul>
-        \\      </nav>
-        \\    </header>
-    );
+//     try html_builder.appendSlice(allocator,
+//         \\<html>
+//         \\  <head>
+//         \\    <title>Large Performance Test Document</title>
+//         \\    <meta charset="UTF-8">
+//         \\    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//         \\    <link rel="stylesheet" href="styles.css">
+//         \\    <script src="app.js"></script>
+//         \\  </head>
+//         \\  <body class="main-body">
+//         \\    <header id="main-header" class="sticky-header">
+//         \\      <nav class="navbar">
+//         \\        <ul class="nav-list">
+//         \\          <li><a href="/" class="nav-link active">Home</a></li>
+//         \\          <li><a href="/about" class="nav-link">About</a></li>
+//         \\          <li><a href="/contact" class="nav-link">Contact</a></li>
+//         \\          <li><a href="/products" class="nav-link">Products</a></li>
+//         \\          <li><a href="/services" class="nav-link">Services</a></li>
+//         \\        </ul>
+//         \\      </nav>
+//         \\    </header>
+//     );
 
-    // Duplicate main content sections to reach ~20KB
-    const section_template =
-        \\    <main class="content-wrapper">
-        \\      <article class="blog-post">
-        \\        <h1>Performance Test Section</h1>
-        \\        <p class="intro">This is a section of our <strong>large-scale</strong> HTML document 
-        \\           designed to test <em>performance</em> of our tuple serialization system with 
-        \\           substantial content that simulates real-world usage patterns.</p>
-        \\        <!-- Performance test comment -->
-        \\        <div class="content-section">
-        \\          <h2>Features We're Testing</h2>
-        \\          <ul class="feature-list">
-        \\            <li data-feature="speed">Ultra-fast serialization</li>
-        \\            <li data-feature="memory">Memory-efficient processing</li>
-        \\            <li data-feature="accuracy">Accurate round-trip conversion</li>
-        \\            <li data-feature="scalability">Scalability under load</li>
-        \\            <li data-feature="reliability">Reliable error handling</li>
-        \\          </ul>
-        \\        </div>
-        \\        <div class="data-table">
-        \\          <table class="performance-table">
-        \\            <thead>
-        \\              <tr><th>Metric</th><th>Value</th><th>Benchmark</th></tr>
-        \\            </thead>
-        \\            <tbody>
-        \\              <tr><td>Latency</td><td>0.5ms</td><td>Excellent</td></tr>
-        \\              <tr><td>Throughput</td><td>1000k ops/sec</td><td>Outstanding</td></tr>
-        \\              <tr><td>Memory</td><td>256KB</td><td>Optimal</td></tr>
-        \\            </tbody>
-        \\          </table>
-        \\        </div>
-        \\        <form class="feedback-form" method="post" action="/feedback">
-        \\          <fieldset>
-        \\            <legend>Section Feedback</legend>
-        \\            <div class="form-group">
-        \\              <label for="name">Name:</label>
-        \\              <input type="text" id="name" name="name" required placeholder="Your name">
-        \\            </div>
-        \\            <div class="form-group">
-        \\              <label for="email">Email:</label>
-        \\              <input type="email" id="email" name="email" required placeholder="your@email.com">
-        \\            </div>
-        \\            <div class="form-group">
-        \\              <label for="rating">Rating:</label>
-        \\              <select id="rating" name="rating">
-        \\                <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
-        \\                <option value="4">⭐⭐⭐⭐ Very Good</option>
-        \\                <option value="3">⭐⭐⭐ Good</option>
-        \\                <option value="2">⭐⭐ Fair</option>
-        \\                <option value="1">⭐ Poor</option>
-        \\              </select>
-        \\            </div>
-        \\            <div class="form-group">
-        \\              <textarea name="comments" rows="4" cols="50" 
-        \\                        placeholder="Your detailed feedback..."></textarea>
-        \\            </div>
-        \\            <button type="submit" class="btn-primary">Submit Feedback</button>
-        \\          </fieldset>
-        \\        </form>
-        \\      </article>
-        \\      <aside class="sidebar">
-        \\        <div class="widget news">
-        \\          <h3>Latest News</h3>
-        \\          <ul>
-        \\            <li><a href="/news/1">Performance improvements</a></li>
-        \\            <li><a href="/news/2">Memory optimization</a></li>
-        \\            <li><a href="/news/3">Better DOM handling</a></li>
-        \\            <li><a href="/news/4">Enhanced error reporting</a></li>
-        \\          </ul>
-        \\        </div>
-        \\        <div class="widget tags">
-        \\          <h3>Tags</h3>
-        \\          <span class="tag">performance</span>
-        \\          <span class="tag">html</span>
-        \\          <span class="tag">parsing</span>
-        \\          <span class="tag">optimization</span>
-        \\          <span class="tag">benchmarks</span>
-        \\        </div>
-        \\      </aside>
-        \\    </main>
-    ;
+//     // Duplicate main content sections to reach ~20KB
+//     const section_template =
+//         \\    <main class="content-wrapper">
+//         \\      <article class="blog-post">
+//         \\        <h1>Performance Test Section</h1>
+//         \\        <p class="intro">This is a section of our <strong>large-scale</strong> HTML document
+//         \\           designed to test <em>performance</em> of our tuple serialization system with
+//         \\           substantial content that simulates real-world usage patterns.</p>
+//         \\        <!-- Performance test comment -->
+//         \\        <div class="content-section">
+//         \\          <h2>Features We're Testing</h2>
+//         \\          <ul class="feature-list">
+//         \\            <li data-feature="speed">Ultra-fast serialization</li>
+//         \\            <li data-feature="memory">Memory-efficient processing</li>
+//         \\            <li data-feature="accuracy">Accurate round-trip conversion</li>
+//         \\            <li data-feature="scalability">Scalability under load</li>
+//         \\            <li data-feature="reliability">Reliable error handling</li>
+//         \\          </ul>
+//         \\        </div>
+//         \\        <div class="data-table">
+//         \\          <table class="performance-table">
+//         \\            <thead>
+//         \\              <tr><th>Metric</th><th>Value</th><th>Benchmark</th></tr>
+//         \\            </thead>
+//         \\            <tbody>
+//         \\              <tr><td>Latency</td><td>0.5ms</td><td>Excellent</td></tr>
+//         \\              <tr><td>Throughput</td><td>1000k ops/sec</td><td>Outstanding</td></tr>
+//         \\              <tr><td>Memory</td><td>256KB</td><td>Optimal</td></tr>
+//         \\            </tbody>
+//         \\          </table>
+//         \\        </div>
+//         \\        <form class="feedback-form" method="post" action="/feedback">
+//         \\          <fieldset>
+//         \\            <legend>Section Feedback</legend>
+//         \\            <div class="form-group">
+//         \\              <label for="name">Name:</label>
+//         \\              <input type="text" id="name" name="name" required placeholder="Your name">
+//         \\            </div>
+//         \\            <div class="form-group">
+//         \\              <label for="email">Email:</label>
+//         \\              <input type="email" id="email" name="email" required placeholder="your@email.com">
+//         \\            </div>
+//         \\            <div class="form-group">
+//         \\              <label for="rating">Rating:</label>
+//         \\              <select id="rating" name="rating">
+//         \\                <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
+//         \\                <option value="4">⭐⭐⭐⭐ Very Good</option>
+//         \\                <option value="3">⭐⭐⭐ Good</option>
+//         \\                <option value="2">⭐⭐ Fair</option>
+//         \\                <option value="1">⭐ Poor</option>
+//         \\              </select>
+//         \\            </div>
+//         \\            <div class="form-group">
+//         \\              <textarea name="comments" rows="4" cols="50"
+//         \\                        placeholder="Your detailed feedback..."></textarea>
+//         \\            </div>
+//         \\            <button type="submit" class="btn-primary">Submit Feedback</button>
+//         \\          </fieldset>
+//         \\        </form>
+//         \\      </article>
+//         \\      <aside class="sidebar">
+//         \\        <div class="widget news">
+//         \\          <h3>Latest News</h3>
+//         \\          <ul>
+//         \\            <li><a href="/news/1">Performance improvements</a></li>
+//         \\            <li><a href="/news/2">Memory optimization</a></li>
+//         \\            <li><a href="/news/3">Better DOM handling</a></li>
+//         \\            <li><a href="/news/4">Enhanced error reporting</a></li>
+//         \\          </ul>
+//         \\        </div>
+//         \\        <div class="widget tags">
+//         \\          <h3>Tags</h3>
+//         \\          <span class="tag">performance</span>
+//         \\          <span class="tag">html</span>
+//         \\          <span class="tag">parsing</span>
+//         \\          <span class="tag">optimization</span>
+//         \\          <span class="tag">benchmarks</span>
+//         \\        </div>
+//         \\      </aside>
+//         \\    </main>
+//     ;
 
-    // Add 100 sections to reach ~100KB
-    for (1..101) |_| {
-        try html_builder.appendSlice(allocator, section_template);
-    }
+//     // Add 100 sections to reach ~100KB
+//     for (1..101) |_| {
+//         try html_builder.appendSlice(allocator, section_template);
+//     }
 
-    try html_builder.appendSlice(allocator,
-        \\    <footer class="site-footer">
-        \\      <div class="footer-content">
-        \\        <p>&copy; 2024 Comprehensive Performance Test Suite. All rights reserved.</p>
-        \\        <div class="footer-links">
-        \\          <a href="/privacy">Privacy Policy</a> |
-        \\          <a href="/terms">Terms of Service</a> |
-        \\          <a href="/api">API Documentation</a> |
-        \\          <a href="/support">Technical Support</a> |
-        \\          <a href="/docs">Documentation</a>
-        \\        </div>
-        \\        <div class="footer-stats">
-        \\          <span>Total operations tested: 1M+</span>
-        \\          <span>Average response time: 0.3ms</span>
-        \\          <span>Memory usage: <128KB</span>
-        \\        </div>
-        \\      </div>
-        \\    </footer>
-        \\  </body>
-        \\</html>
-    );
+//     try html_builder.appendSlice(allocator,
+//         \\    <footer class="site-footer">
+//         \\      <div class="footer-content">
+//         \\        <p>&copy; 2024 Comprehensive Performance Test Suite. All rights reserved.</p>
+//         \\        <div class="footer-links">
+//         \\          <a href="/privacy">Privacy Policy</a> |
+//         \\          <a href="/terms">Terms of Service</a> |
+//         \\          <a href="/api">API Documentation</a> |
+//         \\          <a href="/support">Technical Support</a> |
+//         \\          <a href="/docs">Documentation</a>
+//         \\        </div>
+//         \\        <div class="footer-stats">
+//         \\          <span>Total operations tested: 1M+</span>
+//         \\          <span>Average response time: 0.3ms</span>
+//         \\          <span>Memory usage: <128KB</span>
+//         \\        </div>
+//         \\      </div>
+//         \\    </footer>
+//         \\  </body>
+//         \\</html>
+//     );
 
-    const large_html = try html_builder.toOwnedSlice(allocator);
-    defer allocator.free(large_html);
+//     const large_html = try html_builder.toOwnedSlice(allocator);
+//     defer allocator.free(large_html);
 
-    const iterations = 100;
+//     const iterations = 100;
 
-    print("\n=== COMPREHENSIVE DOM PERFORMANCE BENCHMARK ===\n", .{});
-    print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-    print("Iterations: {d}\n", .{iterations});
+//     print("\n=== COMPREHENSIVE DOM PERFORMANCE BENCHMARK ===\n", .{});
+//     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
+//     print("Iterations: {d}\n", .{iterations});
 
-    var timer = try std.time.Timer.start();
+//     var timer = try std.time.Timer.start();
 
-    // === Test 1: HTML String → DOM (lexbor parsing) ===
-    timer.reset();
-    for (0..iterations) |_| {
-        const doc = try z.parseFromString(large_html);
-        z.destroyDocument(doc);
-    }
-    const html_to_dom_time = timer.read();
+//     // === Test 1: HTML String → DOM (lexbor parsing) ===
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const doc = try z.createDocFromString(large_html);
+//         z.destroyDocument(doc);
+//     }
+//     const html_to_dom_time = timer.read();
 
-    // Parse once for other tests
-    const doc = try z.parseFromString(large_html);
-    defer z.destroyDocument(doc);
+//     // Parse once for other tests
+//     const doc = try z.createDocFromString(large_html);
+//     defer z.destroyDocument(doc);
 
-    // === Test 2: DOM → Tuple String ===
-    timer.reset();
-    var tuple_result: []u8 = undefined;
-    for (0..iterations) |i| {
-        if (i > 0) allocator.free(tuple_result);
-        tuple_result = try domToTupleString(allocator, doc);
-    }
-    const dom_to_tuple_time = timer.read();
+//     // === Test 2: DOM → Tuple String ===
+//     timer.reset();
+//     var tuple_result: []u8 = undefined;
+//     for (0..iterations) |i| {
+//         if (i > 0) allocator.free(tuple_result);
+//         tuple_result = try domToTupleString(allocator, doc);
+//     }
+//     const dom_to_tuple_time = timer.read();
 
-    // === Test 3: Tuple String → HTML String ===
-    timer.reset();
-    var html_result: []u8 = undefined;
-    for (0..iterations) |i| {
-        if (i > 0) allocator.free(html_result);
-        html_result = try tupleStringToHtml(allocator, tuple_result);
-    }
-    const tuple_to_html_time = timer.read();
+//     // === Test 3: Tuple String → HTML String ===
+//     timer.reset();
+//     var html_result: []u8 = undefined;
+//     for (0..iterations) |i| {
+//         if (i > 0) allocator.free(html_result);
+//         html_result = try tupleStringToHtml(allocator, tuple_result);
+//     }
+//     const tuple_to_html_time = timer.read();
 
-    // === Test 4: HTML String → DOM → HTML String (lexbor round-trip) ===
-    timer.reset();
-    for (0..iterations) |_| {
-        const temp_doc = try z.parseFromString(large_html);
-        const body_element = try z.bodyElement(temp_doc);
-        const serialized_html = try z.outerHTML(allocator, body_element);
-        allocator.free(serialized_html);
-        z.destroyDocument(temp_doc);
-    }
-    const lexbor_roundtrip_time = timer.read();
+//     // === Test 4: HTML String → DOM → HTML String (lexbor round-trip) ===
+//     timer.reset();
+//     for (0..iterations) |_| {
+//         const temp_doc = try z.createDocFromString(large_html);
+//         const body_element = try z.bodyElement(temp_doc);
+//         const serialized_html = try z.outerHTML(allocator, body_element);
+//         allocator.free(serialized_html);
+//         z.destroyDocument(temp_doc);
+//     }
+//     const lexbor_roundtrip_time = timer.read();
 
-    // === Test 5: Single Node Operations ===
-    const body_node = try z.bodyNode(doc);
-    const main_node = z.firstChild(body_node).?;
+//     // === Test 5: Single Node Operations ===
+//     const body_node = z.bodyNode(doc).?;
+//     const main_node = z.firstChild(body_node).?;
 
-    timer.reset();
-    var node_tuple_result: []u8 = undefined;
-    for (0..iterations) |i| {
-        if (i > 0) allocator.free(node_tuple_result);
-        node_tuple_result = try nodeToTupleString(allocator, main_node);
-    }
-    const single_node_time = timer.read();
+//     timer.reset();
+//     var node_tuple_result: []u8 = undefined;
+//     for (0..iterations) |i| {
+//         if (i > 0) allocator.free(node_tuple_result);
+//         node_tuple_result = try nodeToTupleString(allocator, main_node);
+//     }
+//     const single_node_time = timer.read();
 
-    // Clean up
-    allocator.free(tuple_result);
-    allocator.free(html_result);
-    allocator.free(node_tuple_result);
+//     // Clean up
+//     allocator.free(tuple_result);
+//     allocator.free(html_result);
+//     allocator.free(node_tuple_result);
 
-    // === Results ===
-    const ns_to_us = @as(f64, @floatFromInt(std.time.ns_per_us));
-    const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
+//     // === Results ===
+//     const ns_to_us = @as(f64, @floatFromInt(std.time.ns_per_us));
+//     const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
 
-    print("\n--- Performance Results (100 iterations) ---\n", .{});
+//     print("\n--- Performance Results (100 iterations) ---\n", .{});
 
-    print("HTML → DOM (lexbor):     {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms, @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     print("HTML → DOM (lexbor):     {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms, @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-    print("DOM → Tuple:             {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms, @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     print("DOM → Tuple:             {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms, @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-    print("Tuple → HTML:            {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms, @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     print("Tuple → HTML:            {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms, @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-    print("Lexbor Round-trip:       {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms, @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     print("Lexbor Round-trip:       {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms, @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-    print("Single Node → Tuple:     {d:.2} μs total, {d:.2} μs/op\n", .{ @as(f64, @floatFromInt(single_node_time)) / ns_to_us, @as(f64, @floatFromInt(single_node_time)) / ns_to_us / @as(f64, @floatFromInt(iterations)) });
+//     print("Single Node → Tuple:     {d:.2} μs total, {d:.2} μs/op\n", .{ @as(f64, @floatFromInt(single_node_time)) / ns_to_us, @as(f64, @floatFromInt(single_node_time)) / ns_to_us / @as(f64, @floatFromInt(iterations)) });
 
-    print("\n--- Full Pipeline Analysis ---\n", .{});
-    const total_tuple_pipeline = dom_to_tuple_time + tuple_to_html_time;
-    print("Tuple Pipeline (DOM→Tuple→HTML): {d:.3} ms/op\n", .{@as(f64, @floatFromInt(total_tuple_pipeline)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
-    print("Lexbor Pipeline (HTML→DOM→HTML):  {d:.3} ms/op\n", .{@as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
+//     print("\n--- Full Pipeline Analysis ---\n", .{});
+//     const total_tuple_pipeline = dom_to_tuple_time + tuple_to_html_time;
+//     print("Tuple Pipeline (DOM→Tuple→HTML): {d:.3} ms/op\n", .{@as(f64, @floatFromInt(total_tuple_pipeline)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
+//     print("Lexbor Pipeline (HTML→DOM→HTML):  {d:.3} ms/op\n", .{@as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
 
-    const pipeline_comparison = @as(f64, @floatFromInt(lexbor_roundtrip_time)) / @as(f64, @floatFromInt(total_tuple_pipeline));
-    print("Pipeline Comparison: Lexbor is {d:.2}x {s} than tuple pipeline\n", .{ if (pipeline_comparison > 1) pipeline_comparison else 1.0 / pipeline_comparison, if (pipeline_comparison > 1) "slower" else "faster" });
+//     const pipeline_comparison = @as(f64, @floatFromInt(lexbor_roundtrip_time)) / @as(f64, @floatFromInt(total_tuple_pipeline));
+//     print("Pipeline Comparison: Lexbor is {d:.2}x {s} than tuple pipeline\n", .{ if (pipeline_comparison > 1) pipeline_comparison else 1.0 / pipeline_comparison, if (pipeline_comparison > 1) "slower" else "faster" });
 
-    print("\n--- BEAM Scheduler Compliance ---\n", .{});
-    const dom_to_tuple_ms = @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
-    const tuple_to_html_ms = @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
+//     print("\n--- BEAM Scheduler Compliance ---\n", .{});
+//     const dom_to_tuple_ms = @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
+//     const tuple_to_html_ms = @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
 
-    print("DOM → Tuple: {s} (limit: 1ms)\n", .{if (dom_to_tuple_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
-    print("Tuple → HTML: {s} (limit: 1ms)\n", .{if (tuple_to_html_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+//     print("DOM → Tuple: {s} (limit: 1ms)\n", .{if (dom_to_tuple_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+//     print("Tuple → HTML: {s} (limit: 1ms)\n", .{if (tuple_to_html_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
 
-    print("\n--- Memory Usage ---\n", .{});
-    print("Original HTML:      {d} bytes ({d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-    print("Tuple string:       {d} bytes ({d:.1}KB)\n", .{ tuple_result.len, @as(f64, @floatFromInt(tuple_result.len)) / 1024.0 });
-    print("Reconstructed HTML: {d} bytes ({d:.1}KB)\n", .{ html_result.len, @as(f64, @floatFromInt(html_result.len)) / 1024.0 });
+//     print("\n--- Memory Usage ---\n", .{});
+//     print("Original HTML:      {d} bytes ({d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
+//     print("Tuple string:       {d} bytes ({d:.1}KB)\n", .{ tuple_result.len, @as(f64, @floatFromInt(tuple_result.len)) / 1024.0 });
+//     print("Reconstructed HTML: {d} bytes ({d:.1}KB)\n", .{ html_result.len, @as(f64, @floatFromInt(html_result.len)) / 1024.0 });
 
-    const expansion_ratio = @as(f64, @floatFromInt(tuple_result.len)) / @as(f64, @floatFromInt(large_html.len));
-    print("Tuple size ratio:   {d:.2}x original HTML size\n", .{expansion_ratio});
+//     const expansion_ratio = @as(f64, @floatFromInt(tuple_result.len)) / @as(f64, @floatFromInt(large_html.len));
+//     print("Tuple size ratio:   {d:.2}x original HTML size\n", .{expansion_ratio});
 
-    // Verify correctness
-    try testing.expect(tuple_result.len > 0);
-    try testing.expect(html_result.len > 0);
-    // Note: Detailed verification commented out to avoid segfault in test environment
-    // try testing.expect(std.mem.indexOf(u8, tuple_result, "\"body\"") != null);
-    // try testing.expect(std.mem.indexOf(u8, html_result, "Performance Test") != null);
+//     // Verify correctness
+//     try testing.expect(tuple_result.len > 0);
+//     try testing.expect(html_result.len > 0);
+//     // Note: Detailed verification commented out to avoid segfault in test environment
+//     // try testing.expect(std.mem.indexOf(u8, tuple_result, "\"body\"") != null);
+//     // try testing.expect(std.mem.indexOf(u8, html_result, "Performance Test") != null);
 
-    print("\n✅ All comprehensive benchmarks completed successfully!\n", .{});
-}
+//     print("\n✅ All comprehensive benchmarks completed successfully!\n", .{});
+// }

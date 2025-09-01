@@ -4,7 +4,6 @@ const log = @import("global_writer.zig");
 const lxb = @import("modules/core.zig");
 const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
-const fragments = @import("modules/fragments.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
 const tree = @import("modules/dom_tree.zig");
@@ -20,13 +19,11 @@ const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
 const parser = @import("modules/parser.zig");
 const colours = @import("modules/colours.zig");
-// const get = @import("modules/fetch.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
 // pub const Writer = log.GlobalWriter;
 
-// pub const fetchTest = get.fetchTest;
 // =========================================================
 // General Status codes & constants & definitions
 // =========================================================
@@ -70,10 +67,6 @@ pub const isKnownAttribute = colours.isKnownAttribute;
 pub const isDangerousAttributeValue = colours.isDangerousAttributeValue;
 
 // ====================================
-// Sanitizer
-// ====================================
-
-// ====================================
 // Walker Search traversal functions
 // ====================================
 pub const simpleWalk = walker.simpleWalk;
@@ -96,6 +89,7 @@ pub const DocumentFragment = opaque {};
 //=====================================
 pub const createDocument = lxb.createDocument;
 pub const destroyDocument = lxb.destroyDocument;
+pub const cleanDocument = lxb.cleanDocument;
 
 //=====================================
 // Create / Destroy Node / Element
@@ -163,6 +157,7 @@ pub const HtmlTag = tag.HtmlTag;
 pub const WhitespacePreserveTagSet = tag.WhitespacePreserveTagSet;
 pub const VoidTagSet = tag.VoidTagSet;
 pub const NoEscapeTagSet = tag.NoEscapeTagSet;
+pub const FragmentContext = tag.FragmentContext;
 
 // from lexbor source: /tag/const.h
 
@@ -230,10 +225,14 @@ pub const children = lxb.children;
 // Parser
 //=====================================
 
-pub const HtmlTree = opaque {};
-pub const parseFromString = parser.parseFromString;
 // Parser engine
-pub const Parser = parser.Parser;
+pub const HTMLParser = parser.HTMLParser;
+pub const Parser = parser.HTMLParser;
+pub const parseString = parser.parseString;
+pub const createDocFromString = parser.createDocFromString;
+pub const fragmentToNode = parser.fragmentToNode;
+pub const createDocumentFragment = parser.createDocumentFragment;
+pub const appendFragment = parser.appendFragment;
 
 // ============================================================
 // Chunk processing engine
@@ -244,17 +243,6 @@ pub const HtmlParser = chunks.HtmlParser;
 // =============================================================
 // Fragment & fragment parsing
 // =============================================================
-pub const FragmentContext = tag.FragmentContext;
-
-pub const FragmentResult = fragments.FragmentResult;
-pub const fragmentNode = fragments.fragmentNode;
-pub const createDocumentFragment = fragments.createDocumentFragment;
-pub const destroyDocumentFragment = fragments.destroyDocumentFragment;
-pub const appendFragment = fragments.appendFragment;
-
-pub const parseFragment = fragments.parseFragment;
-pub const parseFragmentSimple = fragments.parseFragmentSimple;
-pub const parseFragmentInto = fragments.parseFragmentInto;
 
 //=====================================
 // Template element

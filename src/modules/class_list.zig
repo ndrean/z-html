@@ -268,8 +268,8 @@ pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !DOMToke
 // test "DOMTokenList set operations" {
 //     const allocator = testing.allocator;
 
-//     const doc = try z.parseFromString("<p></p>");
-//     const body = try z.bodyNode(doc);
+//     const doc = try z.createDocFromString("<p></p>");
+//     const body = z.bodyNode(doc).?;
 //     const p = z.nodeToElement(z.firstChild(body).?).?;
 //     var token_list = try DOMTokenList.init(
 //         allocator,
@@ -315,8 +315,8 @@ pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !DOMToke
 // test "DOMTokenList performance" {
 //     const allocator = testing.allocator;
 
-//     const doc = try z.parseFromString("<p></p>");
-//     const body = try z.bodyNode(doc);
+//     const doc = try z.createDocFromString("<p></p>");
+//     const body = z.bodyNode(doc).?;
 //     const p = z.nodeToElement(z.firstChild(body).?).?;
 //     var token_list = try DOMTokenList.init(
 //         allocator,
@@ -357,10 +357,10 @@ pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !DOMToke
 //         \\<div>No class div</div>
 //     ;
 
-//     const doc = try z.parseFromString(html);
+//     const doc = try z.createDocFromString(html);
 //     defer z.destroyDocument(doc);
 
-//     const body_node = try z.bodyNode(doc);
+//     const body_node = z.bodyNode(doc).?;
 //     var child = z.firstChild(body_node);
 
 //     // Test hasClass function and compare with existing classList

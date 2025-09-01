@@ -30,7 +30,7 @@ test "Smart text processing features" {
     const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.firstChild(z.elementToNode(body)).?;
 
     // Check script element

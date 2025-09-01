@@ -13,7 +13,7 @@ test "Newly added lexbor functions" {
     const doc = try z.printDocStruct(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.firstChild(z.elementToNode(body)).?;
     const div_element = z.nodeToElement(div).?;
 

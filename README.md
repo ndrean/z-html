@@ -55,7 +55,7 @@ test "Append fragment" {
   const doc = try z.printDocStruct("");
   defer z.destroyDocument(doc);
 
-  const body = try z.bodyNode(doc);
+  const body = z.bodyNode(doc).?;
 
   const fragment = try z.createDocumentFragment(doc);
 

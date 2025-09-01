@@ -218,10 +218,10 @@ pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 /// ## Example
 /// ```
 /// test "getAttributes" {
-///   const doc = try z.parseFromString("");
+///   const doc = try z.createDocFromString("");
 ///   defer z.destroyDocument(doc);
 ///
-///   const body = try z.bodyNode(doc);
+///   const body = z.bodyNode(doc).?;
 ///   const button = try z.createElementAttr(
 ///       doc,
 ///        "button",
@@ -390,9 +390,9 @@ pub fn getElementById(root_node: *z.DomNode, id: []const u8) ?*z.HTMLElement {
 }
 
 test "getElementById" {
-    const doc = try z.parseFromString("<div id=\"1\"><p ></p><span id=\"2\"></span></div>");
+    const doc = try z.createDocFromString("<div id=\"1\"><p ></p><span id=\"2\"></span></div>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const element = getElementById(body, "2");
     try testing.expect(z.tagFromElement(element.?) == .span);
 }
@@ -440,9 +440,9 @@ pub fn getElementsById(allocator: std.mem.Allocator, root_node: *z.DomNode, id_v
 
 test "getElementsById" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<div id=\"1\"><p ></p><span id=\"1\"></span></div>");
+    const doc = try z.createDocFromString("<div id=\"1\"><p ></p><span id=\"1\"></span></div>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const element = try getElementsById(allocator, body, "1");
     defer allocator.free(element);
     try testing.expect(z.tagFromElement(element[0]).? == .div and z.tagFromElement(element[1]).? == .span);
@@ -472,9 +472,9 @@ pub fn getElementByClass(root_node: *z.DomNode, class_name: []const u8) ?*z.HTML
 }
 
 test "getElementByClass" {
-    const doc = try z.parseFromString("<div id=\"1\"><p class=\"test\"></p><span class=\"test\"></span></div>");
+    const doc = try z.createDocFromString("<div id=\"1\"><p class=\"test\"></p><span class=\"test\"></span></div>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const element = getElementByClass(body, "test");
     try testing.expect(z.tagFromElement(element.?) == .p);
 }
@@ -510,9 +510,9 @@ pub fn getElementByAttribute(root_node: *z.DomNode, attr_name: []const u8, attr_
 }
 
 test "getElementByAttribute" {
-    const doc = try z.parseFromString("<div id=\"1\" data-test=\"value1\"><p ></p><span data-test=\"value2\"></span></div>");
+    const doc = try z.createDocFromString("<div id=\"1\" data-test=\"value1\"><p ></p><span data-test=\"value2\"></span></div>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const element_2 = getElementByAttribute(body, "data-test", "value2");
     try testing.expect(z.tagFromElement(element_2.?) == .span);
     const element_1 = getElementByAttribute(body, "data-test", null);
@@ -522,7 +522,7 @@ test "getElementByAttribute" {
 /// [attrs] Fast search by data-attributes
 ///
 /// ```
-/// const doc = try z.parseFromString("<form><input phx-click=\"increment\" disabled></form>");
+/// const doc = try z.createDocFromString("<form><input phx-click=\"increment\" disabled></form>");
 /// defer z.destroyDocument(doc);
 /// try z.getElementByDataAttribute(root_node, "phx", "click", "increment");
 ///
@@ -547,9 +547,9 @@ test "getElementByDataAttribute" {
         \\Carina Anand
         \\</div>
     ;
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const div = z.nodeToElement(z.firstChild(body).?).?;
 
     const elt = getElementById(body, "user").?;
@@ -618,9 +618,9 @@ pub fn getElementByTag(root_node: *z.DomNode, tag: z.HtmlTag) ?*z.HTMLElement {
 }
 
 test "getElementByTag" {
-    const doc = try z.parseFromString("<div id=\"1\"><p class=\"test\"></p><span id=\"2\"></span></div>");
+    const doc = try z.createDocFromString("<div id=\"1\"><p class=\"test\"></p><span id=\"2\"></span></div>");
     defer z.destroyDocument(doc);
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const element = getElementByTag(body, .span);
     try testing.expectEqualStrings(z.getElementId_zc(element.?), "2");
 }
@@ -667,7 +667,7 @@ test "removeAllAtributes" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
     const root_node = z.documentRoot(doc).?;
 
@@ -675,7 +675,7 @@ test "removeAllAtributes" {
     removeAllAttributes(allocator, root_node);
 
     // Verify attributes are gone
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
     const serialized = try z.outerNodeHTML(allocator, body);
     defer allocator.free(serialized);
 
@@ -722,7 +722,7 @@ test "removeSelectedAttributes" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
     const root_node = z.documentRoot(doc).?;
 
@@ -734,7 +734,7 @@ test "removeSelectedAttributes" {
     );
 
     // Verify attributes are gone
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const serialized = try z.outerHTML(allocator, body);
     defer allocator.free(serialized);
 
@@ -783,7 +783,7 @@ test "single element search" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
     // Test compile-time ID search with compile-time known string
@@ -836,7 +836,7 @@ test "bigger search functions" {
         \\</html>
     ;
 
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
     const root_node = z.documentRoot(doc).?;
@@ -976,9 +976,9 @@ test "bigger search functions" {
 }
 
 test "hasElementID" {
-    const doc1 = try z.parseFromString("<p id=\"test\"></p><p id=\"\"></p>");
+    const doc1 = try z.createDocFromString("<p id=\"test\"></p><p id=\"\"></p>");
     defer z.destroyDocument(doc1);
-    const body = try z.bodyNode(doc1);
+    const body = z.bodyNode(doc1).?;
     const p1 = z.firstChild(body);
     const p1_elt = z.nodeToElement(p1.?);
     const p2 = z.nextSibling(p1.?);
@@ -1000,10 +1000,10 @@ test "named attribute operations" {
     const allocator = testing.allocator;
 
     const html = "<div class='container test' id='main-div' data-value='123' title='tooltip'>Content</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
@@ -1041,10 +1041,10 @@ test "attribute modification" {
     const allocator = testing.allocator;
 
     const html = "<p>Original content</p>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const p_node = z.firstChild(body_node).?;
     const p_element = z.nodeToElement(p_node).?;
 
@@ -1095,10 +1095,10 @@ test "attribute iteration" {
     const allocator = testing.allocator;
 
     const html = "<div class='test' id='main' data-value='123' title='tooltip' hidden>Content</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node);
     const div_element = z.nodeToElement(div_node.?).?;
 
@@ -1130,10 +1130,10 @@ test "attribute edge cases" {
     const allocator = testing.allocator;
 
     const html = "<div data-empty='' title='  spaces  '>Content</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body);
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
@@ -1181,10 +1181,10 @@ test "attribute error handling" {
     const allocator = testing.allocator;
 
     const html = "<div>Test</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body_node = try z.bodyNode(doc);
+    const body_node = z.bodyNode(doc).?;
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
@@ -1212,10 +1212,10 @@ test "getAttributes_bf stack buffer optimization" {
 
     // Test with small number of attributes (should use stack buffer)
     const html_small = "<div class='test' id='main' data-value='123' title='tooltip'>Content</div>";
-    const doc_small = try z.parseFromString(html_small);
+    const doc_small = try z.createDocFromString(html_small);
     defer z.destroyDocument(doc_small);
 
-    const body_small = try z.bodyElement(doc_small);
+    const body_small = z.bodyElement(doc_small).?;
     const div_small = z.nodeToElement(z.firstChild(z.elementToNode(body_small)).?).?;
 
     const attrs_small = try getAttributes_bf(allocator, div_small);
@@ -1250,10 +1250,10 @@ test "getAttributes_bf large attribute set" {
     const allocator = testing.allocator;
 
     // Create element with many attributes to test ArrayList fallback
-    const doc = try z.parseFromString("<div>Content</div>");
+    const doc = try z.createDocFromString("<div>Content</div>");
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.nodeToElement(z.firstChild(z.elementToNode(body)).?).?;
 
     // Add 15 attributes (less than MAX_STACK_ATTRS = 16)
@@ -1283,10 +1283,10 @@ test "getAttributes performance comparison" {
 
     // Create test element with typical number of attributes
     const html = "<div class='container active' id='main-content' data-component='card' data-state='loaded' title='Main Content' aria-label='Content Area'>Content</div>";
-    const doc = try z.parseFromString(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyElement(doc);
+    const body = z.bodyElement(doc).?;
     const div = z.nodeToElement(z.firstChild(z.elementToNode(body)).?).?;
 
     // Both should produce identical results

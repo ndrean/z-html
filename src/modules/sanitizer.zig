@@ -31,27 +31,7 @@ pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"valu
 
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
 
-pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
-    .{ "a", &allowed_a },
-    .{ "img", &allowed_img },
-    .{ "div", &allowed_common },
-    .{ "span", &allowed_common },
-    .{ "p", &allowed_common },
-    .{ "ul", &allowed_common },
-    .{ "ol", &allowed_common },
-    .{ "li", &allowed_common },
-    .{ "strong", &allowed_common },
-    .{ "em", &allowed_common },
-    .{ "br", &allowed_common },
-    .{ "h1", &allowed_common },
-    .{ "h2", &allowed_common },
-    .{ "h3", &allowed_common },
-    .{ "h4", &allowed_common },
-    .{ "h5", &allowed_common },
-    .{ "h6", &allowed_common },
-    .{ "blockquote", &allowed_common },
-    .{ "button", &allowed_button },
-});
+pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{ .{ "a", &allowed_a }, .{ "img", &allowed_img }, .{ "div", &allowed_common }, .{ "span", &allowed_common }, .{ "p", &allowed_common }, .{ "ul", &allowed_common }, .{ "ol", &allowed_common }, .{ "li", &allowed_common }, .{ "strong", &allowed_common }, .{ "em", &allowed_common }, .{ "br", &allowed_common }, .{ "h1", &allowed_common }, .{ "h2", &allowed_common }, .{ "h3", &allowed_common }, .{ "h4", &allowed_common }, .{ "h5", &allowed_common }, .{ "h6", &allowed_common }, .{ "blockquote", &allowed_common }, .{ "button", &allowed_button }, .{ "strong", &allowed_common }, .{ "em", &allowed_common }, .{ "i", &allowed_common } });
 
 /// [sanitize] Can be improved with lexbor URL module ??
 pub fn isSafeUri(value: []const u8) bool {
@@ -316,7 +296,7 @@ fn sanitizePostWalkOperations(allocator: std.mem.Allocator, context: *SanitizeCo
 fn sanitizeTemplateContent(allocator: std.mem.Allocator, template_node: *z.DomNode, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
     const template = z.nodeToTemplate(template_node) orelse return;
     const content = z.templateContent(template);
-    const content_node = z.fragmentNode(content);
+    const content_node = z.fragmentToNode(content);
 
     var template_context = SanitizeContext.init(allocator, options);
     defer template_context.deinit();
@@ -367,10 +347,10 @@ test "comprehensive sanitization" {
         \\</div>
     ;
 
-    const doc = try z.parseFromString(malicious_html);
+    const doc = try z.createDocFromString(malicious_html);
     defer z.destroyDocument(doc);
 
-    const body = try z.bodyNode(doc);
+    const body = z.bodyNode(doc).?;
 
     try sanitizeWithOptions(allocator, body, .{
         .skip_comments = true,

