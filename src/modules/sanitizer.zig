@@ -31,7 +31,30 @@ pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"valu
 
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
 
-pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{ .{ "a", &allowed_a }, .{ "img", &allowed_img }, .{ "div", &allowed_common }, .{ "span", &allowed_common }, .{ "p", &allowed_common }, .{ "ul", &allowed_common }, .{ "ol", &allowed_common }, .{ "li", &allowed_common }, .{ "strong", &allowed_common }, .{ "em", &allowed_common }, .{ "br", &allowed_common }, .{ "h1", &allowed_common }, .{ "h2", &allowed_common }, .{ "h3", &allowed_common }, .{ "h4", &allowed_common }, .{ "h5", &allowed_common }, .{ "h6", &allowed_common }, .{ "blockquote", &allowed_common }, .{ "button", &allowed_button }, .{ "strong", &allowed_common }, .{ "em", &allowed_common }, .{ "i", &allowed_common } });
+pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
+    .{ "a", &allowed_a },
+    .{ "img", &allowed_img },
+    .{ "div", &allowed_common },
+    .{ "span", &allowed_common },
+    .{ "p", &allowed_common },
+    .{ "ul", &allowed_common },
+    .{ "ol", &allowed_common },
+    .{ "li", &allowed_common },
+    .{ "strong", &allowed_common },
+    .{ "em", &allowed_common },
+    .{ "br", &allowed_common },
+    .{ "h1", &allowed_common },
+    .{ "h2", &allowed_common },
+    .{ "h3", &allowed_common },
+    .{ "h4", &allowed_common },
+    .{ "h5", &allowed_common },
+    .{ "h6", &allowed_common },
+    .{ "blockquote", &allowed_common },
+    .{ "button", &allowed_button },
+    .{ "strong", &allowed_common },
+    .{ "em", &allowed_common },
+    .{ "i", &allowed_common },
+});
 
 /// [sanitize] Can be improved with lexbor URL module ??
 pub fn isSafeUri(value: []const u8) bool {

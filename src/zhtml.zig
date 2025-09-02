@@ -17,7 +17,7 @@ const template = @import("modules/template.zig");
 const norm = @import("modules/normalize.zig");
 const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
-const parser = @import("modules/parser.zig");
+const parse = @import("modules/parsing.zig");
 const colours = @import("modules/colours.zig");
 
 // Re-export commonly used types
@@ -207,6 +207,8 @@ pub const previousSibling = lxb.previousSibling;
 pub const parentNode = lxb.parentNode;
 pub const firstElementChild = lxb.firstElementChild;
 pub const nextElementSibling = lxb.nextElementSibling;
+pub const lastElementChild = lxb.lastElementChild;
+
 pub const parentElement = lxb.parentElement;
 
 pub const insertBefore = lxb.insertBefore;
@@ -222,17 +224,21 @@ pub const childNodes = lxb.childNodes;
 pub const children = lxb.children;
 
 //=====================================
-// Parser
+// Parser & Fragments
 //=====================================
 
+// Direct access to parser functions
+pub const parseString = parse.parseString;
+pub const createDocFromString = parse.createDocFromString;
+
 // Parser engine
-pub const HTMLParser = parser.HTMLParser;
-pub const Parser = parser.HTMLParser;
-pub const parseString = parser.parseString;
-pub const createDocFromString = parser.createDocFromString;
-pub const fragmentToNode = parser.fragmentToNode;
-pub const createDocumentFragment = parser.createDocumentFragment;
-pub const appendFragment = parser.appendFragment;
+pub const FragmentParser = parse.FragmentParser;
+
+// fragments
+pub const fragmentToNode = parse.fragmentToNode;
+pub const createDocumentFragment = parse.createDocumentFragment;
+pub const destroyDocumentFragment = parse.destroyDocumentFragment;
+pub const appendFragment = parse.appendFragment;
 
 // ============================================================
 // Chunk processing engine
@@ -260,7 +266,7 @@ pub const nodeToTemplate = template.nodeToTemplate;
 pub const elementToTemplate = template.elementToTemplate;
 // ---
 pub const templateContent = template.templateContent;
-pub const useTemplate = template.useTemplate;
+pub const useTemplateElement = template.useTemplateElement;
 
 // ===========================================================================
 // DOM Traversal utilities
@@ -307,16 +313,19 @@ pub const printNode = tree.printNode;
 // Sanitation / Serialization / Inner / outer HTML manipulation
 //=====================================
 pub const innerHTML = serialize.innerHTML;
-pub const setInnerHTML = serialize.setInnerHTML; // Security-first API with TextOptions
 pub const outerHTML = serialize.outerHTML;
 pub const outerNodeHTML = serialize.outerNodeHTML;
 
+pub const setInnerHTML = parse.setInnerHTML;
+pub const setInnerSafeHTML = parse.setInnerSafeHTML;
+
 pub const sanitizeNode = sanitize.sanitizeNode;
 pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
+
+// ===================================================================
+// Debug printing utilities
 pub const printDocStruct = tree.printDocStruct;
 pub const prettyPrint = serialize.prettyPrint;
-
-// pub const cleanDomTree = cleaner.cleanDomTree;
 
 //=========================================
 // CSS selectors

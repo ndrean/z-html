@@ -59,12 +59,13 @@ pub fn elementToTemplate(element: *z.HTMLElement) ?*z.HTMLTemplateElement {
     return lxb_element_to_template_wrapper(element);
 }
 
-/// [template] Get the content of a template
+/// [template] Get the content of a template as a #document-fragment
 pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
     return lxb_html_template_content_wrapper(template);
 }
 
-pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
+/// [template] Clone then content of a template element into a target node
+pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
     const template_content = templateContent(template);
     const content_node = z.fragmentToNode(template_content);
 
@@ -72,11 +73,10 @@ pub fn useTemplate(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
     // same document => cloneNode()
     const cloned_content = z.cloneNode(content_node, template_doc);
 
-    // Append the clone
     z.appendFragment(target, cloned_content.?);
 }
 
-test "use template" {
+test "use template string" {
     const allocator = testing.allocator;
 
     const pretty_html =
@@ -110,10 +110,11 @@ test "use template" {
     const doc = try z.createDocFromString(initial_html);
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
+
     const txt = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(txt);
 
-    // check body serialization (remove whitespaces and empoty text nodes)
+    // check body serialization (remove whitespaces and empty text nodes)
     try testing.expectEqualStrings(
         "<body><table id=\"producttable\"><thead><tr><td>UPC_Code</td><td>Product_Name</td></tr></thead><tbody><!-- existing data could optionally be included here --></tbody></table><template id=\"productrow\"><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr></template></body>",
         txt,
@@ -138,8 +139,8 @@ test "use template" {
     const tbody_node = z.elementToNode(tbody.?);
 
     // add twice the template
-    try useTemplate(template, tbody_node);
-    try useTemplate(template, tbody_node);
+    try useTemplateElement(template, tbody_node);
+    try useTemplateElement(template, tbody_node);
 
     const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);

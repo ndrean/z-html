@@ -63,13 +63,9 @@ extern "c" fn lxb_html_serialize_pretty_tree_cb(
     ctx: ?*anyopaque,
 ) c_int;
 
-// setInnerHTML
-extern "c" fn lxb_html_element_inner_html_set(
-    body: *z.HTMLElement,
-    inner: [*]const u8,
-    inner_len: usize,
-) *z.HTMLElement;
+// ==================================================================
 
+/// [Serialize] Serializes the given DOM node to an owned string
 pub fn outerNodeHTML(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var str = lxbString{
         .data = null,
@@ -90,11 +86,9 @@ pub fn outerNodeHTML(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     return result;
 }
 
-/// [serializer] Serializes the given DOM node to an owned string
+/// [serializer] Serializes the given element to an owned string
 ///
 /// Caller owns the slice
-///
-/// OuterHTML === outerHTML
 pub fn outerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     var str = lxbString{
         .data = null,
@@ -142,6 +136,22 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     @memcpy(result, str.data.?[0..str.length]);
     return result;
 }
+
+test "inner/outerHTML" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<p>hi</p>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyElement(doc).?;
+
+    const outer = try z.outerHTML(allocator, body);
+    defer allocator.free(outer);
+    try testing.expectEqualStrings("<body><p>hi</p></body>", outer);
+
+    const inner = try z.innerHTML(allocator, body);
+    defer allocator.free(inner);
+    try testing.expectEqualStrings("<p>hi</p>", inner);
+}
+
 // ===================================================================================
 
 /// Context used by the "styler" callback
@@ -299,262 +309,6 @@ test "what does std.mem.endsWith, std.mem.eql find?" {
     const t2 = "=\"";
     try testing.expect(std.mem.endsWith(u8, t1, "=\""));
     try testing.expect(std.mem.eql(u8, t2, "=\""));
-}
-
-// -------------------------------------------------------------------------------
-// SetInnerHTML - To finish
-// -------------------------------------------------------
-
-/// [Serialize] Sets / replaces element's inner HTML with minimal security controls.
-pub fn setInnerHTML(element: *z.HTMLElement, content: []const u8) !*z.HTMLElement {
-    // const espaced_html = sanitize(allocator, element)
-    return lxb_html_element_inner_html_set(element, content.ptr, content.len);
-}
-
-test "innerHTML / setInnerHTML" {
-    const allocator = testing.allocator;
-
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    // Create a container element
-    var div = try z.createElementAttr(doc, "div", &.{});
-
-    // test 1 --------------
-    div = try setInnerHTML(div, "<p id=\"1\">Hello <strong>World</strong></p>");
-    const inner1 = try innerHTML(allocator, div);
-    defer allocator.free(inner1);
-
-    try testing.expectEqualStrings(
-        "<p id=\"1\">Hello <strong>World</strong></p>",
-        inner1,
-    );
-
-    const complex_html =
-        \\<h1>Title</h1>
-        \\<p class="intro">Introduction paragraph</p>
-        \\<article>
-        \\  <ul>
-        \\    <li>Item 1</li>
-        \\    <li>Item 2</li>
-        \\  </ul>
-        \\</article>
-    ;
-
-    // test 2 --------------
-    div = try setInnerHTML(div, complex_html);
-
-    const inner2 = try innerHTML(allocator, div);
-    defer allocator.free(inner2);
-
-    const inner3 = try outerHTML(allocator, div);
-    defer allocator.free(inner3);
-
-    try testing.expect(
-        std.mem.indexOf(u8, inner2, "<h1>Title") != null,
-    );
-    try testing.expect(
-        std.mem.indexOf(u8, inner2, "<ul>") != null,
-    );
-
-    try testing.expect(
-        std.mem.indexOf(u8, inner2, "<p class=\"intro\">Intro") != null,
-    );
-    // check this removed old inner HTML
-    try testing.expect(
-        std.mem.indexOf(u8, inner2, "<p>Hello World</p>") == null,
-    );
-
-    // Test 3: Get outer HTML (includes the div itself) --------------
-    const outer = try outerHTML(allocator, div);
-    defer allocator.free(outer);
-    // print("{s}\n", .{outer});
-
-    // Should contain the root div tag
-    try testing.expect(
-        std.mem.indexOf(u8, outer, "<div>") != null,
-    );
-    // should could inner HTML
-    try testing.expect(
-        std.mem.indexOf(u8, outer, "<li>") != null,
-    );
-
-    try testing.expect(
-        std.mem.indexOf(u8, outer, "</div>") != null,
-    );
-}
-test "behaviour of serializeNode" {
-    const allocator = testing.allocator;
-
-    // Test different types of elements
-    const test_cases = [_]struct {
-        html: []const u8,
-        serialized_node: []const u8,
-        serialized_tree: []const u8,
-    }{
-        // self-closing tags
-        .{
-            .html = "<br/>",
-            .serialized_node = "<br>",
-            .serialized_tree = "<br>",
-        },
-        .{
-            .html = "<img src=\"my-image\"/>",
-            .serialized_node = "<img src=\"my-image\">",
-            .serialized_tree = "<img src=\"my-image\">",
-        },
-        .{
-            .html = "<p><span></span></p>",
-            .serialized_node = "<p>",
-            .serialized_tree = "<p><span></span></p>",
-        },
-        .{
-            .html = "<p></p>",
-            .serialized_node = "<p>",
-            .serialized_tree = "<p></p>",
-        },
-        .{
-            .html = "<div data-id=\"myid\" class=\"test\">Simple text</div>",
-            .serialized_node = "<div data-id=\"myid\" class=\"test\">",
-            .serialized_tree = "<div data-id=\"myid\" class=\"test\">Simple text</div>",
-        },
-    };
-
-    for (test_cases) |case| {
-        const doc = try z.createDocFromString(case.html);
-        defer z.destroyDocument(doc);
-
-        const body = z.bodyElement(doc).?;
-        const body_node = z.elementToNode(body);
-        const element_node = z.firstChild(body_node).?;
-
-        // const serial_node = try serializeNode(allocator, element_node);
-        // defer allocator.free(serial_node);
-
-        const serialized_tree = try outerHTML(allocator, z.nodeToElement(element_node).?);
-        defer allocator.free(serialized_tree);
-
-        // try testing.expectEqualStrings(serial_node, case.serialized_node);
-        try testing.expectEqualStrings(serialized_tree, case.serialized_tree);
-    }
-}
-
-test "setInnerHTML lexbor security sanitation" {
-    const allocator = testing.allocator;
-
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>";
-    const div = try z.createElement(doc, "div");
-    _ = try setInnerHTML(div, malicious_content); //<-- lexbor sanitizes this in part
-
-    const outer = try outerHTML(allocator, div);
-    defer allocator.free(outer);
-
-    const expected = "<div><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a></div>";
-    try testing.expectEqualStrings(expected, outer);
-}
-
-test "sanitized HTML into a fragment" {
-    const allocator = testing.allocator;
-    const doc = try z.createDocFromString("");
-    const body = z.bodyNode(doc).?;
-    defer z.destroyDocument(doc);
-
-    // const fragment = try z.createDocumentFragment(doc);
-    const malicious_content = "<div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
-
-    // const fragment_node = z.fragmentNode(fragment);
-    var parser = try z.HTMLParser.init(allocator);
-    defer parser.deinit();
-
-    const fragment_root = try parser.parseFragment(
-        malicious_content,
-        .div,
-        true,
-    );
-    defer z.destroyNode(fragment_root);
-
-    const fragment_txt = try outerNodeHTML(allocator, fragment_root);
-    defer allocator.free(fragment_txt);
-    // try prettyPrint(fragment_root);
-
-    try testing.expectEqualStrings("<html><div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></html>", fragment_txt);
-
-    try z.sanitizeNode(allocator, fragment_root); // <- second sanitation pass
-    // try prettyPrint(fragment_root); // <- first check what lexbor sanitzed
-
-    z.appendFragment(body, fragment_root);
-    // try z.normalize(allocator, body2_elt);
-    const html_string = try z.outerHTML(allocator, z.nodeToElement(body).?);
-    defer allocator.free(html_string);
-
-    try testing.expectEqualStrings("<body><div><button phx-click=\"go\">Become rich</button><img alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></body>", html_string);
-
-    // try z.printDocStruct(doc);
-    // try z.prettyPrint(body);
-}
-
-pub fn setSafeInnerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, context: z.FragmentContext, content: []const u8) !void {
-    const node = z.elementToNode(element);
-
-    var parser = try z.HTMLParser.init(allocator);
-    defer parser.deinit();
-
-    const fragment_root = try parser.parseFragment(
-        content,
-        context,
-        true,
-    );
-
-    try z.sanitizeNode(allocator, fragment_root);
-    z.appendFragment(node, fragment_root);
-}
-
-test "setSafeInnerHTML" {
-    const allocator = testing.allocator;
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-
-    const body_elt = z.bodyElement(doc).?;
-
-    try setSafeInnerHTML(
-        allocator,
-        body_elt,
-        .div,
-        "<!-- a comment --><script>alert('XSS')</script><p id=\"1\" phx-click=\"increment\">Click me</p>",
-    );
-    // try z.prettyPrint(z.elementToNode(body_elt));
-}
-
-test "Serializer sanitation" {
-    const allocator = testing.allocator;
-
-    const malicious_content = "<div><button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\">Potentially dangerous, not escaped</button><!-- a comment --><div data-time=\"{@current}\"> The current value is: {@counter} </div> <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><a href=\"javascript:alert('XSS')\">Dangerous, not escaped</a><img src=\"javascript:alert('XSS')\" alt=\"not escaped\"><iframe src=\"javascript:alert('XSS')\" alt=\"not escaped\"></iframe><a href=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">Safe escaped</a><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><iframe src=\"data:text/html,<script>alert('XSS')</script>\" >Escaped</iframe><img src=\"data:image/svg+xml,<svg onload=alert('XSS')\" alt=\"escaped\"></svg>\"><img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==\" alt=\"potential dangerous b64\"><a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\">Potential dangerous b64</a><img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\" alt=\"potential dangerous b64\"><a href=\"file:///etc/passwd\">Dangerous Local file access</a><img src=\"file:///etc/passwd\" alt=\"dangerous local file access\"><p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href=\"https://example.com\">example.com</a></p></div><link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\"><script>console.log(\"hi\");</script><template></template>";
-
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-    const body = z.bodyNode(doc).?;
-
-    const fragment = try z.createDocumentFragment(doc);
-    const fragment_node = z.fragmentToNode(fragment);
-    defer z.destroyNode(fragment_node);
-
-    var parser = try z.HTMLParser.init(allocator);
-    defer parser.deinit();
-
-    const new_node = try parser.parseFragment(
-        malicious_content,
-        .div,
-        true,
-    );
-    // try prettyPrint(new_node);
-
-    const fragment_txt = try outerNodeHTML(allocator, new_node);
-    defer allocator.free(fragment_txt);
-    // try z.sanitizeNode(allocator, new_node);
-    try prettyPrint(body);
 }
 
 test "web component" {

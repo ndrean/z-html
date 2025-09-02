@@ -9,6 +9,7 @@ pub const LexborError = error{
     CreateElementFailed,
     CreateTextNodeFailed,
     FragmentParseFailed,
+    FragmentCreateFailed,
     FragmentEmpty,
     InsertChildFailed,
     CollectionFailed,

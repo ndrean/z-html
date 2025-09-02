@@ -359,6 +359,31 @@ test "creation & convertions" {
 
     try testing.expectEqualStrings("#element", z.nodeTypeName(div));
 }
+test "create element and comment" {
+    const allocator = std.testing.allocator;
+    const doc = try createDocument();
+    defer destroyDocument(doc);
+    const element = try createElementAttr(doc, "div", &.{});
+    defer destroyNode(elementToNode(element));
+    const name = tagName_zc(element);
+    try testing.expectEqualStrings("DIV", name);
+
+    const comment = try createComment(doc, "This is a comment");
+    const comment_text = try z.commentContent(
+        allocator,
+        comment,
+    );
+    defer allocator.free(comment_text);
+
+    try testing.expectEqualStrings("This is a comment", comment_text);
+
+    // Test type-safe conversion
+    const comment_node = commentToNode(comment);
+    const comment_name = z.nodeName_zc(comment_node);
+    try testing.expectEqualStrings("#comment", comment_name);
+
+    destroyComment(comment);
+}
 
 // ---------------------------------------------------------------------------
 
@@ -615,7 +640,7 @@ pub fn lastChild(node: *z.DomNode) ?*z.DomNode {
     return lxb_dom_node_last_child_noi(node);
 }
 
-test "firstChild / lastChild" {
+test "firstChild / lastChild / next / previous" {
     {
         const doc = try z.createDocFromString("<ul><li>Hello</li><li>World</li></ul>");
         defer z.destroyDocument(doc);
@@ -639,6 +664,26 @@ test "firstChild / lastChild" {
         try testing.expect(first == null);
         try testing.expect(last == null);
     }
+    {
+        const doc = try z.createDocFromString("<p><span>Hello</span><span>World</span></p>");
+        defer z.destroyDocument(doc);
+        const body = z.bodyNode(doc).?;
+
+        const p = firstChild(body);
+
+        const p_parent_node = z.parentNode(p.?);
+        try testing.expectEqualStrings("BODY", z.nodeName_zc(p_parent_node.?));
+
+        const p_parent_elt = z.parentElement(z.nodeToElement(p.?).?);
+        try testing.expectEqualStrings("BODY", z.tagName_zc(p_parent_elt.?));
+
+        const span = z.firstChild(p.?);
+        const next_span = z.nextSibling(span.?);
+        try testing.expectEqualStrings("SPAN", z.nodeName_zc(next_span.?));
+
+        const prev_next_span = z.previousSibling(next_span.?);
+        try testing.expectEqualStrings("SPAN", z.nodeName_zc(prev_next_span.?));
+    }
 }
 
 /// [core] Get first element child
@@ -654,6 +699,19 @@ pub fn firstElementChild(element: *z.HTMLElement) ?*z.HTMLElement {
             return child_element;
         }
         child = nextSibling(child.?);
+    }
+    return null;
+}
+
+/// [core] Get last element child
+pub fn lastElementChild(element: *z.HTMLElement) ?*z.HTMLElement {
+    const node = elementToNode(element);
+    var child = lastChild(node);
+    while (child != null) {
+        if (nodeToElement(child.?)) |child_element| {
+            return child_element;
+        }
+        child = previousSibling(child.?);
     }
     return null;
 }
@@ -676,6 +734,28 @@ test "firstElementChild" {
     try testing.expectEqualStrings(
         "DIV",
         z.tagName_zc(div.?),
+    );
+}
+
+test "lastElementChild" {
+    const doc = try z.createDocFromString("hello <div>world <p></p></div>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+    const first_text = z.firstChild(body);
+    try testing.expectEqualStrings(
+        "#text",
+        z.nodeName_zc(first_text.?),
+    );
+
+    const div = z.firstElementChild(nodeToElement(body).?);
+    const p = z.lastElementChild(div.?);
+    try testing.expectEqualStrings(
+        "#element",
+        z.nodeTypeName(elementToNode(p.?)),
+    );
+    try testing.expectEqualStrings(
+        "P",
+        z.tagName_zc(p.?),
     );
 }
 
@@ -745,6 +825,17 @@ pub fn childNodes(allocator: std.mem.Allocator, parent_node: *z.DomNode) ![]*z.D
     }
 
     return nodes.toOwnedSlice(allocator);
+}
+
+test "childNodes" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<p></p>text<div></div>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+    const child_nodes = try z.childNodes(allocator, body);
+    defer allocator.free(child_nodes);
+
+    try testing.expect(child_nodes.len == 3);
 }
 
 /// [core] Helper: Collect only element children from an element
@@ -1143,8 +1234,8 @@ fn insertChildNodesAfter(reference_node: *z.DomNode, parent_node: *z.DomNode) vo
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// try insertAdjacentHTML(target.?, .beforeend, "<p>New <em>content</em></p>");
-/// try insertAdjacentHTML(target.?, "beforeend", "<p>New content</p>");
+/// try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>New <em>content</em></p>", false);
+/// try insertAdjacentHTML(allocator, target.?, "beforeend", "<p>New content</p>", false);
 /// ---
 /// ```
 pub fn insertAdjacentHTML(
@@ -1167,11 +1258,11 @@ pub fn insertAdjacentHTML(
 
     const target_node = elementToNode(target);
 
-    var parser = try z.HTMLParser.init(allocator);
+    var parser = try z.FragmentParser.init(allocator);
     defer parser.deinit();
 
     // Parse the HTML fragment once
-    const fragment_root = try parser.parseFragment(
+    const fragment_root = try parser.parseString(
         html,
         .body,
         sanitizer_enabled,
@@ -1266,24 +1357,48 @@ test "insertAdjacentHTML - all positions" {
     const body = z.bodyNode(doc).?;
     const target = z.getElementById(body, "target");
 
-    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p id=\"before\">Before</p>", false);
+    try insertAdjacentHTML(
+        allocator,
+        target.?,
+        .beforebegin,
+        "<p> before-begin </p>",
+        false,
+    );
 
-    try insertAdjacentHTML(allocator, target.?, .afterbegin, "<span id=\"first\">First</span>", false);
+    try insertAdjacentHTML(
+        allocator,
+        target.?,
+        .afterbegin,
+        "<span> after-begin </span>",
+        false,
+    );
 
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span id=\"last\">Last</span>", false);
+    try insertAdjacentHTML(
+        allocator,
+        target.?,
+        .beforeend,
+        "<span> before-end </span>",
+        false,
+    );
 
-    try insertAdjacentHTML(allocator, target.?, .afterend, "<p id=\"after\">After</p>", false);
+    try insertAdjacentHTML(
+        allocator,
+        target.?,
+        .afterend,
+        "<p> after-end </p>",
+        false,
+    );
 
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
 
     const pretty_expected =
         \\<body>
-        \\  <p id="before">Before</p>
+        \\  <p> before-begin </p>
         \\  <div id="target">
-        \\    <span id="first">First</span>Target Content<span id="last">Last</span>
+        \\    <span> after-begin </span>Target Content<span> before-end </span>
         \\  </div>
-        \\  <p id="after">After</p>
+        \\  <p> after-end </p>
         \\</body>
     ;
 
@@ -1302,22 +1417,67 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
         const target = z.getElementById(body, "target");
 
         // Insert multiple elements at once
-        try insertAdjacentHTML(allocator, target.?, .afterend, "<p>First</p><p>Second</p><span>Third</span>", false);
-        try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>First</p><p>Second</p><span>Third</span>", false);
-        try insertAdjacentHTML(allocator, target.?, .afterbegin, "<p>First</p><p>Second</p><span>Third</span>", false);
-        try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>First</p><p>Second</p><span>Third</span>", false);
-        try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>First</p><p>Second</p><span>Third</span>", false);
+        try insertAdjacentHTML(
+            allocator,
+            target.?,
+            .afterend,
+            "<p> after-end: 1 </p><p> after-end: 2 </p><span> after-end: 3 </span>",
+            false,
+        );
+        // print("\nafterend:\n", .{});
+        // try z.prettyPrint(body);
+
+        try insertAdjacentHTML(
+            allocator,
+            target.?,
+            .beforeend,
+            "<p> before-end: 1 </p><p> before-end: 2 </p><span> before-end: 3 </span>",
+            false,
+        );
+        // print("\nbeforeend:\n", .{});
+        // try z.prettyPrint(body);
+
+        try insertAdjacentHTML(
+            allocator,
+            target.?,
+            .afterbegin,
+            "<p> after-begin: 1 </p><p> after-begin: 2 </p><span> after-begin: 3 </span>",
+            false,
+        );
+        // print("\nafterbegin:\n", .{});
+        // try z.prettyPrint(body);
+
+        try insertAdjacentHTML(
+            allocator,
+            target.?,
+            .beforebegin,
+            "<p> before-begin: 1 </p><p> before-begin: 2 </p><span> before-begin: 3 </span>",
+            false,
+        );
+        // print("\nbeforebegin:\n", .{});
+        // try z.prettyPrint(body);
+
+        try insertAdjacentHTML(
+            allocator,
+            target.?,
+            .beforebegin,
+            "<p> before-begin: 12 </p><p> before-begin: 22 </p><span> before-begin: 32 </span>",
+            false,
+        );
+        // print("\nbeforebegin:\n", .{});
+        // try z.prettyPrint(body);
 
         const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
         defer allocator.free(html);
 
         const pretty_html =
             \\<body>
-            \\  <p>First</p><p>Second</p><span>Third</span>
+            \\  <p> before-begin: 1 </p><p> before-begin: 2 </p><span> before-begin: 3 </span>
+            \\  <p> before-begin: 12 </p><p> before-begin: 22 </p><span> before-begin: 32 </span>
             \\  <div id="target">
-            \\      <p>First</p><p>Second</p><span>Third</span>Content<p>First</p><p>Second</p><span>Third</span>
+            \\      <p> after-begin: 1 </p><p> after-begin: 2 </p><span> after-begin: 3 </span>Content<p> before-end: 1 </p><p> before-end: 2 </p><span> before-end: 3 </span>
             \\  </div>
-            \\  <p>First</p><p>Second</p><span>Third</span>
+            \\  <p> after-end: 1 </p><p> after-end: 2 </p><span> after-end: 3 </span>
             \\</body>
             \\
         ;
@@ -1327,26 +1487,6 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
 
         try testing.expectEqualStrings(expected, html);
     }
-
-    // <body>
-    // <p>First</p><p>Second</p><span>Third</span>
-    // <div id="target">
-    // <p>First</p><p>Second</p><span>Third</span>Content
-    // <p>First</p><p>Second</p><span>Third</span>
-    // </div>
-    // <p>First</p><p>Second</p><span>Third</span>
-    // </body>
-
-    // <body>
-    // <p>First</p><p>Second</p><span>Third</span>
-    // <p>First</p><p>Second</p><span>Third</span>
-    // <div id="target">
-    // <p>First</p><p>Second</p><span>Third</span>Content
-    // <p>First</p><p>Second</p><span>Third</span>
-    // </div>
-    // <p>First</p><p>Second</p><span>Third</span>
-    // </body>
-
 }
 
 test "insertAdjacent demo" {
@@ -1748,32 +1888,6 @@ test "memory safety: nodeName vs nodeNameOwned" {
 
     // owned_name is still valid and safe to use
     try testing.expectEqualStrings("DIV", owned_name);
-}
-
-test "create element and comment" {
-    const allocator = std.testing.allocator;
-    const doc = try createDocument();
-    defer destroyDocument(doc);
-    const element = try createElementAttr(doc, "div", &.{});
-    defer destroyNode(elementToNode(element));
-    const name = tagName_zc(element);
-    try testing.expectEqualStrings("DIV", name);
-
-    const comment = try createComment(doc, "This is a comment");
-    const comment_text = try z.commentContent(
-        allocator,
-        comment,
-    );
-    defer allocator.free(comment_text);
-
-    try testing.expectEqualStrings("This is a comment", comment_text);
-
-    // Test type-safe conversion
-    const comment_node = commentToNode(comment);
-    const comment_name = z.nodeName_zc(comment_node);
-    try testing.expectEqualStrings("#comment", comment_name);
-
-    destroyComment(comment);
 }
 
 test "insertChild" {
