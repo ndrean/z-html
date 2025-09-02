@@ -327,6 +327,11 @@ pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
 pub const printDocStruct = tree.printDocStruct;
 pub const prettyPrint = serialize.prettyPrint;
 
+//====================================================================
+// Utilities
+pub const stringContains = attrs.stringContains;
+pub const stringEquals = attrs.stringEquals;
+
 //=========================================
 // CSS selectors
 //=========================================
@@ -339,13 +344,14 @@ pub const prettyPrint = serialize.prettyPrint;
 // pub const querySelector = css.querySelector;
 
 //=========================================
-// Class handling - DOMTokenList
+// Class handling - ClassList
 //=========================================
 pub const hasClass = classes.hasClass;
+pub const classList_zc = classes.classList_zc;
 pub const classListAsString = classes.classListAsString;
-pub const classListAsString_zc = classes.classListAsString_zc;
+// pub const classListAsString_zc = classes.classListAsString_zc;
 
-pub const DOMTokenList = classes.DOMTokenList;
+pub const ClassList = classes.ClassList;
 pub const classList = classes.classList;
 
 //=========================================
@@ -367,7 +373,6 @@ pub const removeAttribute = attrs.removeAttribute;
 pub const getElementId = attrs.getElementId;
 pub const getElementId_zc = attrs.getElementId_zc;
 pub const hasElementId = attrs.hasElementId;
-pub const compareStrings = attrs.compareStrings;
 
 pub const getAttributeValue_zc = attrs.getAttributeValue_zc;
 pub const getAttributeValue = attrs.getAttributeValue;

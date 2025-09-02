@@ -49,6 +49,11 @@ extern "c" fn lxb_html_document_parse_fragment(
     html_len: usize,
 ) ?*z.DomNode;
 
+// Chunk parsing for streaming
+extern "c" fn lxb_html_parse_chunk_begin(parser: *HtmlParser) ?*z.HTMLDocument;
+extern "c" fn lxb_html_parse_chunk_process(parser: *HtmlParser, html: [*]const u8, html_len: usize) c_int;
+extern "c" fn lxb_html_parse_chunk_end(parser: *HtmlParser) c_int;
+
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
 
@@ -352,16 +357,16 @@ test "setInnerSafeHTML" {
 
 // ===================================================================
 
-/// [parser] HTML Parser structure and methods. Not thread safe.
+/// [parser] HTML Parser structure and methods. Thread safe per instance.
 ///
-/// Methods: `init`, `deinit`, `parse`, `parseFragment`, `parseFragmentCore`, `parseTemplate`, `parseTemplates`, `useTemplate`, `useTemplateElement`, `insertFragment`, `parseFragmentNodes`
+/// Methods: `init`, `deinit`, `parseFragmentCore`, `parseString`, `parseTemplateString`, `parseTemplates`, 
+/// `useTemplateString`, `useTemplateElement`, `insertFragment`, `parseFragmentNodes`, `setInnerSafeHTML`,
+/// `parseChunkBegin`, `parseChunkProcess`, `parseChunkEnd`, `appendFragment`
 pub const FragmentParser = struct {
     allocator: std.mem.Allocator,
     html_parser: *HtmlParser,
+    temp_doc: ?*z.HTMLDocument,
     initialized: bool,
-
-    var temp_doc: ?*z.HTMLDocument = null;
-    var temp_frag_doc: ?*z.DocumentFragment = null;
 
     /// Create a new parser instance.
     pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -376,6 +381,7 @@ pub const FragmentParser = struct {
         return .{
             .allocator = allocator,
             .html_parser = parser,
+            .temp_doc = null,
             .initialized = true,
         };
     }
@@ -384,9 +390,9 @@ pub const FragmentParser = struct {
     pub fn deinit(self: *FragmentParser) void {
         if (!self.initialized) return;
 
-        if (temp_doc) |doc| {
+        if (self.temp_doc) |doc| {
             z.destroyDocument(doc);
-            temp_doc = null;
+            self.temp_doc = null;
         }
 
         lxb_html_parser_clean(self.html_parser);
@@ -435,14 +441,14 @@ pub const FragmentParser = struct {
     ) !*z.DomNode {
         if (!self.initialized) return Err.HtmlParserNotInitialized;
 
-        if (FragmentParser.temp_doc == null) {
-            temp_doc = try z.createDocument();
+        if (self.temp_doc == null) {
+            self.temp_doc = try z.createDocument();
         } else {
-            z.cleanDocument(temp_doc.?);
+            z.cleanDocument(self.temp_doc.?);
         }
 
         const context_tag = context.toTagName();
-        const context_element = try z.createElement(temp_doc.?, context_tag);
+        const context_element = try z.createElement(self.temp_doc.?, context_tag);
 
         const fragment_root = lxb_html_parse_fragment(
             self.html_parser,
@@ -513,6 +519,9 @@ pub const FragmentParser = struct {
     }
 
     /// Parse multiple templates from HTML and return them as a slice of template elements
+    /// 
+    /// Each template is parsed individually to ensure proper DocumentFragment content preservation.
+    /// The caller is responsible for destroying the returned templates.
     pub fn parseTemplates(
         self: *FragmentParser,
         html: []const u8,
@@ -526,15 +535,19 @@ pub const FragmentParser = struct {
         var templates: std.ArrayList(*z.HTMLTemplateElement) = .empty;
         defer templates.deinit(self.allocator);
 
+        // Extract template HTML strings and parse each individually
         var child = z.firstChild(fragment_root);
         while (child != null) {
             if (z.nodeType(child.?) == .element) {
                 const element = z.nodeToElement(child.?).?;
                 if (z.elementToTemplate(element)) |_| {
-                    const template_doc = z.ownerDocument(child.?);
-                    const cloned_node = z.cloneNode(child.?, template_doc) orelse continue;
-                    const cloned_template = z.elementToTemplate(z.nodeToElement(cloned_node).?).?;
-                    try templates.append(self.allocator, cloned_template);
+                    // Get the template as HTML string and parse it individually
+                    const template_html = try z.outerHTML(self.allocator, element);
+                    defer self.allocator.free(template_html);
+                    
+                    // Parse this individual template
+                    const template = try self.parseTemplateString(template_html, sanitizer_enabled);
+                    try templates.append(self.allocator, template);
                 }
             }
             child = z.nextSibling(child.?);
@@ -554,20 +567,33 @@ pub const FragmentParser = struct {
 
         // Parse template
         const template = try self.parseTemplateString(template_html, sanitizer_enabled);
-        defer z.destroyNode(z.templateToNode(template).?);
+        defer z.destroyNode(z.templateToNode(template));
 
         // Use template (clones content)
-        return z.useTemplateElement(template, target);
+        return self.useTemplateElement(template, target, sanitizer_enabled);
     }
 
-    /// Use an existing template element and injects it into target node
+    /// Use an existing template element and injects it into target node with optional sanitization
     pub fn useTemplateElement(
         self: *FragmentParser,
         template_element: *z.HTMLTemplateElement,
         target: *z.DomNode,
+        sanitizer_enabled: bool,
     ) !void {
-        _ = self; // Parser not needed for this operation
-        return z.useTemplateElement(template_element, target);
+        if (!self.initialized) return Err.HtmlParserNotInitialized;
+
+        const template_content = z.templateContent(template_element);
+        const content_node = z.fragmentToNode(template_content);
+
+        const template_doc = z.ownerDocument(z.templateToNode(template_element));
+        const cloned_content = z.cloneNode(content_node, template_doc) orelse return Err.FragmentParseFailed;
+
+        // Apply sanitization if requested
+        if (sanitizer_enabled) {
+            try z.sanitizeNode(self.allocator, cloned_content);
+        }
+
+        z.appendFragment(target, cloned_content);
     }
 
     /// Parse HTML fragment string and insert it directly into parent given a context (most common use case)
@@ -603,6 +629,38 @@ pub const FragmentParser = struct {
         defer z.destroyNode(fragment_root);
 
         return z.childNodes(allocator, fragment_root);
+    }
+
+    /// Stream parsing - begin parsing a large document in chunks
+    pub fn parseChunkBegin(self: *FragmentParser) !*z.HTMLDocument {
+        if (!self.initialized) return Err.HtmlParserNotInitialized;
+        
+        return lxb_html_parse_chunk_begin(self.html_parser) orelse Err.ParseFailed;
+    }
+
+    /// Stream parsing - process a chunk of HTML
+    pub fn parseChunkProcess(self: *FragmentParser, html_chunk: []const u8) !void {
+        if (!self.initialized) return Err.HtmlParserNotInitialized;
+        
+        const status = lxb_html_parse_chunk_process(
+            self.html_parser,
+            html_chunk.ptr,
+            html_chunk.len,
+        );
+        
+        if (status != z._OK) {
+            return Err.ParseFailed;
+        }
+    }
+
+    /// Stream parsing - finish parsing and get the document
+    pub fn parseChunkEnd(self: *FragmentParser) !void {
+        if (!self.initialized) return Err.HtmlParserNotInitialized;
+        
+        const status = lxb_html_parse_chunk_end(self.html_parser);
+        if (status != z._OK) {
+            return Err.ParseFailed;
+        }
     }
 };
 
@@ -748,9 +806,9 @@ test "template parsing and use template element" {
     const template3 = try parser.parseTemplateString(template3_html, false);
 
     // Use templates to inject content into the list
-    try parser.useTemplateElement(template1, ul_node);
-    try parser.useTemplateElement(template2, ul_node);
-    try parser.useTemplateElement(template3, ul_node);
+    try parser.useTemplateElement(template1, ul_node, false);
+    try parser.useTemplateElement(template2, ul_node, false);
+    try parser.useTemplateElement(template3, ul_node, false);
 
     // Test that everything is properly in the body
     const result_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
@@ -900,8 +958,8 @@ test "useTemplateElement with existing template" {
     const tbody_node = z.elementToNode(tbody);
 
     // Use existing template element twice
-    try parser.useTemplateElement(template, tbody_node);
-    try parser.useTemplateElement(template, tbody_node);
+    try parser.useTemplateElement(template, tbody_node, false);
+    try parser.useTemplateElement(template, tbody_node, false);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1387,6 +1445,158 @@ test "fragment contexts: picture responsive" {
     try testing.expect(std.mem.indexOf(u8, result, "hero-large.jpg") != null);
     try testing.expect(std.mem.indexOf(u8, result, "min-width: 800px") != null);
     try testing.expect(std.mem.indexOf(u8, result, "loading=\"lazy\"") != null);
+}
+
+test "parseTemplates - multiple template parsing" {
+    const allocator = testing.allocator;
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    const multiple_templates_html =
+        \\<template id="item-template">
+        \\  <li class="item">Template Item</li>
+        \\</template>
+        \\<div>Some other content</div>
+        \\<template id="card-template">
+        \\  <div class="card">
+        \\    <h3>Card Title</h3>
+        \\    <p>Card content</p>
+        \\  </div>
+        \\</template>
+        \\<template id="button-template">
+        \\  <button class="btn">Click me</button>
+        \\</template>
+    ;
+
+    const templates = try parser.parseTemplates(multiple_templates_html, false);
+    defer {
+        // Clean up each template and its document
+        for (templates) |template| {
+            z.destroyNode(z.templateToNode(template));
+        }
+        allocator.free(templates);
+    }
+
+    try testing.expect(templates.len == 3);
+
+    // Test that templates are valid by checking their content directly
+    const first_template = templates[0];
+    const template_content = z.templateContent(first_template);
+    const content_node = z.fragmentToNode(template_content);
+    
+    // Template content should have the LI element directly
+    const li_node = z.firstChild(content_node);
+    try testing.expect(li_node != null);
+    
+    // Skip text nodes to find the LI element
+    var current_child = li_node;
+    while (current_child != null and z.nodeType(current_child.?) != .element) {
+        current_child = z.nextSibling(current_child.?);
+    }
+    
+    try testing.expect(current_child != null);
+    try testing.expectEqualStrings("LI", z.nodeName_zc(current_child.?));
+    
+    const text_content = z.textContent_zc(current_child.?);
+    try testing.expectEqualStrings("Template Item", text_content);
+
+}
+
+test "chunk parsing - stream large HTML" {
+    const allocator = testing.allocator;
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Begin chunk parsing
+    const doc = try parser.parseChunkBegin();
+    defer z.destroyDocument(doc);
+
+    // Process HTML in chunks (simulating streaming)
+    const chunk1 = "<html><head><title>Test</title></head><body>";
+    const chunk2 = "<h1>Chunk Parsing Test</h1>";
+    const chunk3 = "<p>This HTML was processed in multiple chunks.</p>";
+    const chunk4 = "<ul><li>Item 1</li><li>Item 2</li></ul>";
+    const chunk5 = "</body></html>";
+
+    try parser.parseChunkProcess(chunk1);
+    try parser.parseChunkProcess(chunk2);
+    try parser.parseChunkProcess(chunk3);
+    try parser.parseChunkProcess(chunk4);
+    try parser.parseChunkProcess(chunk5);
+
+    // Finish chunk parsing
+    try parser.parseChunkEnd();
+
+    // Verify the document was parsed correctly
+    const body = z.bodyNode(doc).?;
+    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(result);
+
+    try testing.expect(std.mem.indexOf(u8, result, "Chunk Parsing Test") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "multiple chunks") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Item 1") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Item 2") != null);
+}
+
+test "chunk parsing - simulate network streaming" {
+    const allocator = testing.allocator;
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Simulate receiving a large HTML document over network in small chunks
+    const large_html =
+        \\<!DOCTYPE html>
+        \\<html>
+        \\<head><title>Large Document</title></head>
+        \\<body>
+        \\<main>
+        \\  <section id="content">
+        \\    <h1>Streaming Large HTML</h1>
+        \\    <p>This demonstrates processing HTML as it arrives from network.</p>
+        \\    <div class="data">
+        \\      <table>
+        \\        <thead><tr><th>Name</th><th>Value</th></tr></thead>
+        \\        <tbody>
+        \\          <tr><td>Item 1</td><td>Value 1</td></tr>
+        \\          <tr><td>Item 2</td><td>Value 2</td></tr>
+        \\          <tr><td>Item 3</td><td>Value 3</td></tr>
+        \\        </tbody>
+        \\      </table>
+        \\    </div>
+        \\  </section>
+        \\</main>
+        \\</body>
+        \\</html>
+    ;
+
+    const doc = try parser.parseChunkBegin();
+    defer z.destroyDocument(doc);
+
+    // Process in 50-byte chunks (simulating slow network)
+    const chunk_size = 50;
+    var offset: usize = 0;
+    
+    while (offset < large_html.len) {
+        const end = @min(offset + chunk_size, large_html.len);
+        const chunk = large_html[offset..end];
+        try parser.parseChunkProcess(chunk);
+        offset = end;
+    }
+
+    try parser.parseChunkEnd();
+
+    // Verify complete parsing
+    const section = z.getElementById(z.bodyNode(doc).?, "content").?;
+    const content = try z.outerHTML(allocator, section);
+    defer allocator.free(content);
+
+    try testing.expect(std.mem.indexOf(u8, content, "Streaming Large HTML") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "Item 1") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "Item 3") != null);
+    try testing.expect(std.mem.indexOf(u8, content, "<table>") != null);
 }
 
 test "fragment contexts: audio sources" {

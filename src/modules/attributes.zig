@@ -30,6 +30,40 @@ extern "c" fn lxb_dom_element_set_attribute(element: *z.HTMLElement, name: [*]co
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
+// Lexbor string comparison functions for zero-copy operations
+extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
+extern "c" fn lexbor_str_data_ncmp_contain(where: [*c]const u8, where_size: usize, what: [*c]const u8, what_size: usize) bool;
+
+/// Fast string comparison using lexbor's optimized functions
+///
+/// Returns true if strings are equal
+pub fn stringEquals(first: []const u8, second: []const u8) bool {
+    if (first.len != second.len) return false;
+    if (first.len == 0) return true;
+    return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
+}
+
+
+pub fn stringContains(where: []const u8, what: []const u8) bool {
+    if (what.len == 0) return true;
+    if (where.len == 0) return false;
+    if (what.len > where.len) return false;
+    return lexbor_str_data_ncmp_contain(where.ptr, where.len, what.ptr, what.len);
+}
+
+test "lexbor string functions" {
+    // Test stringEquals only (stringEndsWith needs verification)
+    try testing.expect(stringEquals("hello", "hello"));
+    try testing.expect(!stringEquals("hello", "world"));
+    try testing.expect(!stringEquals("hello", "hello2"));
+    try testing.expect(stringEquals("", ""));
+
+    // TODO: Fix stringEndsWith - the function signature or logic might be wrong
+    try testing.expect(stringContains("hello world", "world"));
+    try testing.expect(!stringContains("hello world", "planet"));
+}
+
+// ===============================================================================
 /// [attributes] Get attribute value
 ///
 /// Returns `null` if attribute doesn't exist, empty string `""` if attribute exists but has no value.
@@ -323,7 +357,7 @@ pub fn removeAttribute(element: *z.HTMLElement, name: []const u8) !void {
         name.ptr,
         name.len,
     );
-    _ = result; // Ignore return.
+    _ = result;
 }
 
 // ----------------------------------------------------------
@@ -356,14 +390,55 @@ pub fn getElementId_zc(element: *z.HTMLElement) []const u8 {
 pub fn hasElementId(element: *z.HTMLElement, id: []const u8) bool {
     const id_value = z.getElementId_zc(element);
     if (id_value.len != id.len or id_value.len == 0) return false;
-    return std.mem.eql(u8, id_value, id);
+    return stringEquals(id_value, id);
 }
 
 // ===========================================================
+/// GENERIC DOM SEARCH PATTERN
+/// 
+/// The search functions below use a generic pattern from walker.zig that allows
+/// efficient DOM traversal with custom matching logic. Here's how it works:
+///
+/// **Pattern Structure:**
+/// 1. Define a Context struct with mandatory fields:
+///    - `found_element: ?*z.HTMLElement` (for single element search)
+///    - `matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int` (callback)
+///    - Custom fields for search criteria (target_id, target_class, etc.)
+///
+/// 2. Implement the matcher function that:
+///    - Returns `z._CONTINUE` to keep searching
+///    - Returns `z._STOP` when match found (sets `found_element`)
+///
+/// 3. Call `z.genSearchElement(ContextType, root_node, &context_instance)`
+///
+/// **Example Pattern:**
+/// ```zig
+/// const MyContext = struct {
+///     target: []const u8,
+///     found_element: ?*z.HTMLElement = null,
+///     matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int,
+///     
+///     fn implement(node: *z.DomNode, ctx: *@This()) callconv(.c) c_int {
+///         // Your matching logic here
+///         if (matches_criteria(node, ctx.target)) {
+///             ctx.found_element = z.nodeToElement(node);
+///             return z._STOP;
+///         }
+///         return z._CONTINUE;
+///     }
+/// };
+/// ```
+///
+/// This pattern provides:
+/// - Type-safe context passing
+/// - Efficient single-pass DOM traversal
+/// - Early termination on first match
+/// - Zero heap allocation for search logic
+///
+/// See walker.zig for genSearchElements() (multiple results) and genProcessAll() (side effects)
+// ===========================================================
+
 /// [attrs] getElementById traversal DOM search
-///
-///
-/// Input IDs are "strings".
 ///
 /// Returns the first element with matching ID, or null if not found.
 pub fn getElementById(root_node: *z.DomNode, id: []const u8) ?*z.HTMLElement {
@@ -377,7 +452,7 @@ pub fn getElementById(root_node: *z.DomNode, id: []const u8) ?*z.HTMLElement {
             if (!z.hasAttribute(element, "id")) return z._CONTINUE;
             const id_value = z.getElementId_zc(element);
 
-            if (std.mem.eql(u8, id_value, ctx.target_id)) {
+            if (stringEquals(id_value, ctx.target_id)) {
                 ctx.found_element = element;
                 return z._STOP;
             }
@@ -423,7 +498,7 @@ pub fn getElementsById(allocator: std.mem.Allocator, root_node: *z.DomNode, id_v
             if (!z.hasAttribute(element, "id")) return z._CONTINUE;
             const id = z.getElementId_zc(element);
 
-            if (std.mem.eql(u8, id, ctx.target_id)) {
+            if (stringEquals(id, ctx.target_id)) {
                 ctx.results.append(ctx.allocator, element) catch {
                     return z._STOP;
                 };
@@ -987,11 +1062,6 @@ test "hasElementID" {
     try testing.expect(hasElementId(p1_elt.?, "test"));
     try testing.expect(!hasElementId(p1_elt.?, "nope"));
     try testing.expect(!hasElementId(p2_elt.?, ""));
-}
-
-/// Compare two lexbor strings with case sensitivity.
-pub fn compareStrings(first: []const u8, second: []const u8) bool {
-    return std.mem.eql(u8, first, second);
 }
 
 // ----------------------------------------------------------}

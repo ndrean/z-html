@@ -12,7 +12,6 @@ const print = std.debug.print;
 extern "c" fn lxb_html_create_template_element_wrapper(doc: *z.HTMLDocument) ?*z.HTMLTemplateElement;
 extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HTMLTemplateElement) *z.HTMLTemplateElement;
 
-// extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
 extern "c" fn lxb_html_template_to_element(template: *z.HTMLTemplateElement) *z.HTMLElement;
 extern "c" fn lxb_node_to_template_wrapper(node: *z.DomNode) ?*z.HTMLTemplateElement;
 extern "c" fn lxb_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLTemplateElement;
@@ -20,8 +19,6 @@ extern "c" fn lxb_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLT
 extern "c" fn lxb_html_template_content_wrapper(template: *z.HTMLTemplateElement) *z.DocumentFragment;
 extern "c" fn lxb_html_template_to_node(template: *z.HTMLTemplateElement) *z.DomNode;
 extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
-// extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) *z.DomNode;
-// extern "c" fn lxb_dom_document_import_node(doc: *z.HTMLDocument, node: *z.DomNode, deep: bool) *z.DomNode;
 
 /// [template] Create a template
 pub fn createTemplate(doc: *z.HTMLDocument) !*z.HTMLTemplateElement {
@@ -39,9 +36,8 @@ pub fn isTemplate(node: *z.DomNode) bool {
 }
 
 /// [template] Cast template to node
-pub fn templateToNode(template: *z.HTMLTemplateElement) ?*z.DomNode {
+pub fn templateToNode(template: *z.HTMLTemplateElement) *z.DomNode {
     return lxb_html_template_to_node(template);
-    // return lexbor_dom_interface_node_wrapper(template);
 }
 
 /// [template] Cast template to element
@@ -69,11 +65,13 @@ pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) 
     const template_content = templateContent(template);
     const content_node = z.fragmentToNode(template_content);
 
-    const template_doc = z.ownerDocument(z.templateToNode(template).?);
+    const template_doc = z.ownerDocument(z.templateToNode(template));
     // same document => cloneNode()
     const cloned_content = z.cloneNode(content_node, template_doc);
 
-    z.appendFragment(target, cloned_content.?);
+    if (cloned_content) |content| {
+        z.appendFragment(target, content);
+    }
 }
 
 test "use template string" {

@@ -9,71 +9,104 @@ const z = @import("../zhtml.zig");
 const Err = z.Err;
 
 const testing = std.testing;
+const print = std.debug.print;
 
-extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, length: *usize) [*]const u8;
+extern "c" fn lxb_dom_element_class_attribute_noi(element: *z.HTMLElement) *z.DomAttr;
+extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
+
+pub fn classList_zc(element: *z.HTMLElement) []const u8 {
+    var size: usize = 0;
+    const class = lxb_dom_element_class_noi(element, &size);
+    return class[0..size];
+}
+
+test "classList_zc" {
+    const doc = try z.createDocFromString("<p id=\"1\" class= \"bold main\"></p><p id=\"2\"></p>");
+    defer z.destroyDocument(doc);
+    const element1 = z.getElementById(z.bodyNode(doc).?, "1");
+    const class_list = classList_zc(element1.?);
+    try testing.expectEqualStrings("bold main", class_list);
+
+    const element2 = z.getElementById(z.bodyNode(doc).?, "2");
+    const class_list2 = classList_zc(element2.?);
+    try testing.expectEqualStrings("", class_list2);
+}
 
 // ====================================================================
 
 /// [classList] Check if element has specific class without creating the classList
 pub fn hasClass(element: *z.HTMLElement, class_name: []const u8) bool {
-    // Quick check: does element have class attribute at all?
-    if (!z.hasAttribute(element, "class")) return false;
+    // if (!z.hasAttribute(element, "class")) return false;
 
-    // Get class string directly from lexbor (zero-copy)
-    const class_attr = z.getAttribute_zc(element, "class") orelse return false;
+    const class_list = classList_zc(element); //orelse return false;
+    return z.stringContains(class_list, class_name);
 
-    // Search for the class name in the class list (space-separated)
-    var iterator = std.mem.splitScalar(u8, class_attr, ' ');
-    while (iterator.next()) |class| {
-        // Trim whitespace and compare
-        const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-        if (std.mem.eql(u8, trimmed_class, class_name)) {
-            return true;
-        }
-    }
-    return false;
+    // // Get class string directly from lexbor (zero-copy)
+    // const class_attr = z.getAttribute_zc(element, "class") orelse return false;
+
+    // // Search for the class name in the class list (space-separated)
+    // var iterator = std.mem.splitScalar(u8, class_attr, ' ');
+    // while (iterator.next()) |class| {
+    //     // Trim whitespace and compare
+    //     const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+    //     if (std.mem.eql(u8, trimmed_class, class_name)) {
+    //         return true;
+    //     }
+    // }
+    // return false;
 }
 
-/// [classList] Get the class attribute list as a borrowed string from lexbor
-///
-/// Unsafe: Use it only for parsing
-pub fn classListAsString_zc(element: *z.HTMLElement) ?[]const u8 {
-    if (!z.hasAttribute(element, "class")) return null;
+test "hasClass" {
+    const doc = try z.createDocFromString("<p id=\"1\" class= \"bold main\"></p><p id=\"2\"></p>");
+    defer z.destroyDocument(doc);
+    const element1 = z.getElementById(z.bodyNode(doc).?, "1");
+    try testing.expect(hasClass(element1.?, "bold"));
+    try testing.expect(hasClass(element1.?, "main"));
+    try testing.expect(!hasClass(element1.?, "italic"));
 
-    var class_len: usize = 0;
-    const list = lxb_dom_element_class_noi(element, &class_len);
-    return list[0..class_len];
+    const element2 = z.getElementById(z.bodyNode(doc).?, "2");
+    try testing.expect(!hasClass(element2.?, "bold"));
 }
 
 /// [classList] Get class list as string without creating the classList
 ///
 /// Caller owns the slice
 pub fn classListAsString(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
-    var class_len: usize = 0;
-    const class_ptr = lxb_dom_element_class_noi(
-        element,
-        &class_len,
-    );
+    const class_list = classList_zc(element);
 
-    // If no class or empty class
-    if (class_len == 0) {
+    if (class_list.len == 0) {
         return try allocator.dupe(u8, "");
     }
 
-    // Copy lexbor memory to Zig-managed memory
-    const class_string = try allocator.alloc(u8, class_len);
-    @memcpy(class_string, class_ptr[0..class_len]);
+    // Copy lexbor -> Zig-managed memory
+    const class_string = try allocator.alloc(u8, class_list.len);
+    @memcpy(class_string, class_list.ptr[0..class_list.len]);
     return class_string;
+}
+
+test "classListAsString" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("<p id=\"1\" class= \"bold main\"></p><p id=\"2\"></p>");
+    defer z.destroyDocument(doc);
+    const element1 = z.getElementById(z.bodyNode(doc).?, "1");
+    const class_string = try classListAsString(allocator, element1.?);
+    defer allocator.free(class_string);
+    try testing.expectEqualStrings("bold main", class_string);
+
+    const element2 = z.getElementById(z.bodyNode(doc).?, "2");
+    const class_string2 = try classListAsString(allocator, element2.?);
+    defer allocator.free(class_string2);
+    try testing.expectEqualStrings("", class_string2);
 }
 
 // ===================================================================
 
-/// [classList] Browser-like DOMTokenList using StringHashMap as a set
-pub const DOMTokenList = struct {
+/// [classList] Browser-like ClassList using StringHashMap as a set
+pub const ClassList = struct {
     allocator: std.mem.Allocator,
     element: *z.HTMLElement,
     classes: std.StringHashMap(void),
-    dirty: bool = false,
 
     const Self = @This();
 
@@ -83,7 +116,6 @@ pub const DOMTokenList = struct {
             .element = element,
             // build a SET of the classes as keys and use empty strings as values
             .classes = std.StringHashMap(void).init(allocator),
-            .dirty = false,
         };
 
         try token_list.refresh();
@@ -108,14 +140,14 @@ pub const DOMTokenList = struct {
         self.classes.clearRetainingCapacity();
 
         // Get class string from DOM
-        const borrowed_classes = classListAsString_zc(self.element);
+        const borrowed_classes = classList_zc(self.element);
 
-        if (borrowed_classes == null) return;
+        if (borrowed_classes.len == 0) return;
 
         // Parse and add classes to set
         var split_iterator = std.mem.splitScalar(
             u8,
-            borrowed_classes.?,
+            borrowed_classes,
             ' ',
         );
         // create owned copies
@@ -126,14 +158,10 @@ pub const DOMTokenList = struct {
                 try self.classes.put(class_copy, {});
             }
         }
-
-        self.dirty = false;
     }
 
     /// Sync changes back to the DOM element
     fn sync(self: *Self) !void {
-        if (!self.dirty) return;
-
         var class_string: std.ArrayList(u8) = .empty;
         defer class_string.deinit(self.allocator);
 
@@ -150,7 +178,6 @@ pub const DOMTokenList = struct {
             "class",
             class_string.items,
         );
-        self.dirty = false;
     }
 
     /// Get the number of classes
@@ -166,14 +193,13 @@ pub const DOMTokenList = struct {
     /// Add a class
     pub fn add(self: *Self, class_name: []const u8) !void {
         if (class_name.len == 0 or std.mem.indexOfAny(u8, class_name, " \t\n\r") != null) {
-            return Err.InvalidClassName;
+            return;
         }
 
         if (self.contains(class_name)) return;
 
         const class_copy = try self.allocator.dupe(u8, class_name);
         try self.classes.put(class_copy, {});
-        self.dirty = true;
         try self.sync();
     }
 
@@ -182,7 +208,6 @@ pub const DOMTokenList = struct {
     pub fn remove(self: *Self, class_name: []const u8) !void {
         if (self.classes.fetchRemove(class_name)) |removed| {
             self.allocator.free(removed.key);
-            self.dirty = true;
             try self.sync();
         }
     }
@@ -218,7 +243,6 @@ pub const DOMTokenList = struct {
             self.allocator.free(entry.key_ptr.*);
         }
         self.classes.clearRetainingCapacity();
-        self.dirty = true;
         try self.sync();
     }
 
@@ -244,9 +268,9 @@ pub const DOMTokenList = struct {
     }
 
     /// Get class string as it would appear in DOM
-    pub fn toString(self: *const Self, allocator: std.mem.Allocator) ![]u8 {
+    pub fn toString(self: *const Self) ![]u8 {
         var class_string: std.ArrayList(u8) = .empty;
-        defer class_string.deinit(allocator);
+        defer class_string.deinit(self.allocator);
 
         var iter = self.classes.iterator();
         var first = true;
@@ -260,178 +284,191 @@ pub const DOMTokenList = struct {
     }
 };
 
-/// Convenience function to get classList for an element
-pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !DOMTokenList {
-    return DOMTokenList.init(allocator, element);
+/// Get classList for an element
+pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !ClassList {
+    return ClassList.init(allocator, element);
 }
 
-// test "DOMTokenList set operations" {
-//     const allocator = testing.allocator;
+test "ClassList set operations" {
+    const allocator = testing.allocator;
 
-//     const doc = try z.createDocFromString("<p></p>");
-//     const body = z.bodyNode(doc).?;
-//     const p = z.nodeToElement(z.firstChild(body).?).?;
-//     var token_list = try DOMTokenList.init(
-//         allocator,
-//         p,
-//     );
-//     defer token_list.deinit();
+    const doc = try z.createDocFromString("<p></p>");
+    const body = z.bodyNode(doc).?;
+    const p = z.nodeToElement(z.firstChild(body).?).?;
+    var token_list = try ClassList.init(
+        allocator,
+        p,
+    );
+    defer token_list.deinit();
 
-//     // Test basic operations
-//     try token_list.add("active");
-//     try token_list.add("button");
-//     try token_list.add("primary");
+    // Test basic operations
+    try token_list.add("active");
+    try token_list.add("button");
+    try token_list.add("primary");
+    try token_list.sync();
 
-//     try testing.expect(token_list.length() == 3);
-//     try testing.expect(token_list.contains("active"));
-//     try testing.expect(token_list.contains("button"));
-//     try testing.expect(token_list.contains("primary"));
+    try testing.expect(token_list.length() == 3);
+    try testing.expect(token_list.contains("active"));
+    try testing.expect(token_list.contains("button"));
+    try testing.expect(token_list.contains("primary"));
 
-//     // Test duplicate add (should be ignored)
-//     try token_list.add("active");
-//     try testing.expect(token_list.length() == 3);
+    // Test duplicate add (should be ignored)
+    try token_list.add("active");
+    try testing.expect(token_list.length() == 3);
 
-//     // Test remove
-//     try token_list.remove("button");
-//     try testing.expect(!token_list.contains("button"));
-//     try testing.expect(token_list.length() == 2);
+    // Test remove
+    try token_list.remove("button");
+    try testing.expect(!token_list.contains("button"));
+    try testing.expect(token_list.length() == 2);
 
-//     // Test toggle
-//     const added = try token_list.toggle("new-class");
-//     try testing.expect(added == true);
-//     try testing.expect(token_list.contains("new-class"));
+    // Test toggle
+    const added = try token_list.toggle("new-class");
+    try testing.expect(added == true);
+    try testing.expect(token_list.contains("new-class"));
 
-//     const removed = try token_list.toggle("new-class");
-//     try testing.expect(removed == false);
-//     try testing.expect(!token_list.contains("new-class"));
+    const removed = try token_list.toggle("new-class");
+    try testing.expect(removed == false);
+    try testing.expect(!token_list.contains("new-class"));
 
-//     // // Test replace
-//     // const replaced = try token_list.replace("active", "inactive");
-//     // try testing.expect(replaced == true);
-//     // try testing.expect(!token_list.contains("active"));
-//     // try testing.expect(token_list.contains("inactive"));
-// }
+    try token_list.sync();
 
-// test "DOMTokenList performance" {
-//     const allocator = testing.allocator;
+    const lxb_classes = classList_zc(p);
+    const token_list_classes = try token_list.toString();
+    defer allocator.free(token_list_classes);
+    try testing.expectEqualStrings(lxb_classes, token_list_classes[0..token_list_classes.len]);
 
-//     const doc = try z.createDocFromString("<p></p>");
-//     const body = z.bodyNode(doc).?;
-//     const p = z.nodeToElement(z.firstChild(body).?).?;
-//     var token_list = try DOMTokenList.init(
-//         allocator,
-//         p,
-//     );
-//     defer token_list.deinit();
+    // // Test replace
+    // const replaced = try token_list.replace("active", "inactive");
+    // try testing.expect(replaced == true);
+    // try testing.expect(!token_list.contains("active"));
+    // try testing.expect(token_list.contains("inactive"));
+}
 
-//     // Add many classes - should be fast
-//     const num_classes = 100;
-//     for (0..num_classes) |i| {
-//         const class_name = try std.fmt.allocPrint(allocator, "class-{}", .{i});
-//         defer allocator.free(class_name);
-//         try token_list.add(class_name);
-//     }
+test "ClassList performance with lxb check" {
+    const allocator = testing.allocator;
 
-//     // Test contains performance - O(1) lookups
-//     var found_count: usize = 0;
-//     for (0..num_classes) |i| {
-//         const class_name = try std.fmt.allocPrint(allocator, "class-{}", .{i});
-//         defer allocator.free(class_name);
-//         if (token_list.contains(class_name)) {
-//             found_count += 1;
-//         }
-//     }
+    const doc = try z.createDocFromString("<p></p>");
+    const body = z.bodyNode(doc).?;
+    const p = z.nodeToElement(z.firstChild(body).?).?;
+    var token_list = try ClassList.init(
+        allocator,
+        p,
+    );
+    defer token_list.deinit();
 
-//     try testing.expect(found_count == num_classes);
-//     try testing.expect(token_list.length() == num_classes);
-// }
+    // Add many classes - should be fast
+    const num_classes = 100;
+    for (0..num_classes) |i| {
+        const class_name = try std.fmt.allocPrint(allocator, "class-{}", .{i});
+        defer allocator.free(class_name);
+        try token_list.add(class_name);
+    }
 
-// test "class search functionality" {
-//     const allocator = testing.allocator;
+    const classes = classList_zc(p);
 
-//     // Create HTML with multiple classes
-//     const html =
-//         \\<div class="container main active">First div</div>
-//         \\<div class="container secondary">Second div</div>
-//         \\<span class="active">Span element</span>
-//         \\<div>No class div</div>
-//     ;
+    // Test contains performance - O(1) lookups
+    var found_count: usize = 0;
+    var found_lxb_count: usize = 0;
+    for (0..num_classes) |i| {
+        const class_name = try std.fmt.allocPrint(allocator, "class-{}", .{i});
+        defer allocator.free(class_name);
+        if (token_list.contains(class_name)) {
+            found_count += 1;
+        }
+        try testing.expect(hasClass(p, class_name));
+        if (z.stringContains(classes, class_name)) {
+            found_lxb_count += 1;
+        }
+    }
 
-//     const doc = try z.createDocFromString(html);
-//     defer z.destroyDocument(doc);
+    try testing.expect(found_count == num_classes);
+    try testing.expect(found_lxb_count == num_classes);
+    try testing.expect(token_list.length() == num_classes);
+}
 
-//     const body_node = z.bodyNode(doc).?;
-//     var child = z.firstChild(body_node);
+test "class search functionality" {
+    const allocator = testing.allocator;
 
-//     // Test hasClass function and compare with existing classList
-//     while (child != null) {
-//         if (z.nodeToElement(child.?)) |element| {
-//             const element_name = z.tagName_zc(element);
-//             if (std.mem.eql(u8, element_name, "div")) {
-//                 const text_content = try z.textContent(allocator, child.?);
-//                 defer allocator.free(text_content);
-//                 if (std.mem.eql(u8, text_content, "First div")) {
-//                     // First div should have all three classes
-//                     try testing.expect(z.hasClass(element, "container"));
-//                     try testing.expect(z.hasClass(element, "main"));
-//                     try testing.expect(z.hasClass(element, "active"));
-//                     try testing.expect(!z.hasClass(element, "missing"));
+    // Create HTML with multiple classes
+    const html =
+        \\<div class="container main active">First div</div>
+        \\<div class="container secondary">Second div</div>
+        \\<span class="active">Span element</span>
+        \\<div>No class div</div>
+    ;
 
-//                     // Test unified classList function - returns full class string
-//                     var tokenList_1 = try z.DOMTokenList.init(
-//                         allocator,
-//                         element,
-//                     );
-//                     defer tokenList_1.deinit();
-//                     try testing.expect(tokenList_1.length() == 4);
-//                     try testing.expect(tokenList_1.contains("container"));
-//                     try testing.expect(tokenList_1.contains("main"));
-//                     try testing.expect(tokenList_1.contains("active"));
-//                     try testing.expect(!tokenList_1.contains("missing"));
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
 
-//                     // Test new getClasses function - returns array of individual classes
-//                     const classes = try tokenList_1.toSlice(allocator);
-//                     defer {
-//                         for (classes) |class| allocator.free(class);
-//                         allocator.free(classes);
-//                     }
-//                     try testing.expect(classes.len == 4);
-//                     try testing.expect(std.mem.eql(u8, classes[0], "container"));
-//                     try testing.expect(std.mem.eql(u8, classes[1], "main"));
-//                     try testing.expect(std.mem.eql(u8, classes[2], "active"));
-//                 } else if (std.mem.eql(u8, text_content, "Second div")) {
-//                     // Second div should have container and secondary
-//                     try testing.expect(z.hasClass(element, "container"));
-//                     try testing.expect(z.hasClass(element, "secondary"));
-//                     try testing.expect(!z.hasClass(element, "main"));
-//                     try testing.expect(!z.hasClass(element, "active"));
-//                 } else if (std.mem.eql(u8, text_content, "No class div")) {
-//                     // Third div should have no classes
-//                     try testing.expect(!z.hasClass(element, "container"));
-//                     try testing.expect(!z.hasClass(element, "any"));
+    const body_node = z.bodyNode(doc).?;
+    var child = z.firstChild(body_node);
 
-//                     // classList should return null for elements with no class attribute
-//                     var tokenList_2 = try z.classList(
-//                         allocator,
-//                         element,
-//                     );
-//                     defer tokenList_2.deinit();
-//                     try testing.expect(tokenList_2.length() == 0);
-//                 }
-//             } else if (std.mem.eql(u8, element_name, "span")) {
-//                 // Span should have active class
-//                 try testing.expect(z.hasClass(element, "active"));
-//                 try testing.expect(!z.hasClass(element, "container"));
-//                 var tokenList_3 = try z.classList(
-//                     allocator,
-//                     element,
-//                 );
-//                 defer tokenList_3.deinit();
-//                 try testing.expect(tokenList_3.length() == 2);
-//                 try testing.expect(tokenList_3.contains("active"));
-//                 try testing.expect(!tokenList_3.contains("container"));
-//             }
-//         }
-//         child = z.nextSibling(child.?);
-//     }
-// }
+    // Test hasClass function and compare with existing classList
+    while (child != null) {
+        if (z.nodeToElement(child.?)) |element| {
+            const element_name = z.tagName_zc(element);
+            if (std.mem.eql(u8, element_name, "DIV")) {
+                const text_content = z.textContent_zc(child.?);
+                if (std.mem.eql(u8, text_content, "First div")) {
+                    // First div should have three classes
+                    try testing.expect(z.hasClass(element, "container"));
+                    try testing.expect(z.hasClass(element, "main"));
+                    try testing.expect(z.hasClass(element, "active"));
+                    try testing.expect(!z.hasClass(element, "missing"));
+
+                    var tokenList_1 = try z.ClassList.init(
+                        allocator,
+                        element,
+                    );
+                    defer tokenList_1.deinit();
+
+                    try testing.expect(tokenList_1.length() == 3);
+                    try testing.expect(tokenList_1.contains("container"));
+                    try testing.expect(tokenList_1.contains("main"));
+                    try testing.expect(tokenList_1.contains("active"));
+                    try testing.expect(!tokenList_1.contains("missing"));
+
+                    // Test new getClasses function - returns array of individual classes
+                    const classes = try tokenList_1.toSlice(allocator);
+                    // defer {
+                    //     for (classes) |class| allocator.free(class);
+                    //     allocator.free(classes);
+                    // }
+                    defer allocator.free(classes);
+                    try testing.expect(classes.len == 3);
+                    try testing.expect(tokenList_1.contains("container"));
+                    try testing.expect(tokenList_1.contains("main"));
+                    try testing.expect(tokenList_1.contains("active"));
+                } else if (std.mem.eql(u8, text_content, "Second div")) {
+                    // Second div should have container and secondary
+                    try testing.expect(z.hasClass(element, "container"));
+                } else if (std.mem.eql(u8, text_content, "No class div")) {
+                    // Third div should have no classes
+                    try testing.expect(!z.hasClass(element, "container"));
+                    try testing.expect(!z.hasClass(element, "any"));
+
+                    // classList should return null for elements with no class attribute
+                    var tokenList_2 = try z.classList(
+                        allocator,
+                        element,
+                    );
+                    defer tokenList_2.deinit();
+                    try testing.expect(tokenList_2.length() == 0);
+                }
+            } else if (std.mem.eql(u8, element_name, "SPAN")) {
+                // Span should have active class
+                try testing.expect(z.hasClass(element, "active"));
+                try testing.expect(!z.hasClass(element, "container"));
+                var tokenList_3 = try z.classList(
+                    allocator,
+                    element,
+                );
+                defer tokenList_3.deinit();
+                try testing.expect(tokenList_3.length() == 1);
+                try testing.expect(tokenList_3.contains("active"));
+                try testing.expect(!tokenList_3.contains("container"));
+            }
+        }
+        child = z.nextSibling(child.?);
+    }
+}

@@ -11,37 +11,6 @@ pub const print = std.debug.print;
 
 const testing = std.testing;
 
-// Lexbor string comparison functions for zero-copy operations
-extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
-extern "c" fn lexbor_str_data_ncmp_end(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
-
-/// Fast string comparison using lexbor's optimized functions
-/// Returns true if strings are equal
-pub fn stringEquals(first: []const u8, second: []const u8) bool {
-    if (first.len != second.len) return false;
-    if (first.len == 0) return true;
-    return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
-}
-
-/// Fast string ending comparison using lexbor's optimized functions
-/// Returns true if first string ends with second string
-pub fn stringEndsWith(first: []const u8, second: []const u8) bool {
-    if (second.len > first.len) return false;
-    if (second.len == 0) return true;
-    return lexbor_str_data_ncmp_end(first.ptr, second.ptr, second.len);
-}
-
-test "lexbor string functions" {
-    // Test stringEquals only (stringEndsWith needs verification)
-    try testing.expect(stringEquals("hello", "hello"));
-    try testing.expect(!stringEquals("hello", "world"));
-    try testing.expect(!stringEquals("hello", "hello2"));
-    try testing.expect(stringEquals("", ""));
-
-    // TODO: Fix stringEndsWith - the function signature or logic might be wrong
-    // try testing.expect(stringEndsWith("hello world", "world"));
-}
-
 const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
 
 const lxbString = extern struct {
