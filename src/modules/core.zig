@@ -8,14 +8,8 @@ const print = std.debug.print;
 const time = std.time;
 const Instant = time.Instant;
 const Timer = time.Timer;
-const writer = std.io.getStdOut().writer();
-
-// pub const LXB_DOM_NODE_TYPE_ELEMENT: u32 = 1;
-// pub const LXB_DOM_NODE_TYPE_TEXT: u32 = 3;
-// pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
 
 pub const LXB_TAG_TEMPLATE: u32 = 0x31; // From lexbor source
-
 pub const LXB_TAG_STYLE: u32 = 0x2d;
 pub const LXB_TAG_SCRIPT: u32 = 0x29;
 

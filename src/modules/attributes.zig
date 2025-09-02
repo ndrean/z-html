@@ -812,30 +812,6 @@ test "removeSelectedAttributes" {
     try testing.expect(std.mem.containsAtLeast(u8, serialized, 1, "style="));
 }
 
-// Context for adding a class to all elements - different extra field
-// const AddClassContext = struct {
-//     allocator: std.mem.Allocator,
-//     processor: *const fn (*z.HTMLElement, ctx: *@This()) c_int,
-//     class_name: []const u8, // Different extra field!
-
-//     fn addClass(node: *z.DomNode, ctx: *@This()) c_int {
-//         const element = z.nodeToElement(node).?;
-//         const existing_class = z.getAttribute_zc(element, "class") orelse "";
-
-//         var new_class : std.ArrayList(u8) = .empty;
-//         defer new_class.deinit(ctx.allocator);
-
-//         if (existing_class.len > 0) {
-//             new_class.appendSlice(existing_class) catch return z._STOP;
-//             new_class.append(' ') catch return z._STOP;
-//         }
-//         new_class.appendSlice(ctx.class_name) catch return z._STOP;
-
-//         z.setAttribute(element, "class", new_class.items) catch return z._STOP;
-//         return z._CONTINUE;
-//     }
-// };
-
 test "single element search" {
     const allocator = testing.allocator;
     const html =

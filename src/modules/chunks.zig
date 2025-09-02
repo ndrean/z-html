@@ -4,10 +4,10 @@ const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
 
-pub const HtmlParser = opaque {};
-
 const testing = std.testing;
 const print = std.debug.print;
+
+// =======================================================================
 
 extern "c" fn lxb_html_parser_create() *z.HtmlParser;
 extern "c" fn lxb_html_parser_init(*z.HtmlParser) usize;
@@ -15,6 +15,8 @@ extern "c" fn lxb_html_parser_destroy(parser: *z.HtmlParser) void;
 extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HTMLDocument) usize;
 extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HTMLDocument) usize;
 extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*:0]const u8, len: usize) usize;
+
+// =======================================================================
 
 /// [chunks] Chunk engine to process streams of HTML documents
 ///

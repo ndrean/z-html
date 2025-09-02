@@ -10,7 +10,6 @@ const Err = z.Err;
 
 const print = std.debug.print;
 const testing = std.testing;
-const writer = std.io.getStdOut().writer();
 
 // Structure ====================================================================
 
