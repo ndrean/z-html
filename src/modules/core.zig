@@ -160,7 +160,7 @@ test "create elt" {
     z.appendChild(body, z.elementToNode(button));
 
     const allocator = testing.allocator;
-    const attrs = try z.getAttributes(allocator, button);
+    const attrs = try z.getAttributes_bf(allocator, button);
     defer {
         for (attrs) |attr| {
             allocator.free(attr.name);
@@ -1262,7 +1262,7 @@ pub fn insertAdjacentHTML(
     defer parser.deinit();
 
     // Parse the HTML fragment once
-    const fragment_root = try parser.parseString(
+    const fragment_root = try parser.parseStringContext(
         html,
         .body,
         sanitizer_enabled,

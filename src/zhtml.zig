@@ -76,13 +76,16 @@ pub const genSearchElement = walker.genSearchElement;
 pub const genSearchElements = walker.genSearchElements;
 
 //=====================================
-// Main structs
+// Opaque structs
 //=====================================
 pub const HTMLDocument = opaque {};
 pub const DomNode = opaque {};
 pub const HTMLElement = opaque {};
 pub const Comment: type = opaque {};
 pub const DocumentFragment = opaque {};
+pub const HTMLTemplateElement = opaque {};
+pub const HtmlParser = opaque {};
+pub const DomAttr = opaque {};
 
 //=====================================
 // Core
@@ -231,7 +234,10 @@ pub const children = lxb.children;
 pub const parseString = parse.parseString;
 pub const createDocFromString = parse.createDocFromString;
 
-// Parser engine
+pub const setInnerHTML = parse.setInnerHTML;
+pub const setInnerSafeHTML = parse.setInnerSafeHTML;
+
+// Parser engine for templates and chunk processing
 pub const FragmentParser = parse.FragmentParser;
 
 // fragments
@@ -244,8 +250,6 @@ pub const appendFragment = parse.appendFragment;
 // Chunk processing engine
 // ============================================================
 pub const ChunkParser = chunks.ChunkParser;
-pub const HtmlParser = chunks.HtmlParser;
-
 // =============================================================
 // Fragment & fragment parsing
 // =============================================================
@@ -253,7 +257,6 @@ pub const HtmlParser = chunks.HtmlParser;
 //=====================================
 // Template element
 //=====================================
-pub const HTMLTemplateElement = opaque {};
 pub const isTemplate = template.isTemplate;
 
 pub const createTemplate = template.createTemplate;
@@ -316,9 +319,6 @@ pub const innerHTML = serialize.innerHTML;
 pub const outerHTML = serialize.outerHTML;
 pub const outerNodeHTML = serialize.outerNodeHTML;
 
-pub const setInnerHTML = parse.setInnerHTML;
-pub const setInnerSafeHTML = parse.setInnerSafeHTML;
-
 pub const sanitizeNode = sanitize.sanitizeNode;
 pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
 
@@ -326,11 +326,6 @@ pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
 // Debug printing utilities
 pub const printDocStruct = tree.printDocStruct;
 pub const prettyPrint = serialize.prettyPrint;
-
-//====================================================================
-// Utilities
-pub const stringContains = attrs.stringContains;
-pub const stringEquals = attrs.stringEquals;
 
 //=========================================
 // CSS selectors
@@ -344,7 +339,7 @@ pub const stringEquals = attrs.stringEquals;
 // pub const querySelector = css.querySelector;
 
 //=========================================
-// Class handling - ClassList
+// Class & ClassList
 //=========================================
 pub const hasClass = classes.hasClass;
 pub const classList_zc = classes.classList_zc;
@@ -357,44 +352,35 @@ pub const classList = classes.classList;
 //=========================================
 // Attributes
 //=========================================
-pub const DomAttr = attrs.DomAttr;
+
 pub const AttributePair = attrs.AttributePair;
+pub const hasAttribute = attrs.hasAttribute;
 pub const hasAttributes = attrs.hasAttributes;
 
 pub const getAttribute = attrs.getAttribute;
 pub const getAttribute_zc = attrs.getAttribute_zc;
-pub const setAttribute = attrs.setAttribute;
 
-pub const getAttributes_bf = attrs.getAttributes_bf;
-pub const getAttributes = attrs.getAttributes;
-pub const setAttributes = attrs.setAttributes;
-pub const hasAttribute = attrs.hasAttribute;
+pub const setAttribute = attrs.setAttribute;
 pub const removeAttribute = attrs.removeAttribute;
+
+pub const setAttributes = attrs.setAttributes;
+pub const getAttributes_bf = attrs.getAttributes_bf;
+
 pub const getElementId = attrs.getElementId;
 pub const getElementId_zc = attrs.getElementId_zc;
 pub const hasElementId = attrs.hasElementId;
 
-pub const getAttributeValue_zc = attrs.getAttributeValue_zc;
-pub const getAttributeValue = attrs.getAttributeValue;
-pub const getAttributeName_zc = attrs.getAttributeName_zc;
-pub const getAttributeName = attrs.getAttributeName;
-
-//=========================================
-// Attribute struct reflexion
-//=========================================
-
-pub const getFirstAttribute = attrs.getFirstAttribute;
-pub const getNextAttribute = attrs.getNextAttribute;
-
 //=======================================
-// ------- Search (simple walk)
+// SEARCH byId / byClass / byTag/ byAttribute-{value}  - Simple Walk -
 // ======================================
 pub const getElementById = attrs.getElementById;
+pub const getElementByTag = attrs.getElementByTag;
 pub const getElementByClass = attrs.getElementByClass;
 pub const getElementByAttribute = attrs.getElementByAttribute;
 pub const getElementByDataAttribute = attrs.getElementByDataAttribute;
-pub const getElementByTag = attrs.getElementByTag; // multiple
-pub const getElementsById = attrs.getElementsById; // multiple
+
+// multiple
+pub const getElementsById = attrs.getElementsById;
 
 //=====================================
 // Collection management
@@ -430,6 +416,11 @@ pub const getElementsById = attrs.getElementsById; // multiple
 // pub const getElementsByAttributeName = collection.getElementsByAttributeName;
 // pub const getElementsByTagName = collection.getElementsByTagName;
 // pub const getElementsByName = collection.getElementsByName;
+
+//====================================================================
+// Utilities
+pub const stringContains = attrs.stringContains;
+pub const stringEquals = attrs.stringEquals;
 
 // ***************************************************************************
 // ***************************************************************************

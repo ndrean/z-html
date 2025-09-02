@@ -8,8 +8,7 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
-pub const DomAttr = opaque {};
-pub const DomCol = opaque {};
+pub const DomAttr = z.DomAttr;
 
 /// [attributes] Pair of attribute name and value
 pub const AttributePair = struct {
@@ -34,6 +33,8 @@ extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8
 extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
 extern "c" fn lexbor_str_data_ncmp_contain(where: [*c]const u8, where_size: usize, what: [*c]const u8, what_size: usize) bool;
 
+// ===============================================================================
+
 /// Fast string comparison using lexbor's optimized functions
 ///
 /// Returns true if strings are equal
@@ -42,7 +43,6 @@ pub fn stringEquals(first: []const u8, second: []const u8) bool {
     if (first.len == 0) return true;
     return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
 }
-
 
 pub fn stringContains(where: []const u8, what: []const u8) bool {
     if (what.len == 0) return true;
@@ -64,6 +64,7 @@ test "lexbor string functions" {
 }
 
 // ===============================================================================
+
 /// [attributes] Get attribute value
 ///
 /// Returns `null` if attribute doesn't exist, empty string `""` if attribute exists but has no value.
@@ -112,8 +113,6 @@ pub fn getAttribute_zc(element: *z.HTMLElement, name: []const u8) ?[]const u8 {
     return value_ptr[0..value_len];
 }
 
-// ----------------------------------------------------------
-
 /// [attributes] Check if element has a given attribute
 ///
 /// ## Example
@@ -134,8 +133,6 @@ pub fn hasAttribute(element: *z.HTMLElement, name: []const u8) bool {
 pub fn hasAttributes(element: *z.HTMLElement) bool {
     return lxb_dom_element_has_attributes(element);
 }
-
-// ----------------------------------------------------------
 
 /// [attributes] Set the attribute name/value as strings
 pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8) void {
@@ -175,15 +172,11 @@ pub fn setAttributes(element: *z.HTMLElement, attrs: []const AttributePair) void
 }
 
 // ----------------------------------------------------------
-// Reflexion function on the `DomAttr` struct
-//
-// and functions to iterate over attributes
-// ----------------------------------------------------------
 
 /// Get attribute name as owned string
 ///
 /// Caller needs to free the slice
-pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
+fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_attr_qualified_name(
         attr,
@@ -196,7 +189,7 @@ pub fn getAttributeName(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
 }
 
 /// [attributes] Get attribute name as borrowed slice (zero-copy)
-pub fn getAttributeName_zc(attr: *DomAttr) []const u8 {
+fn getAttributeName_zc(attr: *DomAttr) []const u8 {
     var name_len: usize = 0;
     const name_ptr = lxb_dom_attr_qualified_name(
         attr,
@@ -206,7 +199,7 @@ pub fn getAttributeName_zc(attr: *DomAttr) []const u8 {
 }
 
 /// [attributes] Get attribute value as borrowed slice (zero-copy)
-pub fn getAttributeValue_zc(attr: *DomAttr) []const u8 {
+fn getAttributeValue_zc(attr: *DomAttr) []const u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_attr_value_noi(
         attr,
@@ -218,7 +211,7 @@ pub fn getAttributeValue_zc(attr: *DomAttr) []const u8 {
 /// [attributes] Get attribute value as owned string
 ///
 /// Caller needs to free the slice
-pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
+fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
     var value_len: usize = 0;
     const value_ptr = lxb_dom_attr_value_noi(
         attr,
@@ -233,20 +226,21 @@ pub fn getAttributeValue(allocator: std.mem.Allocator, attr: *DomAttr) ![]u8 {
 /// [attributes] Get first attribute of an HTMLElement
 ///
 /// Returns a DomAttr
-pub fn getFirstAttribute(element: *z.HTMLElement) ?*DomAttr {
+fn getFirstAttribute(element: *z.HTMLElement) ?*DomAttr {
     return lxb_dom_element_first_attribute_noi(element);
 }
-
-// ----------------------------------------------------------
 
 /// [attributes] Get next attribute in the list gives an attribute
 ///
 /// Returns a DomAttr
-pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
+fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
     return lxb_dom_element_next_attribute_noi(attr);
 }
 
-/// [attributes] Collect all attributes from an element.
+// ----------------------------------------------------------
+/// [attributes] _deprecate_ Collect all attributes from an element.
+///
+/// First version.
 ///
 /// Caller needs to free the slice
 /// ## Example
@@ -280,8 +274,7 @@ pub fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 ///    try testing.expectEqualStrings("hidden", attrs[1].name);
 ///}
 /// ```
-///## Signature
-pub fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
+fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
     var attribute = getFirstAttribute(element);
     if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
 
@@ -360,8 +353,6 @@ pub fn removeAttribute(element: *z.HTMLElement, name: []const u8) !void {
     _ = result;
 }
 
-// ----------------------------------------------------------
-
 /// [attributes] Get element ID as owned string
 ///
 /// Caller needs to free the slice
@@ -395,7 +386,7 @@ pub fn hasElementId(element: *z.HTMLElement, id: []const u8) bool {
 
 // ===========================================================
 /// GENERIC DOM SEARCH PATTERN
-/// 
+///
 /// The search functions below use a generic pattern from walker.zig that allows
 /// efficient DOM traversal with custom matching logic. Here's how it works:
 ///
@@ -417,7 +408,7 @@ pub fn hasElementId(element: *z.HTMLElement, id: []const u8) bool {
 ///     target: []const u8,
 ///     found_element: ?*z.HTMLElement = null,
 ///     matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int,
-///     
+///
 ///     fn implement(node: *z.DomNode, ctx: *@This()) callconv(.c) c_int {
 ///         // Your matching logic here
 ///         if (matches_criteria(node, ctx.target)) {
@@ -710,11 +701,11 @@ const RemoveAllContext = struct {
         defer attr_names.deinit(cast_ctx.allocator);
         const element = z.nodeToElement(node).?;
 
-        var attr = z.getFirstAttribute(element);
+        var attr = getFirstAttribute(element);
         while (attr != null) {
-            const name = z.getAttributeName_zc(attr.?);
+            const name = getAttributeName_zc(attr.?);
             attr_names.append(cast_ctx.allocator, name) catch return z._STOP;
-            attr = z.getNextAttribute(attr.?);
+            attr = getNextAttribute(attr.?);
         }
 
         for (attr_names.items) |name| {

@@ -16,6 +16,7 @@ pub const LexborError = error{
     SearchFailed,
     NotANode,
     NotAnElement,
+    NotATemplateElement,
     NoNode,
     NoBodyElement,
     NoFirstChild,

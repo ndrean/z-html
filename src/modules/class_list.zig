@@ -14,6 +14,7 @@ const print = std.debug.print;
 extern "c" fn lxb_dom_element_class_attribute_noi(element: *z.HTMLElement) *z.DomAttr;
 extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
 
+/// [classList] Get the raw class attribute value as a zero-copy slice.
 pub fn classList_zc(element: *z.HTMLElement) []const u8 {
     var size: usize = 0;
     const class = lxb_dom_element_class_noi(element, &size);
@@ -102,7 +103,11 @@ test "classListAsString" {
 
 // ===================================================================
 
-/// [classList] Browser-like ClassList using StringHashMap as a set
+/// [classList] DOMTTokenList Browser-like for clasees.
+///
+/// Caller must use `class_list.deinit()` to free the allocations.
+///
+///  Methods: `init`, `deinit`, `length`, `contains`, `add`, `remove`, `toggle`, `replace`, `clear`, `toString`, `toSlice`
 pub const ClassList = struct {
     allocator: std.mem.Allocator,
     element: *z.HTMLElement,
@@ -223,18 +228,18 @@ pub const ClassList = struct {
         }
     }
 
-    // /// Replace one class with another
-    // pub fn replace(self: *Self, old_class: []const u8, new_class: []const u8) !bool {
-    //     if (new_class.len == 0 or std.mem.indexOfAny(u8, new_class, " \t\n\r") != null) {
-    //         return Err.InvalidClassName;
-    //     }
+    /// Replace one class with another
+    pub fn replace(self: *Self, old_class: []const u8, new_class: []const u8) !bool {
+        if (new_class.len == 0 or std.mem.indexOfAny(u8, new_class, " \t\n\r") != null) {
+            return false;
+        }
 
-    //     if (!self.contains(old_class)) return false;
+        if (!self.contains(old_class)) return false;
 
-    //     try self.remove(old_class);
-    //     try self.add(new_class);
-    //     return true;
-    // }
+        try self.remove(old_class);
+        try self.add(new_class);
+        return true;
+    }
 
     /// Clear all classes
     pub fn clear(self: *Self) !void {
@@ -284,9 +289,65 @@ pub const ClassList = struct {
     }
 };
 
-/// Get classList for an element
+/// Use a `ClassList` instance (eq DomTokenList) for an element with its methods.
+///
+/// - Use `class_list.init(allocator, elememnt)` to create a new instance.
+///
+/// - Use `class_list.deinit()` to free the allocations.
+///
+/// Caller must use `class_list.deinit()` to free the allocations.
+///
+/// To access the classList as a string, prefer `classListAsString` (or `classList_zc`).
+///
+/// The methods available on `classList` include:
+/// - `add`: Add a class
+/// - `remove`: Remove a class
+/// - `toggle`: Toggle a class
+/// - `replace`: Replace one class with another
+/// - `clear`: Clear all classes
+/// - `toString`: Get the classList as a string
+/// - `toSlice`: Convert the classList to a slice
+/// ## Example
+/// ```
+/// <p class="bold main"></p>
+///
+/// const class_list = try z.classList(allocator, p);
+/// defer class_list.deinit();
+/// std.debug.assert(class_list.contains("main"));
+/// _ = try class_list.toggle("main");
+/// std.debug.assert(!class_list.contains("main"));
+/// class_list.add("container");
+/// try class_list.replace("bold", "italic");
+/// std.debug.assert(class_list.contains("italic"));
+/// std.debug.assert(!class_list.contains("bold"));
+/// ```
 pub fn classList(allocator: std.mem.Allocator, element: *z.HTMLElement) !ClassList {
     return ClassList.init(allocator, element);
+}
+
+test "classList" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("<p class=\"bold main\"></p>");
+    const body = z.bodyNode(doc).?;
+    const p = z.nodeToElement(z.firstChild(body).?).?;
+
+    var class_list = try z.classList(allocator, p);
+    defer class_list.deinit();
+
+    std.debug.assert(class_list.contains("main"));
+    _ = try class_list.toggle("main");
+    std.debug.assert(!class_list.contains("main"));
+    _ = try class_list.toggle("main");
+    try testing.expect(class_list.contains("main"));
+    _ = try class_list.add("container");
+    try testing.expect(class_list.contains("container"));
+    _ = try class_list.replace("bold", "italic");
+    try testing.expect(class_list.contains("italic"));
+    try testing.expect(!class_list.contains("bold"));
+    const class_list_string = try class_list.toString();
+    defer allocator.free(class_list_string);
+    try testing.expect(std.mem.eql(u8, class_list_string, "container main italic"));
 }
 
 test "ClassList set operations" {

@@ -74,7 +74,7 @@ pub fn nodeTuple(allocator: std.mem.Allocator, node: *z.DomNode) !TupleNode {
         .element => {
             const element = z.nodeToElement(node).?;
             const tag_name = try z.nodeName(allocator, node);
-            const elt_attrs = try z.getAttributes(allocator, element);
+            const elt_attrs = try z.getAttributes_bf(allocator, element);
 
             // Convert child nodes recursively
             var children_list: std.ArrayList(TupleNode) = .empty;

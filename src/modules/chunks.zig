@@ -11,12 +11,16 @@ const print = std.debug.print;
 
 extern "c" fn lxb_html_parser_create() *z.HtmlParser;
 extern "c" fn lxb_html_parser_init(*z.HtmlParser) usize;
-extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) void;
+extern "c" fn lxb_html_parser_destroy(parser: *z.HtmlParser) void;
 extern "c" fn lxb_html_document_parse_chunk_begin(document: *z.HTMLDocument) usize;
 extern "c" fn lxb_html_document_parse_chunk_end(document: *z.HTMLDocument) usize;
 extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*:0]const u8, len: usize) usize;
 
-/// [chunks] Chunk engine.
+/// [chunks] Chunk engine to process streams of HTML documents
+///
+/// Instantiate a new chunk parser with `ChunkParser.init(allocator)`
+///
+/// Free it with `ChunkParser.deinit()`.
 ///
 /// Exposes:
 /// - `init`: create a new document
@@ -25,6 +29,18 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*
 /// - `processChunk`: process a chunk of HTML
 /// - `endParsing`: end the parsing process
 /// - `getDocument`: get the underlying HTML document
+/// ## Example
+/// ```
+/// var chunk_parser = try ChunkParser.init(allocator);
+/// defer chunk_parser.deinit();
+///
+/// try chunk_parser.beginParsing();
+/// try chunk_parser.processChunk("/p></body></html>");
+/// [...]
+/// try chunk_parser.endParsing();
+///
+/// const doc = chunk_parser.getDocument();
+/// ```
 pub const ChunkParser = struct {
     doc: *z.HTMLDocument,
     parser: *z.HtmlParser,
