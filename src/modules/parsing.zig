@@ -3,25 +3,28 @@ const z = @import("../zhtml.zig");
 const Err = z.Err;
 
 const testing = std.testing;
-// const print = std.debug.print;
 const print = std.debug.print;
 
-const HtmlParser = opaque {};
-const HtmlTree = opaque {};
 const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
 
+// =================================================================
+
 // setInnerHTML
-extern "c" fn lxb_html_element_inner_html_set(body: *z.HTMLElement, inner: [*]const u8, inner_len: usize) ?*z.HTMLElement;
+extern "c" fn lxb_html_element_inner_html_set(
+    body: *z.HTMLElement,
+    inner: [*]const u8,
+    inner_len: usize,
+) ?*z.HTMLElement;
 
 // parser
-extern "c" fn lxb_html_parser_create() ?*HtmlParser;
-extern "c" fn lxb_html_parser_destroy(parser: *HtmlParser) *HtmlParser;
-extern "c" fn lxb_html_parser_clean(parser: *HtmlParser) void;
-extern "c" fn lxb_html_parser_init(parser: *HtmlParser) usize;
+extern "c" fn lxb_html_parser_create() ?*z.HtmlParser;
+extern "c" fn lxb_html_parser_destroy(parser: *z.HtmlParser) *z.HtmlParser;
+extern "c" fn lxb_html_parser_clean(parser: *z.HtmlParser) void;
+extern "c" fn lxb_html_parser_init(parser: *z.HtmlParser) usize;
 
 // creates a document from the given string with a parser
 extern "c" fn lxb_html_parse(
-    parser: *HtmlParser,
+    parser: *z.HtmlParser,
     html: [*]const u8,
     size: usize,
 ) ?*z.HTMLDocument;
@@ -35,7 +38,7 @@ extern "c" fn lxb_html_document_parse(
 
 // element-based fragment parsing
 extern "c" fn lxb_html_parse_fragment(
-    parser: *HtmlParser,
+    parser: *z.HtmlParser,
     element: *z.HTMLElement,
     html: [*]const u8,
     size: usize,
@@ -50,9 +53,9 @@ extern "c" fn lxb_html_document_parse_fragment(
 ) ?*z.DomNode;
 
 // Chunk parsing for streaming
-extern "c" fn lxb_html_parse_chunk_begin(parser: *HtmlParser) ?*z.HTMLDocument;
-extern "c" fn lxb_html_parse_chunk_process(parser: *HtmlParser, html: [*]const u8, html_len: usize) c_int;
-extern "c" fn lxb_html_parse_chunk_end(parser: *HtmlParser) c_int;
+extern "c" fn lxb_html_parse_chunk_begin(parser: *z.HtmlParser) ?*z.HTMLDocument;
+extern "c" fn lxb_html_parse_chunk_process(parser: *z.HtmlParser, html: [*]const u8, html_len: usize) c_int;
+extern "c" fn lxb_html_parse_chunk_end(parser: *z.HtmlParser) c_int;
 
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
@@ -410,7 +413,7 @@ test "setInnerSafeHTML" {
 /// - `parseChunkEnd`: ends the chunk parsing process.
 pub const FragmentParser = struct {
     allocator: std.mem.Allocator,
-    html_parser: *HtmlParser,
+    html_parser: *z.HtmlParser,
     temp_doc: ?*z.HTMLDocument,
     initialized: bool,
 

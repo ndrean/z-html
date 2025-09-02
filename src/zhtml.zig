@@ -237,7 +237,7 @@ pub const createDocFromString = parse.createDocFromString;
 pub const setInnerHTML = parse.setInnerHTML;
 pub const setInnerSafeHTML = parse.setInnerSafeHTML;
 
-// Parser engine for templates and chunk processing
+// Parser engine for templates and fragment chunk processing
 pub const FragmentParser = parse.FragmentParser;
 
 // fragments
