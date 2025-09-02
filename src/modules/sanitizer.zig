@@ -73,22 +73,26 @@ pub fn isCustomElement(tag_name: []const u8) bool {
 
 /// [sanitize] Check if attribute is a framework directive or custom attribute
 pub fn isFrameworkAttribute(attr_name: []const u8) bool {
-    return std.mem.startsWith(u8, attr_name, "phx-") or     // Phoenix LiveView
-           std.mem.startsWith(u8, attr_name, "data-") or     // Data attributes
-           std.mem.startsWith(u8, attr_name, "v-") or        // Vue.js directives
-           std.mem.startsWith(u8, attr_name, "@") or         // Vue.js events, Alpine events
-           std.mem.startsWith(u8, attr_name, ":") or         // Vue.js/Alpine binding
-           std.mem.startsWith(u8, attr_name, "x-") or        // Alpine.js directives
-           std.mem.startsWith(u8, attr_name, "*ng") or       // Angular structural directives
-           std.mem.startsWith(u8, attr_name, "[") or         // Angular property binding
-           std.mem.startsWith(u8, attr_name, "(") or         // Angular event binding
-           std.mem.startsWith(u8, attr_name, "bind:") or     // Svelte binding
-           std.mem.startsWith(u8, attr_name, "on:") or       // Svelte events
-           std.mem.startsWith(u8, attr_name, "use:") or      // Svelte actions
-           std.mem.startsWith(u8, attr_name, ".") or         // Lit property binding
-           std.mem.startsWith(u8, attr_name, "?") or         // Lit boolean attributes
-           std.mem.startsWith(u8, attr_name, "aria-") or     // Accessibility
-           std.mem.startsWith(u8, attr_name, "slot");        // Web Components slots
+    return std.mem.startsWith(u8, attr_name, "phx-") or // Phoenix LiveView events/bindings
+        std.mem.startsWith(u8, attr_name, ":") or // Phoenix LiveView directives (:if, :for, :let) + Vue.js/Alpine
+        std.mem.startsWith(u8, attr_name, "data-") or // Data attributes
+        std.mem.startsWith(u8, attr_name, "v-") or // Vue.js directives
+        std.mem.startsWith(u8, attr_name, "@") or // Vue.js events, Alpine events
+        std.mem.startsWith(u8, attr_name, "x-") or // Alpine.js directives
+        std.mem.startsWith(u8, attr_name, "*ng") or // Angular structural directives
+        std.mem.startsWith(u8, attr_name, "[") or // Angular property binding
+        std.mem.startsWith(u8, attr_name, "(") or // Angular event binding
+        std.mem.startsWith(u8, attr_name, "bind:") or // Svelte binding
+        std.mem.startsWith(u8, attr_name, "on:") or // Svelte events
+        std.mem.startsWith(u8, attr_name, "use:") or // Svelte actions
+        std.mem.startsWith(u8, attr_name, ".") or // Lit property binding
+        std.mem.startsWith(u8, attr_name, "?") or // Lit boolean attributes
+        std.mem.startsWith(u8, attr_name, "aria-") or // Accessibility
+        std.mem.startsWith(u8, attr_name, "slot") or // Web Components slots
+        // Phoenix LiveView specific attributes that might not have prefixes
+        std.mem.eql(u8, attr_name, "for") or // Phoenix :for loops (might appear as 'for')
+        std.mem.eql(u8, attr_name, "if") or // Phoenix :if conditions (might appear as 'if')
+        std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')
 }
 
 pub const SanitizerOptions = struct {
@@ -96,7 +100,7 @@ pub const SanitizerOptions = struct {
     remove_scripts: bool = true,
     remove_styles: bool = true,
     strict_uri_validation: bool = true,
-    allow_custom_elements: bool = false,  // Enable permissive custom element handling
+    allow_custom_elements: bool = false, // Enable permissive custom element handling
 };
 
 const AttributeAction = struct {
@@ -212,7 +216,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
 
             // Try to get lexbor's tag enum first
             const maybe_tag = z.tagFromElement(element);
-            
+
             if (maybe_tag) |tag| {
                 // Known HTML tag
                 if (shouldRemoveTag(context_ptr.options, tag)) {
@@ -223,7 +227,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
                 }
 
                 const tag_str = @tagName(tag);
-                
+
                 // Check if it's a standard HTML tag first
                 if (ALLOWED_TAGS.get(tag_str)) |_| {
                     // Standard HTML element - use strict whitelist
@@ -240,7 +244,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             } else {
                 // Unknown tag - check if it's a custom element
                 const tag_name = z.qualifiedName_zc(element);
-                
+
                 if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
                     // Custom element - use permissive sanitization
                     collectCustomElementAttributes(context_ptr, element) catch |err| {
@@ -255,7 +259,7 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
                     return z._CONTINUE;
                 }
             }
-            
+
             return z._CONTINUE;
         },
 
@@ -309,7 +313,7 @@ fn collectCustomElementAttributes(context: *SanitizeContext, element: *z.HTMLEle
         {
             should_remove = true;
         } else if (std.mem.startsWith(u8, attr_pair.name, "on") and
-                   !isFrameworkAttribute(attr_pair.name))  // Allow @click, on:click, etc.
+            !isFrameworkAttribute(attr_pair.name)) // Allow @click, on:click, etc.
         {
             // Remove traditional event handlers but allow framework events
             should_remove = true;
@@ -317,7 +321,8 @@ fn collectCustomElementAttributes(context: *SanitizeContext, element: *z.HTMLEle
             // Remove inline styles only if configured
             should_remove = true;
         } else if ((std.mem.eql(u8, attr_pair.name, "href") or std.mem.eql(u8, attr_pair.name, "src")) and
-                   context.options.strict_uri_validation and !isSafeUri(attr_pair.value)) {
+            context.options.strict_uri_validation and !isSafeUri(attr_pair.value))
+        {
             should_remove = true;
         }
 
@@ -479,6 +484,7 @@ test "custom element sanitization" {
 
     const custom_elements_html =
         \\<div>
+        \\  <phoenix-component phx-click="increment" :if="show_component" :for={item <- @items}>The counter value is {@count}</phoenix-component>
         \\  <my-button @click="handleClick" :disabled="isDisabled" class="btn">Custom Button</my-button>
         \\  <user-profile data-user-id="123" v-if="showProfile" phx-click="select_user">
         \\    <user-avatar slot="avatar" .src="avatarUrl"></user-avatar>
@@ -509,6 +515,7 @@ test "custom element sanitization" {
     print("Custom elements result: {s}\n", .{result});
 
     // Custom elements should be preserved
+    try testing.expect(std.mem.indexOf(u8, result, "<phoenix-component") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<my-button") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<user-profile") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<lit-element") != null);
@@ -516,10 +523,12 @@ test "custom element sanitization" {
     try testing.expect(std.mem.indexOf(u8, result, "<svelte-component") != null);
 
     // Framework attributes should be preserved
+    try testing.expect(std.mem.indexOf(u8, result, "phx-click") != null);
+    try testing.expect(std.mem.indexOf(u8, result, ":if") != null);
+    try testing.expect(std.mem.indexOf(u8, result, ":for") != null);
     try testing.expect(std.mem.indexOf(u8, result, "@click") != null);
     try testing.expect(std.mem.indexOf(u8, result, ":disabled") != null);
     try testing.expect(std.mem.indexOf(u8, result, "v-if") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "phx-click") != null);
     try testing.expect(std.mem.indexOf(u8, result, ".property") != null);
     try testing.expect(std.mem.indexOf(u8, result, "?hidden") != null);
     try testing.expect(std.mem.indexOf(u8, result, "[ngclass]") != null);
@@ -532,7 +541,7 @@ test "custom element sanitization" {
 
     // Scripts should be removed
     try testing.expect(std.mem.indexOf(u8, result, "script") == null);
-    
+
     // NOTE: unknown-element has hyphen so it's treated as custom element too
     // This is by Web Components spec - any element with hyphen is potentially custom
 }
