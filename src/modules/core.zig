@@ -52,6 +52,7 @@ extern "c" fn lxb_dom_node_is_empty(node: *z.DomNode) bool;
 
 extern "c" fn lxb_dom_node_first_child_noi(node: *z.DomNode) ?*z.DomNode;
 extern "c" fn lxb_dom_node_next_noi(node: *z.DomNode) ?*z.DomNode;
+extern "c" fn lxb_dom_node_prev_noi(node: *z.DomNode) ?*z.DomNode;
 extern "c" fn lxb_dom_node_last_child_noi(node: *z.DomNode) ?*z.DomNode;
 
 //===========================================================================
@@ -607,17 +608,18 @@ pub fn nextSibling(node: *z.DomNode) ?*z.DomNode {
 ///
 /// Returns NULL when there is no previous sibling.
 pub fn previousSibling(node: *z.DomNode) ?*z.DomNode {
-    const parent = z.parentNode(node) orelse return null;
-    var child = z.firstChild(parent);
+    return lxb_dom_node_prev_noi(node) orelse null;
+    // const parent = z.parentNode(node) orelse return null;
+    // var child = z.firstChild(parent);
 
-    var prev: ?*z.DomNode = null;
+    // var prev: ?*z.DomNode = null;
 
-    while (child != null) {
-        if (child.? == node) return prev;
-        prev = child;
-        child = z.nextSibling(child.?);
-    }
-    return null;
+    // while (child != null) {
+    //     if (child.? == node) return prev;
+    //     prev = child;
+    //     child = z.nextSibling(child.?);
+    // }
+    // return null;
 }
 
 /// [core] Get first child of node

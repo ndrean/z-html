@@ -16,6 +16,7 @@ extern "c" fn lxb_html_element_inner_html_set(
     inner_len: usize,
 ) ?*z.HTMLElement;
 
+extern "c" fn lxb_dom_node_replace_all(parent: *z.DomNode, node: *z.DomNode) c_int;
 // parser
 extern "c" fn lxb_html_parser_create() ?*z.HtmlParser;
 extern "c" fn lxb_html_parser_destroy(parser: *z.HtmlParser) *z.HtmlParser;
@@ -373,7 +374,6 @@ test "setInnerHTML lexbor security sanitation" {
     try testing.expectEqualStrings(expected, outer);
 }
 
-
 /// [parser] Set the inner HTML of an element with enhanced sanitization options.
 ///
 /// **Two-Layer Sanitization Approach:**
@@ -442,7 +442,6 @@ pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTML
     parser.appendFragment(node, fragment_root);
 }
 
-
 test "setInnerSafeHTML" {
     const allocator = testing.allocator;
     const doc = try z.createDocFromString("");
@@ -473,7 +472,7 @@ test "setInnerSafeHTML" {
 ///
 /// ## Sanitization Architecture:
 /// **Two-Layer Approach:**
-/// 1. **Lexbor's built-in sanitization** (always applied) - handles most security efficiently  
+/// 1. **Lexbor's built-in sanitization** (always applied) - handles most security efficiently
 /// 2. **Custom sanitizer** (configurable) - handles SVG, custom elements, framework attributes
 ///
 /// ## Usage Pattern:
@@ -483,7 +482,7 @@ test "setInnerSafeHTML" {
 /// defer parser.deinit();
 /// parser.setSanitizerPermissive(); // Configure once
 ///
-/// // 2. Use simple boolean for all operations  
+/// // 2. Use simple boolean for all operations
 /// const fragment = try parser.parseStringContext(html, .body, true); // Boolean on/off
 /// ```
 ///
@@ -596,7 +595,7 @@ pub const FragmentParser = struct {
     }
 
     /// Parse HTML fragment string in the context of a specific element.
-    /// 
+    ///
     /// **Sanitization:** Lexbor (always) + Custom (if enabled via boolean).
     /// Most commonly used parsing function for fragments, chunks, and templates.
     ///
@@ -1251,9 +1250,6 @@ test "parseFragmentNodes - moving SVG elements" {
     try testing.expect(std.mem.indexOf(u8, result, "fill=\"green\"") != null);
 }
 
-
-
-
 test "useTemplateElement with existing template" {
     const allocator = testing.allocator;
 
@@ -1321,7 +1317,6 @@ test "useTemplateElement with existing template" {
     try testing.expect(std.mem.indexOf(u8, result, "Code: 1") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Name: 1") != null);
 }
-
 
 test "fragment contexts: select options" {
     const allocator = testing.allocator;

@@ -90,7 +90,7 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "use", &allowed_svg_common }, // use element
 });
 
-/// [sanitize] Can be improved with lexbor URL module ??
+/// [sanitize] Defines which URLs can be considered safe as used in an attribute
 pub fn isSafeUri(value: []const u8) bool {
     return std.mem.startsWith(u8, value, "http://") or
         std.mem.startsWith(u8, value, "https://") or
@@ -113,12 +113,16 @@ fn shouldRemoveSvgDescendant(tag_name: []const u8) bool {
         std.mem.eql(u8, tag_name, "set");
 }
 
-
 /// [sanitize] Check if an attribute is allowed by the whitelist
 fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
     return attr_set.has(attr_name) or special_common.has(attr_name);
 }
 
+/// Helper to set the parent context to avoid walking up the DOM tree
+/// to get the context of a node (for example to give context to nested elements in `<code>` elements)
+///
+/// Instead of walking up the DOM tree, we check if a node has a previous sibling,
+/// in which case we use the sibling's context. If not, we keep the current context.
 fn maybeResetContext(context: *SanitizeContext, node: *z.DomNode) void {
     if (z.previousSibling(node)) |sibling| {
         if (z.isTypeElement(sibling)) {
@@ -131,6 +135,7 @@ fn maybeResetContext(context: *SanitizeContext, node: *z.DomNode) void {
     }
 }
 
+/// Sets the parent context for a given tag
 fn setAncestor(tag: z.HtmlTag, parent: z.HtmlTag) z.HtmlTag {
     return switch (tag) {
         .svg => .svg,
@@ -193,6 +198,7 @@ pub fn isFrameworkAttribute(attr_name: []const u8) bool {
         std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')
 }
 
+/// [sanitize] Settings of the sanitizer
 pub const SanitizerOptions = struct {
     skip_comments: bool = true,
     remove_scripts: bool = true,
@@ -212,7 +218,7 @@ const STACK_ATTR_BUFFER_SIZE = 2048; // 2KB for attribute name storage
 const MAX_STACK_REMOVALS = 32; // Stack space for removal operations
 const MAX_STACK_TEMPLATES = 8; // Most documents have few templates
 
-// Context for sanitization
+// Context for simple_walk sanitization callback
 const SanitizeContext = struct {
     allocator: std.mem.Allocator,
     options: SanitizerOptions,
@@ -326,35 +332,41 @@ fn handleKnownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: 
     // Set the new context for this element
     context_ptr.parent = setAncestor(tag, context_ptr.parent);
 
-    // Check if it's an SVG element or descendant
+    // handle SVG context
     if (isDescendantOfSvg(tag, context_ptr.parent)) {
         context_ptr.parent = .svg;
         return handleSvgElement(context_ptr, node, element, tag_str);
-    } else if (ALLOWED_TAGS.get(tag_str)) |_| {
-        // Standard HTML element - use strict whitelist
+    }
+
+    // Standard HTML element - use strict whitelist
+    if (ALLOWED_TAGS.get(tag_str)) |_| {
         collectDangerousAttributes(context_ptr, element, tag_str) catch return z._STOP;
     } else {
-        // Known tag but not in our whitelist - remove
+        // Known tag but not in whitelist: eg script elements, iframe
         return removeAndContinue(context_ptr, node);
     }
 
     return z._CONTINUE;
 }
 
-// Handle unknown elements (custom or unknown SVG)
+// Handle unknown elements in context (custom context or SVG context containing not whitelisted elements)
 fn handleUnknownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z.HTMLElement) c_int {
     const tag_name = z.qualifiedName_zc(element);
 
-    // Check if this is an SVG element (unknown to lexbor HTML parser)
+    //SVG context: `foreignObject`,` animate`
     if (context_ptr.parent == .svg) {
         return handleSvgElement(context_ptr, node, element, tag_name);
-    } else if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
+    }
+
+    // custom element context
+    if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
         // Custom element - use permissive sanitization
         collectCustomElementAttributes(context_ptr, element) catch |err| {
             print("Error in collectCustomElementAttributes: {}\n", .{err});
             return z._STOP;
         };
     } else {
+        print("unknown in SVG or CE: ---{s}\n", .{tag_name});
         // Unknown element and custom elements not allowed - remove
         return removeAndContinue(context_ptr, node);
     }
@@ -362,26 +374,33 @@ fn handleUnknownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element
     return z._CONTINUE;
 }
 
-// Handle element nodes
+/// Templates are handled differently as we need to access its innerContent in its document fragment
+fn handleTemplates(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
+    context_ptr.parent = .template;
+    context_ptr.addTemplate(node) catch return z._STOP;
+    return z._CONTINUE;
+}
+/// Handle element nodes with a separate tratment for templates as we need to access its content.
 fn handleElement(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
     if (z.isTemplate(node)) {
-        context_ptr.parent = .template;
-        context_ptr.addTemplate(node) catch return z._STOP;
-        return z._CONTINUE;
+        return handleTemplates(context_ptr, node);
     }
 
     maybeResetContext(context_ptr, node);
     const element = z.nodeToElement(node) orelse return z._CONTINUE;
     const tag = z.tagFromAnyElement(element);
 
-    if (tag != .custom) {
+    if (tag != .custom)
         return handleKnownElement(context_ptr, node, element, tag);
-    } else {
-        return handleUnknownElement(context_ptr, node, element);
-    }
+
+    return handleUnknownElement(context_ptr, node, element);
 }
 
 /// Sanitization collector callback for simple walk
+///
+/// The callback will be applied to every descendant of the given node given the current context object used as a collector.
+///
+/// A second post-processing step may be applied after the DOM traversal is complete and process the collected nodes and attributes.
 fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     const context_ptr: *SanitizeContext = @ptrCast(@alignCast(ctx));
 
@@ -606,7 +625,7 @@ pub fn sanitizePermissive(allocator: std.mem.Allocator, root_node: *z.DomNode) (
 
 test "comprehensive HTML and SVG sanitization" {
     const allocator = testing.allocator;
-    
+
     // Test input combining HTML XSS vectors, SVG attacks, custom elements, and framework attributes
     const malicious_input =
         \\<div onclick="alert('xss')" style="background: url(javascript:alert('css'))">
@@ -646,7 +665,7 @@ test "comprehensive HTML and SVG sanitization" {
     // Test 1: Strict sanitization (no custom elements)
     try sanitizeWithOptions(allocator, body, .{
         .skip_comments = true,
-        .remove_scripts = true, 
+        .remove_scripts = true,
         .remove_styles = true,
         .strict_uri_validation = true,
         .allow_custom_elements = false,
@@ -691,7 +710,7 @@ test "comprehensive HTML and SVG sanitization" {
     try sanitizeWithOptions(allocator, body2, .{
         .skip_comments = true,
         .remove_scripts = true,
-        .remove_styles = false, // Allow inline styles for custom elements  
+        .remove_styles = false, // Allow inline styles for custom elements
         .strict_uri_validation = true,
         .allow_custom_elements = true,
     });
