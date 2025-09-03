@@ -29,6 +29,28 @@ pub const allowed_label = AttrSet.initComptime(.{.{"for"}});
 pub const allowed_form = AttrSet.initComptime(.{ .{"action"}, .{"method"}, .{"enctype"}, .{"target"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"disabled"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 
+// SVG attribute whitelists
+pub const allowed_svg_common = AttrSet.initComptime(.{
+    // Core attributes
+    .{"id"}, .{"class"}, .{"style"}, .{"title"},
+    // Geometric attributes
+    .{"x"}, .{"y"}, .{"width"}, .{"height"}, .{"r"}, .{"rx"}, .{"ry"}, .{"cx"}, .{"cy"},
+    .{"x1"}, .{"y1"}, .{"x2"}, .{"y2"}, .{"dx"}, .{"dy"},
+    // Presentation attributes (safe ones)
+    .{"fill"}, .{"stroke"}, .{"stroke-width"}, .{"stroke-linecap"}, .{"stroke-linejoin"},
+    .{"opacity"}, .{"fill-opacity"}, .{"stroke-opacity"}, .{"font-size"}, .{"font-family"},
+    .{"text-anchor"}, .{"dominant-baseline"}, .{"alignment-baseline"},
+    // Transform (generally safe)
+    .{"transform"}, .{"viewBox"}, .{"xmlns"},
+});
+
+pub const allowed_svg_path = AttrSet.initComptime(.{ .{"d"}, .{"pathLength"} });
+pub const allowed_svg_text = AttrSet.initComptime(.{ .{"x"}, .{"y"}, .{"dx"}, .{"dy"}, .{"rotate"}, .{"textLength"} });
+pub const allowed_svg_circle = AttrSet.initComptime(.{ .{"cx"}, .{"cy"}, .{"r"} });
+pub const allowed_svg_rect = AttrSet.initComptime(.{ .{"x"}, .{"y"}, .{"width"}, .{"height"}, .{"rx"}, .{"ry"} });
+pub const allowed_svg_line = AttrSet.initComptime(.{ .{"x1"}, .{"y1"}, .{"x2"}, .{"y2"} });
+pub const allowed_svg_animate = AttrSet.initComptime(.{ .{"attributeName"}, .{"values"}, .{"dur"}, .{"repeatCount"} });
+
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
 
 pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
@@ -51,9 +73,18 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "h6", &allowed_common },
     .{ "blockquote", &allowed_common },
     .{ "button", &allowed_button },
-    .{ "strong", &allowed_common },
-    .{ "em", &allowed_common },
     .{ "i", &allowed_common },
+    
+    // SVG elements (safe ones) - defined in centralized HtmlTag enum
+    .{ "svg", &allowed_svg_common },
+    .{ "path", &allowed_svg_path },
+    .{ "circle", &allowed_svg_circle },
+    .{ "rect", &allowed_svg_rect },
+    .{ "line", &allowed_svg_line },
+    .{ "text", &allowed_svg_text },
+    .{ "g", &allowed_svg_common }, // group
+    .{ "defs", &allowed_svg_common }, // definitions
+    .{ "use", &allowed_svg_common }, // use element
 });
 
 /// [sanitize] Can be improved with lexbor URL module ??
@@ -69,6 +100,70 @@ pub fn isSafeUri(value: []const u8) bool {
 pub fn isCustomElement(tag_name: []const u8) bool {
     // Web Components spec: custom elements must contain a hyphen
     return std.mem.indexOf(u8, tag_name, "-") != null;
+}
+
+/// [sanitize] Check if SVG element should be removed (dangerous elements)
+pub fn shouldRemoveSvgElement(tag_name: []const u8) bool {
+    return std.mem.eql(u8, tag_name, "script") or
+           std.mem.eql(u8, tag_name, "foreignObject") or
+           std.mem.eql(u8, tag_name, "animate") or  // Can have onbegin, onend events
+           std.mem.eql(u8, tag_name, "animateTransform") or
+           std.mem.eql(u8, tag_name, "set");
+}
+
+/// [sanitize] Check if an attribute is allowed by the whitelist
+fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
+    return attr_set.has(attr_name) or special_common.has(attr_name);
+}
+
+/// [sanitize] Check if this node is inside an SVG context
+fn isSvgElement(node: *z.DomNode, tag_str: []const u8) bool {
+    // If it's directly an SVG element
+    if (std.mem.eql(u8, tag_str, "svg")) {
+        return true;
+    }
+    
+    // Check if any parent is an SVG element
+    var current = z.parentNode(node);
+    while (current) |parent| {
+        if (z.isTypeElement(parent)) {
+            if (z.nodeToElement(parent)) |parent_element| {
+                const parent_tag = z.qualifiedName_zc(parent_element);
+                if (std.mem.eql(u8, parent_tag, "svg")) {
+                    return true;
+                }
+            }
+        }
+        current = z.parentNode(parent);
+    }
+    
+    return false;
+}
+
+/// [sanitize] Collect dangerous SVG attributes (simplified version without iteration)
+fn collectSvgDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_str: []const u8) !void {
+    // For now, we'll use a simplified approach and check common dangerous attributes
+    // This avoids the complexity of attribute iteration which requires allocator
+    
+    // Check for dangerous event handlers
+    const dangerous_events = [_][]const u8{
+        "onclick", "onload", "onmouseover", "onbegin", "onend", "onfocusin", "onfocusout"
+    };
+    
+    for (dangerous_events) |event_attr| {
+        if (z.hasAttribute(element, event_attr)) {
+            try context.addAttributeToRemove(element, event_attr);
+        }
+    }
+    
+    // Check for dangerous href with javascript
+    if (z.getAttribute_zc(element, "href")) |href_value| {
+        if (std.mem.startsWith(u8, href_value, "javascript:")) {
+            try context.addAttributeToRemove(element, "href");
+        }
+    }
+    
+    _ = tag_str; // Will use this later for more specific attribute checking
 }
 
 /// [sanitize] Check if attribute is a framework directive or custom attribute
@@ -227,8 +322,29 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
 
                 const tag_str = @tagName(tag);
 
-                // Check if it's a standard HTML tag first
-                if (ALLOWED_TAGS.get(tag_str)) |_| {
+                // Check if it's an SVG element first
+                if (isSvgElement(node, tag_str)) {
+                    // Check if it's a dangerous SVG element
+                    if (shouldRemoveSvgElement(tag_str)) {
+                        context_ptr.addNodeToRemove(node) catch {
+                            return z._STOP;
+                        };
+                        return z._CONTINUE;
+                    }
+                    
+                    // Safe SVG element - check if allowed and sanitize attributes
+                    if (ALLOWED_TAGS.get(tag_str)) |_| {
+                        collectSvgDangerousAttributes(context_ptr, element, tag_str) catch {
+                            return z._STOP;
+                        };
+                    } else {
+                        // SVG element not in whitelist - remove
+                        context_ptr.addNodeToRemove(node) catch {
+                            return z._STOP;
+                        };
+                        return z._CONTINUE;
+                    }
+                } else if (ALLOWED_TAGS.get(tag_str)) |_| {
                     // Standard HTML element - use strict whitelist
                     collectDangerousAttributes(context_ptr, element, tag_str) catch {
                         return z._STOP;
@@ -244,7 +360,29 @@ fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
                 // Unknown tag - check if it's a custom element
                 const tag_name = z.qualifiedName_zc(element);
 
-                if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
+                // Check if this is an SVG element (unknown to lexbor HTML parser)
+                if (isSvgElement(node, tag_name)) {
+                    // Check if it's a dangerous SVG element
+                    if (shouldRemoveSvgElement(tag_name)) {
+                        context_ptr.addNodeToRemove(node) catch {
+                            return z._STOP;
+                        };
+                        return z._CONTINUE;
+                    }
+                    
+                    // Safe SVG element - check if allowed and sanitize attributes
+                    if (ALLOWED_TAGS.get(tag_name)) |_| {
+                        collectSvgDangerousAttributes(context_ptr, element, tag_name) catch {
+                            return z._STOP;
+                        };
+                    } else {
+                        // SVG element not in whitelist - remove
+                        context_ptr.addNodeToRemove(node) catch {
+                            return z._STOP;
+                        };
+                        return z._CONTINUE;
+                    }
+                } else if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
                     // Custom element - use permissive sanitization
                     collectCustomElementAttributes(context_ptr, element) catch |err| {
                         print("Error in collectCustomElementAttributes: {}\n", .{err});

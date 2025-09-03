@@ -1094,8 +1094,8 @@ test "simple parseFragment with SVG" {
     );
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    print("Simple insert: {s}\n", .{result});
+    const svg = z.getElementByTag(body, .svg);
+    try testing.expect(svg != null);
 }
 
 test "parseFragmentNodes - moving SVG elements" {
@@ -1126,9 +1126,6 @@ test "parseFragmentNodes - moving SVG elements" {
     const nodes = try parser.parseFragmentNodes(allocator, doc, mixed_html_svg, .div, false);
     defer allocator.free(nodes);
 
-    print("\n=== SVG Fragment Test ===\n", .{});
-    print("Total nodes found: {}\n", .{nodes.len});
-
     // Get target containers
     const body = z.bodyNode(doc).?;
     const icons_div = z.getElementById(body, "icons").?;
@@ -1142,11 +1139,11 @@ test "parseFragmentNodes - moving SVG elements" {
         if (z.nodeType(node) == .element) {
             const element = z.nodeToElement(node).?;
             const tag_name = z.nodeName_zc(node);
-            print("Found element: {s}\n", .{tag_name});
+            // print("Found element: {s}\n", .{tag_name});
 
             // Check if this is an SVG-related element
             if (std.mem.eql(u8, tag_name, "svg")) {
-                print("  -> SVG element detected!\n", .{});
+                // print("  -> SVG element detected!\n", .{});
 
                 // Check SVG attributes
                 const width = z.getAttribute_zc(element, "width");
@@ -1196,6 +1193,206 @@ test "parseFragmentNodes - moving SVG elements" {
     // Test that both SVG elements were processed
     try testing.expect(svg_count >= 1);
     try testing.expect(html_count >= 1);
+}
+
+test "malicious SVG - lexbor behavior analysis" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("");
+    defer z.destroyDocument(doc);
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Test various malicious SVG payloads
+    const malicious_svg_tests = [_]struct { name: []const u8, payload: []const u8 }{
+        .{
+            .name = "Script tag in SVG",
+            .payload = "<svg><script>alert('XSS')</script><rect width='10' height='10'/></svg>",
+        },
+        .{
+            .name = "Onload event handler",
+            .payload = "<svg onload=\"alert('XSS')\" width='100' height='100'><circle r='5'/></svg>",
+        },
+        .{
+            .name = "ForeignObject with HTML",
+            .payload = "<svg><foreignObject><body onload=\"alert('XSS')\"><p>Evil</p></body></foreignObject></svg>",
+        },
+        .{
+            .name = "Animation with onbegin",
+            .payload = "<svg><animate onbegin=\"alert('XSS')\" attributeName='x' values='0;100'/><rect width='10' height='10'/></svg>",
+        },
+        .{
+            .name = "JavaScript href",
+            .payload = "<svg><a href=\"javascript:alert('XSS')\"><rect width='10' height='10'/></a></svg>",
+        },
+        .{
+            .name = "Mixed legitimate + malicious",
+            .payload =
+            \\<div>Safe content</div>
+            \\<svg width="20" height="20">
+            \\  <rect x="2" y="2" width="16" height="16" fill="blue"/>
+            \\  <script>alert('XSS in mixed content')</script>
+            \\  <circle cx="10" cy="10" r="3" fill="white" onclick="alert('click XSS')"/>
+            \\</svg>
+            \\<p>More safe content</p>
+            ,
+        },
+    };
+
+    print("\n=== Malicious SVG Analysis ===\n", .{});
+
+    for (malicious_svg_tests) |test_case| {
+        print("\n--- Test: {s} ---\n", .{test_case.name});
+        print("Input: {s}\n", .{test_case.payload});
+
+        // Test WITHOUT sanitizer first
+        const body = z.bodyNode(doc).?;
+        // Clear previous content manually
+        // while (z.firstChild(body)) |child| {
+        //     z.removeNode(child);
+        // }
+        try z.parseString(doc, "");
+        try parser.insertFragment(
+            body,
+            test_case.payload,
+            .div,
+            false, // NO sanitizer - see what lexbor does
+        );
+
+        const unsanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+        defer allocator.free(unsanitized_result);
+
+        print("Lexbor output (no sanitizer): {s}\n", .{unsanitized_result});
+
+        // Check what dangerous elements remain
+        const has_script = std.mem.indexOf(u8, unsanitized_result, "<script") != null;
+        const has_onload = std.mem.indexOf(u8, unsanitized_result, "onload=") != null;
+        const has_onclick = std.mem.indexOf(u8, unsanitized_result, "onclick=") != null;
+        const has_javascript = std.mem.indexOf(u8, unsanitized_result, "javascript:") != null;
+        const has_foreignobject = std.mem.indexOf(u8, unsanitized_result, "foreignobject") != null or
+            std.mem.indexOf(u8, unsanitized_result, "foreignObject") != null;
+
+        print("Dangerous elements found:\n", .{});
+        print("  - <script>: {}\n", .{has_script});
+        print("  - onload=: {}\n", .{has_onload});
+        print("  - onclick=: {}\n", .{has_onclick});
+        print("  - javascript:: {}\n", .{has_javascript});
+        print("  - foreignObject: {}\n", .{has_foreignobject});
+
+        // Now test WITH current sanitizer
+        // Clear again manually
+        //     while (z.firstChild(body)) |child| {
+        //         z.removeNode(child);
+        //     }
+
+        //     try parser.insertFragment(
+        //         body,
+        //         test_case.payload,
+        //         .div,
+        //         true, // WITH current sanitizer
+        //     );
+
+        //     const sanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+        //     defer allocator.free(sanitized_result);
+
+        //     print("Current sanitizer output: {s}\n", .{sanitized_result});
+
+        //     // Check if current sanitizer removes everything or just dangerous parts
+        //     const completely_removed = sanitized_result.len <= 13; // Just "<body></body>"
+        //     print("Current sanitizer behavior: {s}\n", .{if (completely_removed) "Removes ALL SVG content" else "Partial sanitization"});
+        // }
+
+        // Analysis complete
+    }
+}
+
+test "simple malicious SVG test" {
+    const allocator = testing.allocator;
+
+    const malicious_svg = "<svg><script>alert('XSS')</script><rect width='10' height='10'/></svg>";
+    
+    // Parse directly into a document
+    const doc = try z.createDocFromString(malicious_svg);
+    defer z.destroyDocument(doc);
+
+    const result = try z.outerHTML(allocator, z.nodeToElement(z.bodyNode(doc).?).?);
+    defer allocator.free(result);
+
+    // Check what lexbor produced
+    const has_script = std.mem.indexOf(u8, result, "<script") != null;
+    const has_svg = std.mem.indexOf(u8, result, "<svg") != null;
+
+    // Basic assertions to verify lexbor's handling
+    try testing.expect(has_svg or result.len > 13); // Should have some content
+    _ = has_script; // Just checking lexbor's raw behavior
+}
+
+test "SVG sanitization" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("");
+    defer z.destroyDocument(doc);
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Test malicious SVG that should be sanitized
+    const malicious_svg = 
+        \\<svg width="100" height="100" onload="alert('XSS')">
+        \\  <script>alert('script XSS')</script>
+        \\  <rect x="10" y="10" width="80" height="80" fill="blue" onclick="alert('click XSS')" />
+        \\  <foreignObject width="50" height="50">
+        \\    <body onload="alert('foreign XSS')">Evil content</body>
+        \\  </foreignObject>
+        \\  <animate onbegin="alert('animate XSS')" attributeName="x" values="0;100"/>
+        \\  <circle r="10" fill="green" />
+        \\  <a href="javascript:alert('href XSS')">Link</a>
+        \\</svg>
+    ;
+
+    const body = z.bodyNode(doc).?;
+
+    // Test WITH sanitizer enabled
+    try parser.insertFragment(
+        body,
+        malicious_svg,
+        .div,
+        true, // WITH sanitizer
+    );
+
+    const sanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(sanitized_result);
+
+    // SVG sanitization test completed successfully
+
+    // Verify dangerous elements and attributes are removed
+    const has_script = std.mem.indexOf(u8, sanitized_result, "<script") != null;
+    const has_onload = std.mem.indexOf(u8, sanitized_result, "onload=") != null;
+    const has_onclick = std.mem.indexOf(u8, sanitized_result, "onclick=") != null;
+    const has_onbegin = std.mem.indexOf(u8, sanitized_result, "onbegin=") != null;
+    const has_javascript_href = std.mem.indexOf(u8, sanitized_result, "javascript:") != null;
+    const has_foreignObject = std.mem.indexOf(u8, sanitized_result, "foreignObject") != null;
+    const has_animate = std.mem.indexOf(u8, sanitized_result, "animate") != null;
+
+    // Safe elements should remain
+    const has_svg = std.mem.indexOf(u8, sanitized_result, "<svg") != null;
+    const has_rect = std.mem.indexOf(u8, sanitized_result, "<rect") != null;
+    const has_circle = std.mem.indexOf(u8, sanitized_result, "<circle") != null;
+
+    // Assertions: dangerous content should be removed
+    try testing.expect(!has_script); // <script> should be removed
+    try testing.expect(!has_onload); // onload attributes should be removed
+    try testing.expect(!has_onclick); // onclick attributes should be removed
+    try testing.expect(!has_onbegin); // onbegin attributes should be removed
+    try testing.expect(!has_javascript_href); // javascript: hrefs should be removed
+    try testing.expect(!has_foreignObject); // foreignObject should be removed
+    try testing.expect(!has_animate); // animate should be removed
+
+    // Safe content should remain
+    try testing.expect(has_svg); // SVG container should remain
+    try testing.expect(has_rect); // Safe rect should remain
+    try testing.expect(has_circle); // Safe circle should remain
 }
 
 test "useTemplateElement with existing template" {

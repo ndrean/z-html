@@ -127,6 +127,16 @@ pub const HtmlTag = enum {
     ul,
     video,
     wbr,
+    svg,
+    // SVG elements
+    circle,
+    rect,
+    path,
+    line,
+    text,
+    g,
+    defs,
+    use,
 
     pub fn toString(self: @This()) []const u8 {
         return switch (self) {
@@ -224,6 +234,16 @@ pub const HtmlTag = enum {
             .sub => "sub",
             .summary => "summary",
             .sup => "sup",
+            .svg => "svg",
+            // SVG elements
+            .circle => "circle",
+            .rect => "rect",
+            .path => "path",
+            .line => "line",
+            .text => "text",
+            .g => "g",
+            .defs => "defs",
+            .use => "use",
             .table => "table",
             .tbody => "tbody",
             .td => "td",
