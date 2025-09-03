@@ -1,5 +1,6 @@
-//! HTMLElement Attribute functions
-//! This module provides functions to manipulate and retrieve attributes from HTML elements.
+//! This module provides functions to manipulate and retrieve _attributes_ from HTML elements.
+//!
+//! It contains  `getAttributes`, `setAttribute(s)`, `removeAttribute`, `hasAttribute(s)`, and some fast search functions like `getElementById`,  `getElementByAttribute`,  `getElementByDataAtribute` and low-level attribute accessors.
 
 const std = @import("std");
 const z = @import("../zhtml.zig");

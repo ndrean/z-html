@@ -1,3 +1,9 @@
+//! A module to parse strings. You can parse a string into a document, or create and parse a string into its body.
+//!
+//! You havea parser engine with provides utility functions for parsing strings, including templates as strings. It also gives access to a sanitizer process.
+//!
+//! The parser engin can also parse chunks as streamed
+
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
@@ -57,126 +63,6 @@ extern "c" fn lxb_html_document_parse_fragment(
 extern "c" fn lxb_html_parse_chunk_begin(parser: *z.HtmlParser) ?*z.HTMLDocument;
 extern "c" fn lxb_html_parse_chunk_process(parser: *z.HtmlParser, html: [*]const u8, html_len: usize) c_int;
 extern "c" fn lxb_html_parse_chunk_end(parser: *z.HtmlParser) c_int;
-
-extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
-extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
-
-// === Document Fragment ================================================================
-
-/// [fragment] Get the underlying DOM node from a fragment
-pub fn fragmentToNode(fragment: *z.DocumentFragment) *z.DomNode {
-    return z.objectToNode(fragment);
-}
-
-/// [fragment] Create a document fragment and returns a DocumentFragment
-///
-/// Document fragments are lightweight containers that can hold multiple nodes. Useful for batch DOM operations. You can only append programmatically nodes to the fragment, no parsing into.
-///
-/// Browser spec: when you append a fragment to the DOM, only its children are added, not the fragment itself which is destroyed.
-///
-/// Use `appendFragment()` at insert the fragment into the DOM.
-pub fn createDocumentFragment(doc: *z.HTMLDocument) !*z.DocumentFragment {
-    return lxb_dom_document_create_document_fragment(doc) orelse Err.FragmentCreateFailed;
-}
-
-/// [fragment] Destroys a document fragment
-pub fn destroyDocumentFragment(fragment: *z.DocumentFragment) void {
-    _ = lxb_dom_document_fragment_interface_destroy(fragment);
-    return;
-}
-
-/// [fragment] Append all children from a document fragment to a parent node
-///
-/// The fragment is emptied: the fragment children are moved into the DOM, not copied
-pub fn appendFragment(parent: *z.DomNode, fragment: ?*z.DomNode) void {
-    if (fragment == null) return;
-    var fragment_child = z.firstChild(fragment.?);
-    while (fragment_child != null) {
-        // capture next_sibling before moving it!!
-        const next_sibling = z.nextSibling(fragment_child.?);
-        // Remove from fragment first, then append to parent (this moves the node)
-        z.removeNode(fragment_child.?);
-        z.appendChild(parent, fragment_child.?);
-        fragment_child = next_sibling;
-    }
-}
-
-test "append to DocumentFragment  - programmatically only" {
-    const allocator = testing.allocator;
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-    const body = z.bodyNode(doc).?;
-
-    const p: *z.DomNode = @ptrCast(try z.createElement(doc, "p"));
-    const div_elt = try z.createElement(doc, "div");
-
-    try testing.expect(z.isNodeEmpty(body));
-
-    const fragment = try createDocumentFragment(doc);
-    const fragment_root = z.fragmentToNode(fragment);
-    try testing.expect(z.isNodeEmpty(fragment_root));
-
-    z.appendChild(fragment_root, p);
-    z.appendChild(fragment_root, z.elementToNode(div_elt));
-
-    try testing.expect(!z.isNodeEmpty(fragment_root));
-    try testing.expect(z.firstChild(fragment_root) == p);
-
-    z.appendFragment(body, fragment_root);
-
-    const nodes = try z.childNodes(allocator, body);
-    defer allocator.free(nodes);
-    try testing.expect(nodes.len == 2);
-
-    // After appendFragment, the fragment should be empty (nodes were moved, not copied)
-    try testing.expect(z.isNodeEmpty(fragment_root));
-
-    // The nodes should now be in the body, not the fragment
-    try testing.expect(z.firstChild(body) == p);
-    try testing.expect(z.nextSibling(p) == z.elementToNode(div_elt));
-
-    // Second call to appendFragment should be safe (fragment is now empty)
-    z.appendFragment(body, fragment_root);
-
-    // Verify body still has the same 2 nodes after the second (no-op) call
-    const nodes_after = try z.childNodes(allocator, body);
-    defer allocator.free(nodes_after);
-    try testing.expect(nodes_after.len == 2);
-
-    z.destroyNode(fragment_root);
-    z.appendFragment(body, fragment_root); // handled gracefully
-}
-
-test "usage of DocumentFragment" {
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-
-    const fragment = try createDocumentFragment(doc);
-    try testing.expect(z.isNodeEmpty(z.fragmentToNode(fragment)));
-
-    const fragment_root = z.fragmentToNode(fragment);
-    try testing.expectEqualStrings(
-        "#document-fragment",
-        z.nodeName_zc(fragment_root),
-    );
-
-    const p = try z.createElement(doc, "p");
-    z.appendChild(fragment_root, z.elementToNode(p));
-
-    try testing.expect(!z.isNodeEmpty(z.fragmentToNode(fragment)));
-
-    const body = z.bodyNode(doc).?;
-    z.appendFragment(body, fragment_root);
-
-    z.destroyDocumentFragment(fragment); // safe to destroy
-
-    // Check the body now has the <p> element
-    // try z.prettyPrint(body); // <- you see <body><p></p></body>
-    try testing.expectEqualStrings(
-        "P",
-        z.nodeName_zc(z.firstChild(body).?),
-    );
-}
 
 // === Parsing ==========================================================
 

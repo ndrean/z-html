@@ -1,4 +1,7 @@
-//! Text content manipulation functions
+//! Text and comments content manipulation functions to read and set text content and comments
+//!
+//! It provides direct functions (terminated by `_zc`) to get zero-copy slices directly into lexbor's internal memory, and allocated versions.
+
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const print = std.debug.print;

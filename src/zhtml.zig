@@ -13,7 +13,7 @@ const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
 const walker = @import("modules/walker.zig");
 const classes = @import("modules/class_list.zig");
-const template = @import("modules/template.zig");
+const frag_temp = @import("modules/fragment_template.zig");
 const norm = @import("modules/normalize.zig");
 const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
@@ -228,7 +228,7 @@ pub const childNodes = lxb.childNodes;
 pub const children = lxb.children;
 
 //=====================================
-// Parser & Fragments
+// Parser
 //=====================================
 
 // Direct access to parser functions
@@ -243,36 +243,30 @@ pub const setInnerSafeHTMLPermissive = parse.setInnerSafeHTMLPermissive;
 // Parser engine for templates and fragment chunk processing
 pub const FragmentParser = parse.FragmentParser;
 
-// fragments
-pub const fragmentToNode = parse.fragmentToNode;
-pub const createDocumentFragment = parse.createDocumentFragment;
-pub const destroyDocumentFragment = parse.destroyDocumentFragment;
-pub const appendFragment = parse.appendFragment;
-
-// ============================================================
-// Chunk processing engine
-// ============================================================
+// Parser engine for chunk processing
 pub const ChunkParser = chunks.ChunkParser;
-// =============================================================
-// Fragment & fragment parsing
-// =============================================================
 
 //=====================================
-// Template element
+// Fragments & Template element
 //=====================================
-pub const isTemplate = template.isTemplate;
+// fragments
+pub const fragmentToNode = frag_temp.fragmentToNode;
+pub const createDocumentFragment = frag_temp.createDocumentFragment;
+pub const destroyDocumentFragment = frag_temp.destroyDocumentFragment;
+pub const appendFragment = frag_temp.appendFragment;
+// templates
+pub const isTemplate = frag_temp.isTemplate;
+pub const createTemplate = frag_temp.createTemplate;
+pub const destroyTemplate = frag_temp.destroyTemplate;
 
-pub const createTemplate = template.createTemplate;
-pub const destroyTemplate = template.destroyTemplate;
+pub const templateToNode = frag_temp.templateToNode;
+pub const templateToElement = frag_temp.templateToElement;
 
-pub const templateToNode = template.templateToNode;
-pub const templateToElement = template.templateToElement;
-
-pub const nodeToTemplate = template.nodeToTemplate;
-pub const elementToTemplate = template.elementToTemplate;
+pub const nodeToTemplate = frag_temp.nodeToTemplate;
+pub const elementToTemplate = frag_temp.elementToTemplate;
 // ---
-pub const templateContent = template.templateContent;
-pub const useTemplateElement = template.useTemplateElement;
+pub const templateContent = frag_temp.templateContent;
+pub const useTemplateElement = frag_temp.useTemplateElement;
 
 // ===========================================================================
 // DOM Traversal utilities

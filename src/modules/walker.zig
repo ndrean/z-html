@@ -1,4 +1,4 @@
-//! DOM Search Utilities Using `simple_Walk` Walker Callbacks
+//! Fast DOM traverse utilities using `simple_Walk`  with Callbacks
 
 //======================================================================
 // DOM SEARCH USING WALKER CALLBACKS

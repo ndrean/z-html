@@ -655,6 +655,7 @@ test "comprehensive HTML and SVG sanitization" {
         \\    Custom Button
         \\  </my-button>
         \\  <vue-component v-if="showProfile" data-user-id="123">Vue Component</vue-component>
+        \\  <p> The <code>push()</code> method adds one or more elements to the end of an array
         \\</div>
     ;
 
@@ -676,6 +677,7 @@ test "comprehensive HTML and SVG sanitization" {
 
     // Verify dangerous elements/attributes removed
     try testing.expect(std.mem.indexOf(u8, strict_result, "script") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "malicious comment") == null);
     try testing.expect(std.mem.indexOf(u8, strict_result, "iframe") == null);
     try testing.expect(std.mem.indexOf(u8, strict_result, "foreignObject") == null);
     try testing.expect(std.mem.indexOf(u8, strict_result, "animate") == null);

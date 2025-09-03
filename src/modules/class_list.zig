@@ -1,4 +1,4 @@
-//! Manage CSS class lists
+//! Manage CSS class lists as DomTokenList like and direct access utilities
 
 // ---------------------------------------------------
 // ClassList utilties

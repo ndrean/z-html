@@ -1,4 +1,5 @@
-//! Serialization, innerHTML
+//! Serialization functions: `innerHTML`, `outerHTML` and a `prettyPrint` utility function.
+
 // =============================================================================
 // Serialization Nodes and Elements
 // =============================================================================
