@@ -114,7 +114,7 @@ const STACK_ATTR_BUFFER_SIZE = 2048; // 2KB for attribute name storage
 const MAX_STACK_REMOVALS = 32; // Stack space for removal operations
 const MAX_STACK_TEMPLATES = 8; // Most documents have few templates
 
-// Context for sanitization - following your normalize pattern
+// Context for sanitization
 const SanitizeContext = struct {
     allocator: std.mem.Allocator,
     options: SanitizerOptions,
@@ -123,7 +123,7 @@ const SanitizeContext = struct {
     attr_name_buffer: [STACK_ATTR_BUFFER_SIZE]u8,
     attr_name_fba: std.heap.FixedBufferAllocator,
 
-    // Stack arrays (same names as before)
+    // Stack arrays
     nodes_to_remove: [MAX_STACK_REMOVALS]*z.DomNode,
     attributes_to_remove: [MAX_STACK_REMOVALS]AttributeAction,
     template_nodes: [MAX_STACK_TEMPLATES]*z.DomNode,
@@ -133,7 +133,6 @@ const SanitizeContext = struct {
     attrs_count: usize,
     templates_count: usize,
 
-    // Correct init signature - returns new instance
     fn init(alloc: std.mem.Allocator, opts: SanitizerOptions) @This() {
         var self = @This(){
             .allocator = alloc,
@@ -192,7 +191,7 @@ const SanitizeContext = struct {
     }
 };
 
-/// Sanitization collector callback - follows your collectorCallBack pattern
+/// Sanitization collector callback for simple walk
 fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     const context_ptr: *SanitizeContext = z.castContext(SanitizeContext, ctx);
 
@@ -473,7 +472,7 @@ test "simple custom element sanitization" {
     const result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(result);
 
-    print("Simple test result: {s}\n", .{result});
+    // print("Simple test result: {s}\n", .{result});
 
     // Custom element should be preserved
     try testing.expect(std.mem.indexOf(u8, result, "<my-button") != null);
@@ -512,7 +511,7 @@ test "custom element sanitization" {
     const result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(result);
 
-    print("Custom elements result: {s}\n", .{result});
+    // print("Custom elements result: {s}\n", .{result});
 
     // Custom elements should be preserved
     try testing.expect(std.mem.indexOf(u8, result, "<phoenix-component") != null);

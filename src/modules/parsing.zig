@@ -87,24 +87,79 @@ pub fn destroyDocumentFragment(fragment: *z.DocumentFragment) void {
 /// [fragment] Append all children from a document fragment to a parent node
 ///
 /// The fragment is emptied: the fragment children are moved into the DOM, not copied
-pub fn appendFragment(parent: *z.DomNode, fragment: *z.DomNode) void {
-    var fragment_child = z.firstChild(fragment);
+pub fn appendFragment(parent: *z.DomNode, fragment: ?*z.DomNode) void {
+    if (fragment == null) return;
+    var fragment_child = z.firstChild(fragment.?);
     while (fragment_child != null) {
+        // capture next_sibling before moving it!!
         const next_sibling = z.nextSibling(fragment_child.?);
+        // Remove from fragment first, then append to parent (this moves the node)
+        z.removeNode(fragment_child.?);
         z.appendChild(parent, fragment_child.?);
         fragment_child = next_sibling;
     }
 }
 
+test "append to DocumentFragment  - programmatically only" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    const p: *z.DomNode = @ptrCast(try z.createElement(doc, "p"));
+    const div_elt = try z.createElement(doc, "div");
+
+    try testing.expect(z.isNodeEmpty(body));
+
+    const fragment = try createDocumentFragment(doc);
+    const fragment_root = z.fragmentToNode(fragment);
+    try testing.expect(z.isNodeEmpty(fragment_root));
+
+    z.appendChild(fragment_root, p);
+    z.appendChild(fragment_root, z.elementToNode(div_elt));
+
+    try testing.expect(!z.isNodeEmpty(fragment_root));
+    try testing.expect(z.firstChild(fragment_root) == p);
+
+    z.appendFragment(body, fragment_root);
+
+    const nodes = try z.childNodes(allocator, body);
+    defer allocator.free(nodes);
+    try testing.expect(nodes.len == 2);
+
+    // After appendFragment, the fragment should be empty (nodes were moved, not copied)
+    try testing.expect(z.isNodeEmpty(fragment_root));
+
+    // The nodes should now be in the body, not the fragment
+    try testing.expect(z.firstChild(body) == p);
+    try testing.expect(z.nextSibling(p) == z.elementToNode(div_elt));
+
+    // Second call to appendFragment should be safe (fragment is now empty)
+    z.appendFragment(body, fragment_root);
+
+    // Verify body still has the same 2 nodes after the second (no-op) call
+    const nodes_after = try z.childNodes(allocator, body);
+    defer allocator.free(nodes_after);
+    try testing.expect(nodes_after.len == 2);
+
+    z.destroyNode(fragment_root);
+    z.appendFragment(body, fragment_root); // handled gracefully
+}
+
 test "usage of DocumentFragment" {
     const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
-    const fragment = try createDocumentFragment(doc);
 
+    const fragment = try createDocumentFragment(doc);
     try testing.expect(z.isNodeEmpty(z.fragmentToNode(fragment)));
 
-    const p = try z.createElement(doc, "p");
     const fragment_root = z.fragmentToNode(fragment);
+    try testing.expectEqualStrings(
+        "#document-fragment",
+        z.nodeName_zc(fragment_root),
+    );
+
+    const p = try z.createElement(doc, "p");
     z.appendChild(fragment_root, z.elementToNode(p));
 
     try testing.expect(!z.isNodeEmpty(z.fragmentToNode(fragment)));
@@ -515,14 +570,17 @@ pub const FragmentParser = struct {
         return fragment_root;
     }
 
-    pub fn appendFragment(_: *FragmentParser, parent: *z.DomNode, fragment_node: *z.DomNode) void {
-        var fragment_child = z.firstChild(fragment_node);
+    pub fn appendFragment(_: *FragmentParser, parent: *z.DomNode, fragment_node: ?*z.DomNode) void {
+        if (fragment_node == null) return;
+        var fragment_child = z.firstChild(fragment_node.?);
         while (fragment_child != null) {
             const next_sibling = z.nextSibling(fragment_child.?);
+            // Remove from fragment first, then append to parent (this moves the node)
+            z.removeNode(fragment_child.?);
             z.appendChild(parent, fragment_child.?);
             fragment_child = next_sibling;
         }
-        z.destroyNode(fragment_node);
+        z.destroyNode(fragment_node.?);
     }
 
     pub fn setInnerSafeHTML(
@@ -1000,6 +1058,144 @@ test "parseFragmentNodes - direct usage of returned nodes" {
     try testing.expect(std.mem.indexOf(u8, result, "Critical fix") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Update docs") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Deploy") != null);
+}
+
+test "simple parseFragment with SVG" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Mixed HTML + SVG content
+    const mixed_html_svg =
+        \\<div class="icon-wrapper">
+        \\  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        \\    <rect x="2" y="2" width="20" height="20" fill="blue" stroke="black" stroke-width="1"/>
+        \\    <circle cx="12" cy="12" r="6" fill="red"/>
+        \\    <path d="M8 12 L12 8 L16 12 L12 16 Z" fill="white"/>
+        \\  </svg>
+        \\</div>
+        \\<p>Regular HTML paragraph</p>
+        \\<svg class="standalone" width="16" height="16" viewBox="0 0 16 16">
+        \\  <circle cx="8" cy="8" r="7" fill="green" stroke="darkgreen"/>
+        \\  <text x="8" y="12" text-anchor="middle" fill="white" font-size="8">OK</text>
+        \\</svg>
+    ;
+
+    try parser.insertFragment(
+        z.elementToNode(z.bodyElement(doc).?),
+        mixed_html_svg,
+        .body,
+        false, // Disable sanitizer to see if SVG is preserved
+    );
+    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(result);
+
+    print("Simple insert: {s}\n", .{result});
+}
+
+test "parseFragmentNodes - moving SVG elements" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocFromString("<div id='icons'></div><div id='graphics'></div>");
+    defer z.destroyDocument(doc);
+
+    var parser = try FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    // Mixed HTML + SVG content
+    const mixed_html_svg =
+        \\<div class="icon-wrapper">
+        \\  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        \\    <rect x="2" y="2" width="20" height="20" fill="blue" stroke="black" stroke-width="1"/>
+        \\    <circle cx="12" cy="12" r="6" fill="red"/>
+        \\    <path d="M8 12 L12 8 L16 12 L12 16 Z" fill="white"/>
+        \\  </svg>
+        \\</div>
+        \\<p>Regular HTML paragraph</p>
+        \\<svg class="standalone" width="16" height="16" viewBox="0 0 16 16">
+        \\  <circle cx="8" cy="8" r="7" fill="green" stroke="darkgreen"/>
+        \\  <text x="8" y="12" text-anchor="middle" fill="white" font-size="8">OK</text>
+        \\</svg>
+    ;
+
+    const nodes = try parser.parseFragmentNodes(allocator, doc, mixed_html_svg, .div, false);
+    defer allocator.free(nodes);
+
+    print("\n=== SVG Fragment Test ===\n", .{});
+    print("Total nodes found: {}\n", .{nodes.len});
+
+    // Get target containers
+    const body = z.bodyNode(doc).?;
+    const icons_div = z.getElementById(body, "icons").?;
+    const graphics_div = z.getElementById(body, "graphics").?;
+
+    var svg_count: usize = 0;
+    var html_count: usize = 0;
+
+    // Process and categorize nodes
+    for (nodes) |node| {
+        if (z.nodeType(node) == .element) {
+            const element = z.nodeToElement(node).?;
+            const tag_name = z.nodeName_zc(node);
+            print("Found element: {s}\n", .{tag_name});
+
+            // Check if this is an SVG-related element
+            if (std.mem.eql(u8, tag_name, "svg")) {
+                print("  -> SVG element detected!\n", .{});
+
+                // Check SVG attributes
+                const width = z.getAttribute_zc(element, "width");
+                const height = z.getAttribute_zc(element, "height");
+                const viewBox = z.getAttribute_zc(element, "viewBox");
+                print("    width: {s}, height: {s}, viewBox: {s}\n", .{ width orelse "none", height orelse "none", viewBox orelse "none" });
+
+                svg_count += 1;
+                // Route to graphics container
+                const cloned = z.cloneNode(node, doc).?;
+                z.appendChild(z.elementToNode(graphics_div), cloned);
+            } else if (std.mem.eql(u8, tag_name, "div") and z.hasClass(element, "icon-wrapper")) {
+                print("  -> Icon wrapper detected!\n", .{});
+                html_count += 1;
+                // Route to icons container
+                const cloned = z.cloneNode(node, doc).?;
+                z.appendChild(z.elementToNode(icons_div), cloned);
+            } else {
+                print("  -> Regular HTML element\n", .{});
+                html_count += 1;
+                // Route to icons container (default)
+                const cloned = z.cloneNode(node, doc).?;
+                z.appendChild(z.elementToNode(icons_div), cloned);
+            }
+        }
+    }
+
+    print("SVG elements found: {}\n", .{svg_count});
+    print("HTML elements found: {}\n", .{html_count});
+
+    // Verify the results
+    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(result);
+
+    print("Final DOM:\n{s}\n", .{result});
+
+    // Test that SVG elements were preserved with their attributes
+    try testing.expect(std.mem.indexOf(u8, result, "<svg") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "width=\"24\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "viewBox=\"0 0 24 24\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "<rect") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "<circle") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "<path") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "fill=\"blue\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "<text") != null);
+
+    // Test that both SVG elements were processed
+    try testing.expect(svg_count >= 1);
+    try testing.expect(html_count >= 1);
 }
 
 test "useTemplateElement with existing template" {
