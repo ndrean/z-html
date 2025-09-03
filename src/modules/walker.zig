@@ -152,3 +152,64 @@ pub fn genProcessAll(comptime ContextType: type, root_node: *z.DomNode, context:
         toAnyOpaque(ContextType, context),
     );
 }
+
+// test "ancestor walk" {
+//     const allocator = testing.allocator;
+
+//     const doc = try z.createDocFromString("<div><!--comment--><ul><li></li></ul><svg><circle cx='50'/><rect x=\"2\"/></svg><code> a <script>alert(1)</script></code> some text <p></p><pre> do not change</pre><template><p>nothing</p></template><x-widget></x-widget></div>");
+
+//     defer z.destroyDocument(doc);
+
+//     const body = z.bodyNode(doc).?;
+
+//     const TestContext = struct {
+//         allocator: std.mem.Allocator,
+//         parent: z.HtmlTag,
+//         result: std.ArrayList(z.HtmlTag) = .empty,
+//     };
+//     var test_ctx = TestContext{ .allocator = allocator, .parent = .body };
+
+//     const cb = struct {
+//         fn run(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
+//             const context: *TestContext = @ptrCast(@alignCast(ctx));
+//             const node_name = z.nodeName_zc(node);
+//             const q_name = if (z.isTypeElement(node)) z.qualifiedName_zc(z.nodeToElement(node).?) else "";
+//             // const tag_name: ?z.HtmlTag = if (z.isTypeElement(node)) z.tagFromElement(z.nodeToElement(node).?) else .html;
+
+//             const parent: z.HtmlTag = if (!z.isTypeElement(node)) context.parent else blk: {
+//                 const elt = z.nodeToElement(node).?;
+//                 const elt_tag = z.tagFromAnyElement(elt);
+//                 const is_remarkable_parent = context.parent == .svg or context.parent == .pre or context.parent == .template or context.parent == .code;
+
+//                 if (elt_tag == .svg)
+//                     break :blk .svg
+//                 else if (elt_tag == .code)
+//                     break :blk .code
+//                 else if (elt_tag == .pre)
+//                     break :blk .pre
+//                 else if (elt_tag == .template)
+//                     break :blk .template
+//                 else
+//                     break :blk if (is_remarkable_parent) context.parent else z.tagFromAnyElement(elt);
+//             };
+//             context.parent = parent;
+//             // _ = node_name;
+//             // _ = q_name;
+
+//             context.result.append(context.allocator, parent) catch return z._STOP;
+
+//             print("{}, {s}, {s}\n", .{ context.parent, node_name, q_name });
+//             return z._CONTINUE;
+//         }
+//     }.run;
+
+//     z.simpleWalk(body, cb, &test_ctx);
+//     const expected = &[_]z.HtmlTag{ .div, .div, .ul, .li, .svg, .circle, .rect, .code, .code, .script, .script, .script, .p, .pre, .pre, .template, .custom };
+
+//     for (test_ctx.result.items, 0..) |item, i| {
+//         _ = expected[i];
+//         print("Result: {}, {any}\n", .{ i, item });
+//         // std.debug.assert(expected[i] == item);
+//     }
+//     test_ctx.result.deinit(allocator);
+// }

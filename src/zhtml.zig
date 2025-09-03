@@ -166,6 +166,7 @@ pub const FragmentContext = tag.FragmentContext;
 
 pub const tagFromQualifiedName = tag.tagFromQualifiedName;
 pub const tagFromElement = tag.tagFromElement;
+pub const tagFromAnyElement = tag.tagFromAnyElement;
 pub const matchesTagName = tag.matchesTagName;
 pub const isVoidName = tag.isVoidName;
 pub const isVoidElement = tag.isVoidElement; // Change name
@@ -236,6 +237,8 @@ pub const createDocFromString = parse.createDocFromString;
 
 pub const setInnerHTML = parse.setInnerHTML;
 pub const setInnerSafeHTML = parse.setInnerSafeHTML;
+pub const setInnerSafeHTMLStrict = parse.setInnerSafeHTMLStrict;
+pub const setInnerSafeHTMLPermissive = parse.setInnerSafeHTMLPermissive;
 
 // Parser engine for templates and fragment chunk processing
 pub const FragmentParser = parse.FragmentParser;
@@ -319,8 +322,11 @@ pub const innerHTML = serialize.innerHTML;
 pub const outerHTML = serialize.outerHTML;
 pub const outerNodeHTML = serialize.outerNodeHTML;
 
+pub const SanitizerOptions = sanitize.SanitizerOptions;
 pub const sanitizeNode = sanitize.sanitizeNode;
 pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
+pub const sanitizeStrict = sanitize.sanitizeStrict;
+pub const sanitizePermissive = sanitize.sanitizePermissive;
 
 // ===================================================================
 // Debug printing utilities

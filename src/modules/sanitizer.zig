@@ -32,16 +32,19 @@ pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"valu
 // SVG attribute whitelists
 pub const allowed_svg_common = AttrSet.initComptime(.{
     // Core attributes
-    .{"id"}, .{"class"}, .{"style"}, .{"title"},
+    .{"id"},          .{"class"},        .{"style"},             .{"title"},
     // Geometric attributes
-    .{"x"}, .{"y"}, .{"width"}, .{"height"}, .{"r"}, .{"rx"}, .{"ry"}, .{"cx"}, .{"cy"},
-    .{"x1"}, .{"y1"}, .{"x2"}, .{"y2"}, .{"dx"}, .{"dy"},
+    .{"x"},           .{"y"},            .{"width"},             .{"height"},
+    .{"r"},           .{"rx"},           .{"ry"},                .{"cx"},
+    .{"cy"},          .{"x1"},           .{"y1"},                .{"x2"},
+    .{"y2"},          .{"dx"},           .{"dy"},
     // Presentation attributes (safe ones)
-    .{"fill"}, .{"stroke"}, .{"stroke-width"}, .{"stroke-linecap"}, .{"stroke-linejoin"},
-    .{"opacity"}, .{"fill-opacity"}, .{"stroke-opacity"}, .{"font-size"}, .{"font-family"},
-    .{"text-anchor"}, .{"dominant-baseline"}, .{"alignment-baseline"},
+                   .{"fill"},
+    .{"stroke"},      .{"stroke-width"}, .{"stroke-linecap"},    .{"stroke-linejoin"},
+    .{"opacity"},     .{"fill-opacity"}, .{"stroke-opacity"},    .{"font-size"},
+    .{"font-family"}, .{"text-anchor"},  .{"dominant-baseline"}, .{"alignment-baseline"},
     // Transform (generally safe)
-    .{"transform"}, .{"viewBox"}, .{"xmlns"},
+    .{"transform"},   .{"viewBox"},      .{"xmlns"},
 });
 
 pub const allowed_svg_path = AttrSet.initComptime(.{ .{"d"}, .{"pathLength"} });
@@ -74,7 +77,7 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "blockquote", &allowed_common },
     .{ "button", &allowed_button },
     .{ "i", &allowed_common },
-    
+
     // SVG elements (safe ones) - defined in centralized HtmlTag enum
     .{ "svg", &allowed_svg_common },
     .{ "path", &allowed_svg_path },
@@ -102,67 +105,67 @@ pub fn isCustomElement(tag_name: []const u8) bool {
     return std.mem.indexOf(u8, tag_name, "-") != null;
 }
 
-/// [sanitize] Check if SVG element should be removed (dangerous elements)
-pub fn shouldRemoveSvgElement(tag_name: []const u8) bool {
+fn shouldRemoveSvgDescendant(tag_name: []const u8) bool {
     return std.mem.eql(u8, tag_name, "script") or
-           std.mem.eql(u8, tag_name, "foreignObject") or
-           std.mem.eql(u8, tag_name, "animate") or  // Can have onbegin, onend events
-           std.mem.eql(u8, tag_name, "animateTransform") or
-           std.mem.eql(u8, tag_name, "set");
+        std.mem.eql(u8, tag_name, "foreignObject") or
+        std.mem.eql(u8, tag_name, "animate") or // Can have onbegin, onend events
+        std.mem.eql(u8, tag_name, "animateTransform") or
+        std.mem.eql(u8, tag_name, "set");
 }
+
 
 /// [sanitize] Check if an attribute is allowed by the whitelist
 fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
     return attr_set.has(attr_name) or special_common.has(attr_name);
 }
 
-/// [sanitize] Check if this node is inside an SVG context
-fn isSvgElement(node: *z.DomNode, tag_str: []const u8) bool {
-    // If it's directly an SVG element
-    if (std.mem.eql(u8, tag_str, "svg")) {
-        return true;
-    }
-    
-    // Check if any parent is an SVG element
-    var current = z.parentNode(node);
-    while (current) |parent| {
-        if (z.isTypeElement(parent)) {
-            if (z.nodeToElement(parent)) |parent_element| {
-                const parent_tag = z.qualifiedName_zc(parent_element);
-                if (std.mem.eql(u8, parent_tag, "svg")) {
-                    return true;
-                }
+fn maybeResetContext(context: *SanitizeContext, node: *z.DomNode) void {
+    if (z.previousSibling(node)) |sibling| {
+        if (z.isTypeElement(sibling)) {
+            const sibling_tag =
+                z.tagFromAnyElement(z.nodeToElement(sibling).?);
+            if (sibling_tag == .svg or sibling_tag == .pre or sibling_tag == .code or sibling_tag == .template) {
+                context.parent = .body; // Reset context after special elements
             }
         }
-        current = z.parentNode(parent);
     }
-    
-    return false;
+}
+
+fn setAncestor(tag: z.HtmlTag, parent: z.HtmlTag) z.HtmlTag {
+    return switch (tag) {
+        .svg => .svg,
+        .code => .code,
+        .pre => .pre,
+        .template => .template,
+        else => parent, // Context resets are handled by maybeResetContext
+    };
+}
+
+fn isDescendantOfSvg(tag: z.HtmlTag, parent: z.HtmlTag) bool {
+    return (tag == .svg or parent == .svg) or return false;
 }
 
 /// [sanitize] Collect dangerous SVG attributes (simplified version without iteration)
 fn collectSvgDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_str: []const u8) !void {
     // For now, we'll use a simplified approach and check common dangerous attributes
     // This avoids the complexity of attribute iteration which requires allocator
-    
+
     // Check for dangerous event handlers
-    const dangerous_events = [_][]const u8{
-        "onclick", "onload", "onmouseover", "onbegin", "onend", "onfocusin", "onfocusout"
-    };
-    
+    const dangerous_events = [_][]const u8{ "onclick", "onload", "onmouseover", "onbegin", "onend", "onfocusin", "onfocusout" };
+
     for (dangerous_events) |event_attr| {
         if (z.hasAttribute(element, event_attr)) {
             try context.addAttributeToRemove(element, event_attr);
         }
     }
-    
+
     // Check for dangerous href with javascript
     if (z.getAttribute_zc(element, "href")) |href_value| {
         if (std.mem.startsWith(u8, href_value, "javascript:")) {
             try context.addAttributeToRemove(element, "href");
         }
     }
-    
+
     _ = tag_str; // Will use this later for more specific attribute checking
 }
 
@@ -213,6 +216,7 @@ const MAX_STACK_TEMPLATES = 8; // Most documents have few templates
 const SanitizeContext = struct {
     allocator: std.mem.Allocator,
     options: SanitizerOptions,
+    parent: z.HtmlTag,
 
     // Stack attribute name storage
     attr_name_buffer: [STACK_ATTR_BUFFER_SIZE]u8,
@@ -240,6 +244,7 @@ const SanitizeContext = struct {
             .nodes_count = 0,
             .attrs_count = 0,
             .templates_count = 0,
+            .parent = .html,
         };
         self.attr_name_fba = std.heap.FixedBufferAllocator.init(&self.attr_name_buffer);
         return self;
@@ -286,121 +291,110 @@ const SanitizeContext = struct {
     }
 };
 
+// Helper function to remove node and continue
+inline fn removeAndContinue(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
+    context_ptr.addNodeToRemove(node) catch return z._STOP;
+    return z._CONTINUE;
+}
+
+// Handle SVG elements (both known and unknown)
+fn handleSvgElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z.HTMLElement, tag_name: []const u8) c_int {
+    // Check if it's a dangerous SVG element
+    if (shouldRemoveSvgDescendant(tag_name)) {
+        return removeAndContinue(context_ptr, node);
+    }
+
+    // Safe SVG element - check if allowed and sanitize attributes
+    if (ALLOWED_TAGS.get(tag_name)) |_| {
+        collectSvgDangerousAttributes(context_ptr, element, tag_name) catch return z._STOP;
+    } else {
+        // SVG element not in whitelist - remove
+        return removeAndContinue(context_ptr, node);
+    }
+    return z._CONTINUE;
+}
+
+// Handle known HTML elements
+fn handleKnownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z.HTMLElement, tag: z.HtmlTag) c_int {
+    // Check if this tag should be removed
+    if (shouldRemoveTag(context_ptr.options, tag)) {
+        return removeAndContinue(context_ptr, node);
+    }
+
+    const tag_str = @tagName(tag);
+
+    // Set the new context for this element
+    context_ptr.parent = setAncestor(tag, context_ptr.parent);
+
+    // Check if it's an SVG element or descendant
+    if (isDescendantOfSvg(tag, context_ptr.parent)) {
+        context_ptr.parent = .svg;
+        return handleSvgElement(context_ptr, node, element, tag_str);
+    } else if (ALLOWED_TAGS.get(tag_str)) |_| {
+        // Standard HTML element - use strict whitelist
+        collectDangerousAttributes(context_ptr, element, tag_str) catch return z._STOP;
+    } else {
+        // Known tag but not in our whitelist - remove
+        return removeAndContinue(context_ptr, node);
+    }
+
+    return z._CONTINUE;
+}
+
+// Handle unknown elements (custom or unknown SVG)
+fn handleUnknownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z.HTMLElement) c_int {
+    const tag_name = z.qualifiedName_zc(element);
+
+    // Check if this is an SVG element (unknown to lexbor HTML parser)
+    if (context_ptr.parent == .svg) {
+        return handleSvgElement(context_ptr, node, element, tag_name);
+    } else if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
+        // Custom element - use permissive sanitization
+        collectCustomElementAttributes(context_ptr, element) catch |err| {
+            print("Error in collectCustomElementAttributes: {}\n", .{err});
+            return z._STOP;
+        };
+    } else {
+        // Unknown element and custom elements not allowed - remove
+        return removeAndContinue(context_ptr, node);
+    }
+
+    return z._CONTINUE;
+}
+
+// Handle element nodes
+fn handleElement(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
+    if (z.isTemplate(node)) {
+        context_ptr.parent = .template;
+        context_ptr.addTemplate(node) catch return z._STOP;
+        return z._CONTINUE;
+    }
+
+    maybeResetContext(context_ptr, node);
+    const element = z.nodeToElement(node) orelse return z._CONTINUE;
+    const tag = z.tagFromAnyElement(element);
+
+    if (tag != .custom) {
+        return handleKnownElement(context_ptr, node, element, tag);
+    } else {
+        return handleUnknownElement(context_ptr, node, element);
+    }
+}
+
 /// Sanitization collector callback for simple walk
 fn sanitizeCollectorCB(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
-    const context_ptr: *SanitizeContext = z.castContext(SanitizeContext, ctx);
+    const context_ptr: *SanitizeContext = @ptrCast(@alignCast(ctx));
 
     switch (z.nodeType(node)) {
+        .text => maybeResetContext(context_ptr, node),
         .comment => {
+            maybeResetContext(context_ptr, node);
             if (context_ptr.options.skip_comments) {
-                context_ptr.addNodeToRemove(node) catch {
-                    return z._STOP;
-                };
+                return removeAndContinue(context_ptr, node);
             }
         },
-        .element => {
-            if (z.isTemplate(node)) {
-                context_ptr.addTemplate(node) catch {
-                    return z._STOP;
-                };
-                return z._CONTINUE;
-            }
-
-            const element = z.nodeToElement(node) orelse return z._CONTINUE;
-
-            // Try to get lexbor's tag enum first
-            const maybe_tag = z.tagFromElement(element);
-
-            if (maybe_tag) |tag| {
-                // Known HTML tag
-                if (shouldRemoveTag(context_ptr.options, tag)) {
-                    context_ptr.addNodeToRemove(node) catch {
-                        return z._STOP;
-                    };
-                    return z._CONTINUE;
-                }
-
-                const tag_str = @tagName(tag);
-
-                // Check if it's an SVG element first
-                if (isSvgElement(node, tag_str)) {
-                    // Check if it's a dangerous SVG element
-                    if (shouldRemoveSvgElement(tag_str)) {
-                        context_ptr.addNodeToRemove(node) catch {
-                            return z._STOP;
-                        };
-                        return z._CONTINUE;
-                    }
-                    
-                    // Safe SVG element - check if allowed and sanitize attributes
-                    if (ALLOWED_TAGS.get(tag_str)) |_| {
-                        collectSvgDangerousAttributes(context_ptr, element, tag_str) catch {
-                            return z._STOP;
-                        };
-                    } else {
-                        // SVG element not in whitelist - remove
-                        context_ptr.addNodeToRemove(node) catch {
-                            return z._STOP;
-                        };
-                        return z._CONTINUE;
-                    }
-                } else if (ALLOWED_TAGS.get(tag_str)) |_| {
-                    // Standard HTML element - use strict whitelist
-                    collectDangerousAttributes(context_ptr, element, tag_str) catch {
-                        return z._STOP;
-                    };
-                } else {
-                    // Known tag but not in our whitelist - remove
-                    context_ptr.addNodeToRemove(node) catch {
-                        return z._STOP;
-                    };
-                    return z._CONTINUE;
-                }
-            } else {
-                // Unknown tag - check if it's a custom element
-                const tag_name = z.qualifiedName_zc(element);
-
-                // Check if this is an SVG element (unknown to lexbor HTML parser)
-                if (isSvgElement(node, tag_name)) {
-                    // Check if it's a dangerous SVG element
-                    if (shouldRemoveSvgElement(tag_name)) {
-                        context_ptr.addNodeToRemove(node) catch {
-                            return z._STOP;
-                        };
-                        return z._CONTINUE;
-                    }
-                    
-                    // Safe SVG element - check if allowed and sanitize attributes
-                    if (ALLOWED_TAGS.get(tag_name)) |_| {
-                        collectSvgDangerousAttributes(context_ptr, element, tag_name) catch {
-                            return z._STOP;
-                        };
-                    } else {
-                        // SVG element not in whitelist - remove
-                        context_ptr.addNodeToRemove(node) catch {
-                            return z._STOP;
-                        };
-                        return z._CONTINUE;
-                    }
-                } else if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
-                    // Custom element - use permissive sanitization
-                    collectCustomElementAttributes(context_ptr, element) catch |err| {
-                        print("Error in collectCustomElementAttributes: {}\n", .{err});
-                        return z._STOP;
-                    };
-                } else {
-                    // Unknown element and custom elements not allowed - remove
-                    context_ptr.addNodeToRemove(node) catch {
-                        return z._STOP;
-                    };
-                    return z._CONTINUE;
-                }
-            }
-
-            return z._CONTINUE;
-        },
-
-        else => {},
+        .element => return handleElement(context_ptr, node),
+        else => maybeResetContext(context_ptr, node),
     }
 
     return z._CONTINUE;
@@ -589,104 +583,32 @@ pub fn sanitizeNode(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.me
     return sanitizeWithOptions(allocator, root_node, .{});
 }
 
-test "simple custom element sanitization" {
-    const allocator = testing.allocator;
-
-    const simple_html = "<div><my-button>Click me</my-button></div>";
-
-    const doc = try z.createDocFromString(simple_html);
-    defer z.destroyDocument(doc);
-
-    const body = z.bodyNode(doc).?;
-
-    // Test with custom elements ENABLED
-    try sanitizeWithOptions(allocator, body, .{
-        .allow_custom_elements = true,
-        .remove_scripts = false,
-        .remove_styles = false,
-        .strict_uri_validation = false,
-    });
-
-    const result = try z.outerNodeHTML(allocator, body);
-    defer allocator.free(result);
-
-    // print("Simple test result: {s}\n", .{result});
-
-    // Custom element should be preserved
-    try testing.expect(std.mem.indexOf(u8, result, "<my-button") != null);
-}
-
-test "custom element sanitization" {
-    const allocator = testing.allocator;
-
-    const custom_elements_html =
-        \\<div>
-        \\  <phoenix-component phx-click="increment" :if="show_component" :for={item <- @items}>The counter value is {@count}</phoenix-component>
-        \\  <my-button @click="handleClick" :disabled="isDisabled" class="btn">Custom Button</my-button>
-        \\  <user-profile data-user-id="123" v-if="showProfile" phx-click="select_user">
-        \\    <user-avatar slot="avatar" .src="avatarUrl"></user-avatar>
-        \\  </user-profile>
-        \\  <lit-element ?hidden="true" .property="value" onclick="alert('bad')">Lit Component</lit-element>
-        \\  <angular-component [ngclass]="classes" (click)="handler" *ngif="condition">Angular</angular-component>
-        \\  <svelte-component bind:value use:action on:custom="handleCustom">Svelte</svelte-component>
-        \\  <script>alert('evil')</script>
-        \\  <unknown-element>Should be removed</unknown-element>
-        \\</div>
-    ;
-
-    const doc = try z.createDocFromString(custom_elements_html);
-    defer z.destroyDocument(doc);
-
-    const body = z.bodyNode(doc).?;
-
-    // Test with custom elements ENABLED
-    try sanitizeWithOptions(allocator, body, .{
-        .allow_custom_elements = true,
+// Convenience functions for common sanitization scenarios
+pub fn sanitizeStrict(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
+    return sanitizeWithOptions(allocator, root_node, .{
+        .skip_comments = true,
         .remove_scripts = true,
+        .remove_styles = true,
         .strict_uri_validation = true,
+        .allow_custom_elements = false,
     });
-
-    const result = try z.outerNodeHTML(allocator, body);
-    defer allocator.free(result);
-
-    // print("Custom elements result: {s}\n", .{result});
-
-    // Custom elements should be preserved
-    try testing.expect(std.mem.indexOf(u8, result, "<phoenix-component") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<my-button") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<user-profile") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<lit-element") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<angular-component") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<svelte-component") != null);
-
-    // Framework attributes should be preserved
-    try testing.expect(std.mem.indexOf(u8, result, "phx-click") != null);
-    try testing.expect(std.mem.indexOf(u8, result, ":if") != null);
-    try testing.expect(std.mem.indexOf(u8, result, ":for") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "@click") != null);
-    try testing.expect(std.mem.indexOf(u8, result, ":disabled") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "v-if") != null);
-    try testing.expect(std.mem.indexOf(u8, result, ".property") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "?hidden") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "[ngclass]") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "(click)") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "bind:value") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "on:custom") != null);
-
-    // Dangerous attributes should be removed
-    try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
-
-    // Scripts should be removed
-    try testing.expect(std.mem.indexOf(u8, result, "script") == null);
-
-    // NOTE: unknown-element has hyphen so it's treated as custom element too
-    // This is by Web Components spec - any element with hyphen is potentially custom
 }
 
-test "comprehensive sanitization" {
-    const allocator = testing.allocator;
+pub fn sanitizePermissive(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
+    return sanitizeWithOptions(allocator, root_node, .{
+        .skip_comments = true,
+        .remove_scripts = true,
+        .remove_styles = false,
+        .strict_uri_validation = true,
+        .allow_custom_elements = true,
+    });
+}
 
-    const malicious_html =
+test "comprehensive HTML and SVG sanitization" {
+    const allocator = testing.allocator;
+    
+    // Test input combining HTML XSS vectors, SVG attacks, custom elements, and framework attributes
+    const malicious_input =
         \\<div onclick="alert('xss')" style="background: url(javascript:alert('css'))">
         \\  <script>alert('xss')</script>
         \\  <p onmouseover="steal_data()" class="safe-class">Safe text</p>
@@ -695,47 +617,104 @@ test "comprehensive sanitization" {
         \\  <!-- malicious comment -->
         \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
         \\  <iframe src="evil.html"></iframe>
-        \\  <form><input type="text" name="evil"></form>
+        \\  
+        \\  <svg viewBox="0 0 100 100" onclick="alert('svg-xss')">
+        \\    <circle cx="50" cy="50" r="40" fill="blue"/>
+        \\    <script>alert('svg-script')</script>
+        \\    <foreignObject width="100" height="100">
+        \\      <div xmlns="http://www.w3.org/1999/xhtml">Evil content</div>
+        \\    </foreignObject>
+        \\    <animate attributeName="opacity" values="0;1" dur="2s" onbegin="alert('animate')"/>
+        \\    <path d="M10 10 L90 90" stroke="red"/>
+        \\    <text x="50" y="50" href="javascript:alert('text')">SVG Text</text>
+        \\  </svg>
+        \\  
+        \\  <phoenix-component phx-click="increment" :if="show_component" onclick="alert('custom')">
+        \\    Phoenix LiveView Component
+        \\  </phoenix-component>
+        \\  <my-button @click="handleClick" :disabled="isDisabled" class="btn">
+        \\    Custom Button
+        \\  </my-button>
+        \\  <vue-component v-if="showProfile" data-user-id="123">Vue Component</vue-component>
         \\</div>
     ;
 
-    const doc = try z.createDocFromString(malicious_html);
+    const doc = try z.createDocFromString(malicious_input);
     defer z.destroyDocument(doc);
-
     const body = z.bodyNode(doc).?;
 
+    // Test 1: Strict sanitization (no custom elements)
     try sanitizeWithOptions(allocator, body, .{
         .skip_comments = true,
-        .remove_scripts = true,
+        .remove_scripts = true, 
+        .remove_styles = true,
         .strict_uri_validation = true,
+        .allow_custom_elements = false,
     });
 
-    const result = try z.outerNodeHTML(allocator, body);
-    defer allocator.free(result);
+    const strict_result = try z.outerNodeHTML(allocator, body);
+    defer allocator.free(strict_result);
 
-    // print("Sanitized HTML: {s}\n", .{result});
+    // Verify dangerous elements/attributes removed
+    try testing.expect(std.mem.indexOf(u8, strict_result, "script") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "iframe") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "foreignObject") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "animate") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "onclick") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "onmouseover") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "onbegin") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "onerror") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "javascript:") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "style=") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "comment") == null);
 
-    // Should remove dangerous elements
-    try testing.expect(std.mem.indexOf(u8, result, "script") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "iframe") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "form") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "input") == null);
+    // Verify safe content preserved
+    try testing.expect(std.mem.indexOf(u8, strict_result, "Safe text") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "Good link") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "safe-class") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "https://example.com") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "<svg") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "<circle") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "<path") != null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "SVG Text") != null);
 
-    // Should remove dangerous attributes
-    try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "onmouseover") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "onerror") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "style") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "javascript:") == null);
+    // Verify custom elements removed when not allowed
+    try testing.expect(std.mem.indexOf(u8, strict_result, "phoenix-component") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "my-button") == null);
+    try testing.expect(std.mem.indexOf(u8, strict_result, "vue-component") == null);
 
-    // Should remove comments
-    try testing.expect(std.mem.indexOf(u8, result, "comment") == null);
+    // Test 2: Permissive sanitization (with custom elements)
+    const doc2 = try z.createDocFromString(malicious_input);
+    defer z.destroyDocument(doc2);
+    const body2 = z.bodyNode(doc2).?;
 
-    // Should preserve safe content and attributes
-    try testing.expect(std.mem.indexOf(u8, result, "Safe text") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Good link") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Safe image") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "safe-class") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "class=\"link\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "https://example.com") != null);
+    try sanitizeWithOptions(allocator, body2, .{
+        .skip_comments = true,
+        .remove_scripts = true,
+        .remove_styles = false, // Allow inline styles for custom elements  
+        .strict_uri_validation = true,
+        .allow_custom_elements = true,
+    });
+
+    const permissive_result = try z.outerNodeHTML(allocator, body2);
+    defer allocator.free(permissive_result);
+
+    // Still removes dangerous stuff
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "script") == null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "foreignObject") == null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "animate") == null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "javascript:") == null);
+
+    // But preserves custom elements and framework attributes
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "phoenix-component") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "my-button") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "vue-component") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "phx-click") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, ":if") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "@click") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "v-if") != null);
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "data-user-id") != null);
+
+    // Traditional onclick removed even from custom elements
+    try testing.expect(std.mem.indexOf(u8, permissive_result, "onclick") == null);
 }

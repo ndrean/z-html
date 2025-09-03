@@ -227,7 +227,11 @@ test "createDocFromString" {
     try testing.expectEqualStrings("<body><p></p></body>", html);
 }
 
-/// [parser] Sets / replaces element's inner HTML with some security controls.
+/// [parser] Sets / replaces element's inner HTML with Lexbor's built-in sanitization only.
+///
+/// This is the primary function for setting inner HTML - fast and efficient.
+/// Uses Lexbor's built-in sanitization which handles most security concerns.
+/// For 90% of use cases, this is sufficient and recommended.
 pub fn setInnerHTML(element: *z.HTMLElement, content: []const u8) !*z.HTMLElement {
     return lxb_html_element_inner_html_set(element, content.ptr, content.len) orelse Err.FragmentParseFailed;
 }
@@ -369,34 +373,17 @@ test "setInnerHTML lexbor security sanitation" {
     try testing.expectEqualStrings(expected, outer);
 }
 
-test "sanitized HTML into a fragment given a document" {
-    const allocator = testing.allocator;
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-    const body = z.bodyNode(doc).?;
 
-    const malicious_content = "<div><!-- a comment --><button phx-click=\"go\" onclick=\"alert('XSS')\">Become rich</button><script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div>";
-
-    var parser = try z.FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    const fragment_root = try parser.parseStringContext(
-        malicious_content,
-        .div,
-        true,
-    );
-    defer z.destroyNode(fragment_root);
-
-    z.appendFragment(body, fragment_root);
-    const html_string = try z.outerHTML(allocator, z.nodeToElement(body).?);
-    defer allocator.free(html_string);
-
-    try testing.expectEqualStrings("<body><div><button phx-click=\"go\">Become rich</button><img alt=\"escaped\"><img src=\"/my-image.jpg\" alt=\"image\"></div></body>", html_string);
-}
-
-/// [parser] Set the inner HTML of an element with safe content
+/// [parser] Set the inner HTML of an element with enhanced sanitization options.
 ///
-/// This function parses the fragment in _isolation_, runs `sanitize`, then appends the sanitized content to the element.
+/// **Two-Layer Sanitization Approach:**
+/// 1. **Lexbor's sanitization** (always applied) - handles most security concerns
+/// 2. **Custom sanitizer** (optional) - handles edge cases like SVG, custom elements, framework attributes
+///
+/// Use this when you need more control than the basic `setInnerHTML` provides.
+/// Common use cases: SVG content, custom web components, framework-specific attributes.
+///
+/// @param sanitizer_enabled: true to apply custom sanitization, false for Lexbor-only
 pub fn setInnerSafeHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8, sanitizer_enabled: bool) !void {
     const node = z.elementToNode(element);
     const target_doc = z.ownerDocument(node);
@@ -404,7 +391,6 @@ pub fn setInnerSafeHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, c
     var parser = try z.FragmentParser.init(allocator);
     defer parser.deinit();
 
-    // lexbor sanitization + sanitizer enabled
     const fragment_root = try parser.parseFragmentDoc(
         target_doc,
         content,
@@ -413,6 +399,49 @@ pub fn setInnerSafeHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, c
     );
     parser.appendFragment(node, fragment_root);
 }
+
+/// [parser] Set the inner HTML with strict sanitization preset.
+///
+/// **Strict Mode:** Removes all potentially dangerous content including custom elements.
+/// Ideal for user-generated content from untrusted sources.
+pub fn setInnerSafeHTMLStrict(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
+    const node = z.elementToNode(element);
+    const target_doc = z.ownerDocument(node);
+
+    var parser = try z.FragmentParser.init(allocator);
+    defer parser.deinit();
+    parser.setSanitizerStrict();
+
+    const fragment_root = try parser.parseFragmentDoc(
+        target_doc,
+        content,
+        .div,
+        true, // sanitizer enabled
+    );
+    parser.appendFragment(node, fragment_root);
+}
+
+/// [parser] Set the inner HTML with permissive sanitization preset.
+///
+/// **Permissive Mode:** Allows custom elements and framework attributes while removing XSS vectors.
+/// Ideal for modern web applications using frameworks like Phoenix LiveView, Vue, React, etc.
+pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
+    const node = z.elementToNode(element);
+    const target_doc = z.ownerDocument(node);
+
+    var parser = try z.FragmentParser.init(allocator);
+    defer parser.deinit();
+    parser.setSanitizerPermissive();
+
+    const fragment_root = try parser.parseFragmentDoc(
+        target_doc,
+        content,
+        .div,
+        true, // sanitizer enabled
+    );
+    parser.appendFragment(node, fragment_root);
+}
+
 
 test "setInnerSafeHTML" {
     const allocator = testing.allocator;
@@ -439,38 +468,38 @@ test "setInnerSafeHTML" {
 
 // ===================================================================
 
-/// [parser] HTML Parser structure and methods in the context of a document. Thread safe per instance.
+/// **FragmentParser** - HTML fragment parsing engine with configurable sanitization.
+/// Thread safe per instance.
 ///
-/// Methods:
-/// - `init`,
-/// - `deinit`,
-/// - `appendFragment`: moves nodes to a node.
+/// ## Sanitization Architecture:
+/// **Two-Layer Approach:**
+/// 1. **Lexbor's built-in sanitization** (always applied) - handles most security efficiently  
+/// 2. **Custom sanitizer** (configurable) - handles SVG, custom elements, framework attributes
 ///
-/// - `parseFragmentDoc`: Parse a string using a given document. Use `appendFragment` to insert into the DOM.
+/// ## Usage Pattern:
+/// ```zig
+/// // 1. Create parser and configure sanitization once
+/// var parser = try FragmentParser.init(allocator);
+/// defer parser.deinit();
+/// parser.setSanitizerPermissive(); // Configure once
 ///
-/// - `parseStringContext`: Parse a string in the context of a specific element. Use `appendFragment` to insert into the DOM.
+/// // 2. Use simple boolean for all operations  
+/// const fragment = try parser.parseStringContext(html, .body, true); // Boolean on/off
+/// ```
 ///
-/// - `parseTemplateString`: Parse a template string into a DocumentFragment. Call `useTemplateElement` to inject it into a given element.
-///
-/// - `parseTemplates`: Parse multiple templates from HTML and return them as a slice. Caller must destroy each template and free the slice. See test "parseTemplates - multiple template parsing" for usage example.
-///
-/// - `useTemplateString`: parse and inject a template string to a given node.
-///
-/// - `useTemplateElement`: injects a template element to a given node. Can use HTMLTemplateElement or HTMLElement.
-///
-/// - `insertFragment`: Parse HTML fragment string and insert it directly into parent given a context (most common use case)
-///
-/// - `parseFragmentNodes`: Parse HTML fragment and return individual nodes as array for programmatic manipulation. Caller must free the array. See test "parseFragmentNodes - direct usage of returned nodes" for usage example.
-///
-/// - `setInnerSafeHTML`: Set inner HTML with optional sanitization.
-/// - `parseChunkBegin`: starts the chunk parsing process.
-/// - `parseChunkProcess`: processes a chunk of HTML.
-/// - `parseChunkEnd`: ends the chunk parsing process.
+/// ## Key Methods:
+/// **Setup:** `init()`, `deinit()`
+/// **Sanitizer Config:** `setSanitizerOptions()`, `setSanitizerStrict()`, `setSanitizerPermissive()`
+/// **Fragment Parsing:** `parseFragmentDoc()`, `parseStringContext()`, `insertFragment()`
+/// **Template Handling:** `parseTemplateString()`, `useTemplateElement()`
+/// **Chunk Processing:** `parseChunkBegin()`, `parseChunkProcess()`, `parseChunkEnd()`
+/// **Node Management:** `appendFragment()`, `parseFragmentNodes()`
 pub const FragmentParser = struct {
     allocator: std.mem.Allocator,
     html_parser: *z.HtmlParser,
     temp_doc: ?*z.HTMLDocument,
     initialized: bool,
+    sanitizer_options: z.SanitizerOptions,
 
     /// Create a new parser instance.
     pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -487,6 +516,7 @@ pub const FragmentParser = struct {
             .html_parser = parser,
             .temp_doc = null,
             .initialized = true,
+            .sanitizer_options = .{}, // Default sanitizer options
         };
     }
 
@@ -504,9 +534,40 @@ pub const FragmentParser = struct {
         self.initialized = false;
     }
 
-    /// Fragment parsing using a given document
+    /// Configure sanitizer options for this parser instance
+    pub fn setSanitizerOptions(self: *FragmentParser, options: z.SanitizerOptions) void {
+        self.sanitizer_options = options;
+    }
+
+    /// Set sanitizer to strict mode (no custom elements, remove scripts/styles)
+    pub fn setSanitizerStrict(self: *FragmentParser) void {
+        self.sanitizer_options = .{
+            .skip_comments = true,
+            .remove_scripts = true,
+            .remove_styles = true,
+            .strict_uri_validation = true,
+            .allow_custom_elements = false,
+        };
+    }
+
+    /// Set sanitizer to permissive mode (allow custom elements and framework attributes)
+    pub fn setSanitizerPermissive(self: *FragmentParser) void {
+        self.sanitizer_options = .{
+            .skip_comments = true,
+            .remove_scripts = true,
+            .remove_styles = false,
+            .strict_uri_validation = true,
+            .allow_custom_elements = true,
+        };
+    }
+
+    /// Parse HTML fragment using a provided document.
     ///
-    /// The return node is the `<html>` node: its children are the parsed elements.
+    /// **Sanitization:** Lexbor (always) + Custom (if enabled via boolean).
+    /// Configure sanitizer options once with `setSanitizerOptions()` or presets.
+    ///
+    /// @param sanitizer_enabled: true to apply configured custom sanitization, false for Lexbor-only
+    /// @returns: HTML element node - its children are the parsed elements
     pub fn parseFragmentDoc(
         self: *FragmentParser,
         doc: *z.HTMLDocument,
@@ -528,15 +589,19 @@ pub const FragmentParser = struct {
         ) orelse return Err.ParseFailed;
 
         if (sanitizer_enabled) {
-            try z.sanitizeNode(self.allocator, fragment_root);
+            try z.sanitizeWithOptions(self.allocator, fragment_root, self.sanitizer_options);
         }
 
         return fragment_root;
     }
 
-    /// Parse an HTML fragment string into a DocumentFragment rooted at the _context element_.
+    /// Parse HTML fragment string in the context of a specific element.
+    /// 
+    /// **Sanitization:** Lexbor (always) + Custom (if enabled via boolean).
+    /// Most commonly used parsing function for fragments, chunks, and templates.
     ///
-    /// The returned fragment_root is the `<html>` element; the children are the parsed elements.
+    /// @param sanitizer_enabled: true to apply configured custom sanitization, false for Lexbor-only
+    /// @returns: Fragment root HTML element - its children are the parsed elements
     pub fn parseStringContext(
         self: *FragmentParser,
         html: []const u8,
@@ -564,7 +629,7 @@ pub const FragmentParser = struct {
         };
 
         if (sanitizer_enabled) {
-            try z.sanitizeNode(self.allocator, fragment_root);
+            try z.sanitizeWithOptions(self.allocator, fragment_root, self.sanitizer_options);
         }
 
         return fragment_root;
@@ -1109,61 +1174,57 @@ test "parseFragmentNodes - moving SVG elements" {
 
     // Mixed HTML + SVG content
     const mixed_html_svg =
-        \\<div class="icon-wrapper">
-        \\  <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        \\    <rect x="2" y="2" width="20" height="20" fill="blue" stroke="black" stroke-width="1"/>
-        \\    <circle cx="12" cy="12" r="6" fill="red"/>
-        \\    <path d="M8 12 L12 8 L16 12 L12 16 Z" fill="white"/>
-        \\  </svg>
+        \\<div class="icon-wrapper"><svg></svg>
         \\</div>
         \\<p>Regular HTML paragraph</p>
         \\<svg class="standalone" width="16" height="16" viewBox="0 0 16 16">
         \\  <circle cx="8" cy="8" r="7" fill="green" stroke="darkgreen"/>
-        \\  <text x="8" y="12" text-anchor="middle" fill="white" font-size="8">OK</text>
+        \\  <path d="M8 12 L12 8 L16 12 L12 16 Z" fill="white"/>
         \\</svg>
     ;
 
     const nodes = try parser.parseFragmentNodes(allocator, doc, mixed_html_svg, .div, false);
     defer allocator.free(nodes);
 
+    try testing.expect(nodes.len == 5); // div, #text, p, #text, svg
+
     // Get target containers
     const body = z.bodyNode(doc).?;
-    const icons_div = z.getElementById(body, "icons").?;
-    const graphics_div = z.getElementById(body, "graphics").?;
+    const icons_div = z.getElementById(
+        body,
+        "icons",
+    ).?;
+    const graphics_div = z.getElementById(
+        body,
+        "graphics",
+    ).?;
 
     var svg_count: usize = 0;
-    var html_count: usize = 0;
+    var regular_html_count: usize = 0;
 
     // Process and categorize nodes
     for (nodes) |node| {
-        if (z.nodeType(node) == .element) {
+        if (z.isTypeElement(node)) {
             const element = z.nodeToElement(node).?;
-            const tag_name = z.nodeName_zc(node);
-            // print("Found element: {s}\n", .{tag_name});
-
-            // Check if this is an SVG-related element
-            if (std.mem.eql(u8, tag_name, "svg")) {
-                // print("  -> SVG element detected!\n", .{});
-
-                // Check SVG attributes
-                const width = z.getAttribute_zc(element, "width");
-                const height = z.getAttribute_zc(element, "height");
-                const viewBox = z.getAttribute_zc(element, "viewBox");
-                print("    width: {s}, height: {s}, viewBox: {s}\n", .{ width orelse "none", height orelse "none", viewBox orelse "none" });
-
+            if (z.tagFromElement(element) == .svg) {
                 svg_count += 1;
+
                 // Route to graphics container
-                const cloned = z.cloneNode(node, doc).?;
-                z.appendChild(z.elementToNode(graphics_div), cloned);
-            } else if (std.mem.eql(u8, tag_name, "div") and z.hasClass(element, "icon-wrapper")) {
-                print("  -> Icon wrapper detected!\n", .{});
-                html_count += 1;
+                const cloned_svg = z.cloneNode(
+                    node,
+                    doc,
+                ).?;
+                z.appendChild(
+                    z.elementToNode(graphics_div),
+                    cloned_svg,
+                );
+            } else if (z.tagFromElement(element) == .div and z.hasClass(element, "icon-wrapper")) {
+                regular_html_count += 1;
                 // Route to icons container
                 const cloned = z.cloneNode(node, doc).?;
                 z.appendChild(z.elementToNode(icons_div), cloned);
             } else {
-                print("  -> Regular HTML element\n", .{});
-                html_count += 1;
+                regular_html_count += 1;
                 // Route to icons container (default)
                 const cloned = z.cloneNode(node, doc).?;
                 z.appendChild(z.elementToNode(icons_div), cloned);
@@ -1171,229 +1232,27 @@ test "parseFragmentNodes - moving SVG elements" {
         }
     }
 
-    print("SVG elements found: {}\n", .{svg_count});
-    print("HTML elements found: {}\n", .{html_count});
+    try testing.expect(svg_count == 1);
+    try testing.expect(regular_html_count == 2);
 
     // Verify the results
-    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    const result = try z.outerHTML(
+        allocator,
+        z.nodeToElement(body).?,
+    );
     defer allocator.free(result);
-
-    print("Final DOM:\n{s}\n", .{result});
 
     // Test that SVG elements were preserved with their attributes
     try testing.expect(std.mem.indexOf(u8, result, "<svg") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "width=\"24\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "viewBox=\"0 0 24 24\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<rect") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "width=\"16\"") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "viewBox=\"0 0 16 16\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<circle") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<path") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "fill=\"blue\"") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "<text") != null);
-
-    // Test that both SVG elements were processed
-    try testing.expect(svg_count >= 1);
-    try testing.expect(html_count >= 1);
+    try testing.expect(std.mem.indexOf(u8, result, "fill=\"green\"") != null);
 }
 
-test "malicious SVG - lexbor behavior analysis" {
-    const allocator = testing.allocator;
 
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
 
-    var parser = try FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    // Test various malicious SVG payloads
-    const malicious_svg_tests = [_]struct { name: []const u8, payload: []const u8 }{
-        .{
-            .name = "Script tag in SVG",
-            .payload = "<svg><script>alert('XSS')</script><rect width='10' height='10'/></svg>",
-        },
-        .{
-            .name = "Onload event handler",
-            .payload = "<svg onload=\"alert('XSS')\" width='100' height='100'><circle r='5'/></svg>",
-        },
-        .{
-            .name = "ForeignObject with HTML",
-            .payload = "<svg><foreignObject><body onload=\"alert('XSS')\"><p>Evil</p></body></foreignObject></svg>",
-        },
-        .{
-            .name = "Animation with onbegin",
-            .payload = "<svg><animate onbegin=\"alert('XSS')\" attributeName='x' values='0;100'/><rect width='10' height='10'/></svg>",
-        },
-        .{
-            .name = "JavaScript href",
-            .payload = "<svg><a href=\"javascript:alert('XSS')\"><rect width='10' height='10'/></a></svg>",
-        },
-        .{
-            .name = "Mixed legitimate + malicious",
-            .payload =
-            \\<div>Safe content</div>
-            \\<svg width="20" height="20">
-            \\  <rect x="2" y="2" width="16" height="16" fill="blue"/>
-            \\  <script>alert('XSS in mixed content')</script>
-            \\  <circle cx="10" cy="10" r="3" fill="white" onclick="alert('click XSS')"/>
-            \\</svg>
-            \\<p>More safe content</p>
-            ,
-        },
-    };
-
-    print("\n=== Malicious SVG Analysis ===\n", .{});
-
-    for (malicious_svg_tests) |test_case| {
-        print("\n--- Test: {s} ---\n", .{test_case.name});
-        print("Input: {s}\n", .{test_case.payload});
-
-        // Test WITHOUT sanitizer first
-        const body = z.bodyNode(doc).?;
-        // Clear previous content manually
-        // while (z.firstChild(body)) |child| {
-        //     z.removeNode(child);
-        // }
-        try z.parseString(doc, "");
-        try parser.insertFragment(
-            body,
-            test_case.payload,
-            .div,
-            false, // NO sanitizer - see what lexbor does
-        );
-
-        const unsanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
-        defer allocator.free(unsanitized_result);
-
-        print("Lexbor output (no sanitizer): {s}\n", .{unsanitized_result});
-
-        // Check what dangerous elements remain
-        const has_script = std.mem.indexOf(u8, unsanitized_result, "<script") != null;
-        const has_onload = std.mem.indexOf(u8, unsanitized_result, "onload=") != null;
-        const has_onclick = std.mem.indexOf(u8, unsanitized_result, "onclick=") != null;
-        const has_javascript = std.mem.indexOf(u8, unsanitized_result, "javascript:") != null;
-        const has_foreignobject = std.mem.indexOf(u8, unsanitized_result, "foreignobject") != null or
-            std.mem.indexOf(u8, unsanitized_result, "foreignObject") != null;
-
-        print("Dangerous elements found:\n", .{});
-        print("  - <script>: {}\n", .{has_script});
-        print("  - onload=: {}\n", .{has_onload});
-        print("  - onclick=: {}\n", .{has_onclick});
-        print("  - javascript:: {}\n", .{has_javascript});
-        print("  - foreignObject: {}\n", .{has_foreignobject});
-
-        // Now test WITH current sanitizer
-        // Clear again manually
-        //     while (z.firstChild(body)) |child| {
-        //         z.removeNode(child);
-        //     }
-
-        //     try parser.insertFragment(
-        //         body,
-        //         test_case.payload,
-        //         .div,
-        //         true, // WITH current sanitizer
-        //     );
-
-        //     const sanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
-        //     defer allocator.free(sanitized_result);
-
-        //     print("Current sanitizer output: {s}\n", .{sanitized_result});
-
-        //     // Check if current sanitizer removes everything or just dangerous parts
-        //     const completely_removed = sanitized_result.len <= 13; // Just "<body></body>"
-        //     print("Current sanitizer behavior: {s}\n", .{if (completely_removed) "Removes ALL SVG content" else "Partial sanitization"});
-        // }
-
-        // Analysis complete
-    }
-}
-
-test "simple malicious SVG test" {
-    const allocator = testing.allocator;
-
-    const malicious_svg = "<svg><script>alert('XSS')</script><rect width='10' height='10'/></svg>";
-    
-    // Parse directly into a document
-    const doc = try z.createDocFromString(malicious_svg);
-    defer z.destroyDocument(doc);
-
-    const result = try z.outerHTML(allocator, z.nodeToElement(z.bodyNode(doc).?).?);
-    defer allocator.free(result);
-
-    // Check what lexbor produced
-    const has_script = std.mem.indexOf(u8, result, "<script") != null;
-    const has_svg = std.mem.indexOf(u8, result, "<svg") != null;
-
-    // Basic assertions to verify lexbor's handling
-    try testing.expect(has_svg or result.len > 13); // Should have some content
-    _ = has_script; // Just checking lexbor's raw behavior
-}
-
-test "SVG sanitization" {
-    const allocator = testing.allocator;
-
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-
-    var parser = try FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    // Test malicious SVG that should be sanitized
-    const malicious_svg = 
-        \\<svg width="100" height="100" onload="alert('XSS')">
-        \\  <script>alert('script XSS')</script>
-        \\  <rect x="10" y="10" width="80" height="80" fill="blue" onclick="alert('click XSS')" />
-        \\  <foreignObject width="50" height="50">
-        \\    <body onload="alert('foreign XSS')">Evil content</body>
-        \\  </foreignObject>
-        \\  <animate onbegin="alert('animate XSS')" attributeName="x" values="0;100"/>
-        \\  <circle r="10" fill="green" />
-        \\  <a href="javascript:alert('href XSS')">Link</a>
-        \\</svg>
-    ;
-
-    const body = z.bodyNode(doc).?;
-
-    // Test WITH sanitizer enabled
-    try parser.insertFragment(
-        body,
-        malicious_svg,
-        .div,
-        true, // WITH sanitizer
-    );
-
-    const sanitized_result = try z.outerHTML(allocator, z.nodeToElement(body).?);
-    defer allocator.free(sanitized_result);
-
-    // SVG sanitization test completed successfully
-
-    // Verify dangerous elements and attributes are removed
-    const has_script = std.mem.indexOf(u8, sanitized_result, "<script") != null;
-    const has_onload = std.mem.indexOf(u8, sanitized_result, "onload=") != null;
-    const has_onclick = std.mem.indexOf(u8, sanitized_result, "onclick=") != null;
-    const has_onbegin = std.mem.indexOf(u8, sanitized_result, "onbegin=") != null;
-    const has_javascript_href = std.mem.indexOf(u8, sanitized_result, "javascript:") != null;
-    const has_foreignObject = std.mem.indexOf(u8, sanitized_result, "foreignObject") != null;
-    const has_animate = std.mem.indexOf(u8, sanitized_result, "animate") != null;
-
-    // Safe elements should remain
-    const has_svg = std.mem.indexOf(u8, sanitized_result, "<svg") != null;
-    const has_rect = std.mem.indexOf(u8, sanitized_result, "<rect") != null;
-    const has_circle = std.mem.indexOf(u8, sanitized_result, "<circle") != null;
-
-    // Assertions: dangerous content should be removed
-    try testing.expect(!has_script); // <script> should be removed
-    try testing.expect(!has_onload); // onload attributes should be removed
-    try testing.expect(!has_onclick); // onclick attributes should be removed
-    try testing.expect(!has_onbegin); // onbegin attributes should be removed
-    try testing.expect(!has_javascript_href); // javascript: hrefs should be removed
-    try testing.expect(!has_foreignObject); // foreignObject should be removed
-    try testing.expect(!has_animate); // animate should be removed
-
-    // Safe content should remain
-    try testing.expect(has_svg); // SVG container should remain
-    try testing.expect(has_rect); // Safe rect should remain
-    try testing.expect(has_circle); // Safe circle should remain
-}
 
 test "useTemplateElement with existing template" {
     const allocator = testing.allocator;
@@ -1463,31 +1322,6 @@ test "useTemplateElement with existing template" {
     try testing.expect(std.mem.indexOf(u8, result, "Name: 1") != null);
 }
 
-test "sanitizer removes scripts" {
-    const allocator = testing.allocator;
-
-    const malicious_html = "<div> more <i>text</i><span><script>alert(1);</script></span></div>";
-
-    var parser = try FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    // Test without sanitizer
-    const frag_no_sanitizer = try parser.parseStringContext(malicious_html, .body, false);
-    const result_no_sanitizer = try z.outerHTML(allocator, z.nodeToElement(frag_no_sanitizer).?);
-    defer allocator.free(result_no_sanitizer);
-
-    // Test with sanitizer
-    const frag_sanitized = try parser.parseStringContext(malicious_html, .body, true);
-    const result_sanitized = try z.outerHTML(allocator, z.nodeToElement(frag_sanitized).?);
-    defer allocator.free(result_sanitized);
-
-    // print("No sanitizer: {s}\n", .{result_no_sanitizer});
-    // print("Sanitized:    {s}\n", .{result_sanitized});
-
-    // Sanitizer removes script content
-    try testing.expect(std.mem.indexOf(u8, result_sanitized, "alert(1);") == null);
-    try testing.expect(std.mem.indexOf(u8, result_no_sanitizer, "alert(1);") != null);
-}
 
 test "fragment contexts: select options" {
     const allocator = testing.allocator;

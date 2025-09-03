@@ -17,6 +17,7 @@ const print = std.debug.print;
 ///
 ///
 pub const HtmlTag = enum {
+    custom,
     a,
     abbr,
     address,
@@ -127,8 +128,8 @@ pub const HtmlTag = enum {
     ul,
     video,
     wbr,
-    svg,
     // SVG elements
+    svg,
     circle,
     rect,
     path,
@@ -140,6 +141,7 @@ pub const HtmlTag = enum {
 
     pub fn toString(self: @This()) []const u8 {
         return switch (self) {
+            .custom => "custom",
             .a => "a",
             .abbr => "abbr",
             .address => "address",
@@ -234,8 +236,8 @@ pub const HtmlTag = enum {
             .sub => "sub",
             .summary => "summary",
             .sup => "sup",
-            .svg => "svg",
             // SVG elements
+            .svg => "svg",
             .circle => "circle",
             .rect => "rect",
             .path => "path",
@@ -278,7 +280,7 @@ pub const HtmlTag = enum {
 ///
 /// (`Zig` code: std.meta.stringToCode` with a higher limit).
 pub fn stringToEnum(comptime T: type, str: []const u8) ?T {
-    if (@typeInfo(T).@"enum".fields.len <= 112) {
+    if (@typeInfo(T).@"enum".fields.len <= 120) {
         const kvs = comptime build_kvs: {
             const EnumKV = struct { []const u8, T };
             var kvs_array: [@typeInfo(T).@"enum".fields.len]EnumKV = undefined;
@@ -327,15 +329,33 @@ test "tagFromQualifiedName" {
     try testing.expect(tagFromQualifiedName("div") == .div);
     try testing.expect(tagFromQualifiedName("span") == .span);
     try testing.expect(tagFromQualifiedName("unknown") == null);
-    try testing.expect(tagFromQualifiedName("custom-element") == null);
+    try testing.expect(tagFromQualifiedName("x-widget") == null);
     // namespaced
-    try testing.expect(tagFromQualifiedName("svg:circle") == null);
+    try testing.expect(tagFromQualifiedName("svg") == .svg);
 }
 
 /// [HtmlTag] Convert element to HtmlTag enum
 pub fn tagFromElement(element: *z.HTMLElement) ?HtmlTag {
     const qualified_name = z.qualifiedName_zc(element);
     return tagFromQualifiedName(qualified_name);
+}
+
+/// [HtmlTag] Convert any element (including custom) to HtmlTag enum
+///
+/// Custom elements are labelled `.custom`
+pub fn tagFromAnyElement(element: *z.HTMLElement) HtmlTag {
+    const qualified_name = z.qualifiedName_zc(element);
+    return tagFromQualifiedName(qualified_name) orelse .custom;
+}
+
+test "tagFromElement & tagFromAnyElement" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const element = try z.createElement(doc, "div");
+    try testing.expect(z.tagFromElement(element) == z.tagFromAnyElement(element));
+    const custom_elt = try z.createElement(doc, "x-widget");
+    try testing.expect(z.tagFromAnyElement(custom_elt) == .custom);
 }
 
 test "self.toString vs tagFromQualifiedName, self.isVoid, self.isNoEscape" {
