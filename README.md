@@ -3,6 +3,9 @@
 > [!WARNING]
 > Work in progress
 
+![loc](https://sloc.xyz/github/ndrean/z-html)
+[![Zig](https://img.shields.io/badge/Zig-0.15-1)](https://ziglang.org/)
+
 `zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
 
 This is useful for web scapping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
