@@ -1,4 +1,4 @@
-//! Chunks processor
+//! Stream processor
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
@@ -20,9 +20,13 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*
 
 /// [chunks] Chunk engine to process streams of HTML documents
 ///
-/// Instantiate a new chunk parser with `ChunkParser.init(allocator)`
+/// Instantiate a new chunk parser with `Stream.init(allocator)`
 ///
-/// Free it with `ChunkParser.deinit()`.
+/// Free it with `Stream.deinit()`.
+///
+/// Process the chunks on-the-fly with `Stream.processChunk()`.
+///
+/// You may want to
 ///
 /// Exposes:
 /// - `init`: create a new document
@@ -33,7 +37,7 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*
 /// - `getDocument`: get the underlying HTML document
 /// ## Example
 /// ```
-/// var chunk_parser = try ChunkParser.init(allocator);
+/// var chunk_parser = try Stream.init(allocator);
 /// defer chunk_parser.deinit();
 ///
 /// try chunk_parser.beginParsing();
@@ -43,13 +47,13 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*
 ///
 /// const doc = chunk_parser.getDocument();
 /// ```
-pub const ChunkParser = struct {
+pub const Stream = struct {
     doc: *z.HTMLDocument,
     parser: *z.HtmlParser,
     allocator: std.mem.Allocator,
     parsing_active: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator) !ChunkParser {
+    pub fn init(allocator: std.mem.Allocator) !Stream {
         const doc = z.createDocument() catch return Err.DocCreateFailed;
         return .{
             .doc = doc,
@@ -58,15 +62,15 @@ pub const ChunkParser = struct {
         };
     }
 
-    pub fn deinit(self: *ChunkParser) void {
+    pub fn deinit(self: *Stream) void {
         if (self.parsing_active) {
             _ = lxb_html_document_parse_chunk_end(self.doc);
             lxb_html_parser_destroy(self.parser);
         }
-        z.destroyDocument(self.doc);
+        // z.destroyDocument(self.doc);
     }
 
-    pub fn beginParsing(self: *ChunkParser) !void {
+    pub fn beginParsing(self: *Stream) !void {
         if (self.parsing_active) {
             return Err.ChunkBeginFailed;
         }
@@ -81,7 +85,7 @@ pub const ChunkParser = struct {
         self.parsing_active = true;
     }
 
-    pub fn processChunk(self: *ChunkParser, html_chunk: []const u8) !void {
+    pub fn processChunk(self: *Stream, html_chunk: []const u8) !void {
         if (!self.parsing_active) {
             return Err.ChunkProcessFailed;
         }
@@ -98,7 +102,7 @@ pub const ChunkParser = struct {
         }
     }
 
-    pub fn endParsing(self: *ChunkParser) !void {
+    pub fn endParsing(self: *Stream) !void {
         if (!self.parsing_active) {
             return Err.ChunkEndFailed;
         }
@@ -109,14 +113,14 @@ pub const ChunkParser = struct {
         self.parsing_active = false;
     }
 
-    pub fn getDocument(self: *ChunkParser) *z.HTMLDocument {
+    pub fn getDocument(self: *Stream) *z.HTMLDocument {
         return self.doc;
     }
 };
 
 test "chunks1" {
     const allocator = testing.allocator;
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -165,7 +169,7 @@ test "chunks1" {
 test "chunk parsing comprehensive" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -188,6 +192,7 @@ test "chunk parsing comprehensive" {
     try chunk_parser.endParsing();
 
     const doc = chunk_parser.getDocument();
+    defer z.destroyDocument(doc);
     const body = z.bodyElement(doc).?;
 
     const children = try z.children(
@@ -240,7 +245,7 @@ test "chunk parsing comprehensive" {
 test "chunk parsing error handling" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     // Test processing without beginning
@@ -254,4 +259,6 @@ test "chunk parsing error handling" {
 
     // Clean up
     try chunk_parser.endParsing();
+    const doc = chunk_parser.getDocument();
+    z.destroyDocument(doc);
 }

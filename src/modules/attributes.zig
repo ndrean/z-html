@@ -73,7 +73,7 @@ test "lexbor string functions" {
 /// Caller needs to free the slice if not null
 /// ## Example
 /// ```
-///  const element = try z.createElementAttr(doc, "div", &.{.{.name = "class", .value = "card"}});
+///  const element = try z.createElementWithAttrs(doc, "div", &.{.{.name = "class", .value = "card"}});
 /// const class = try getAttribute(allocator, element, "class");
 /// defer if (class != null) |c| {
 ///     allocator.free(c);
@@ -118,7 +118,7 @@ pub fn getAttribute_zc(element: *z.HTMLElement, name: []const u8) ?[]const u8 {
 ///
 /// ## Example
 /// ```
-/// const element = try z.createElementAttr(doc, "div", &.{.{.name = "class", .value = "card"}});
+/// const element = try z.createElementWithAttrs(doc, "div", &.{.{.name = "class", .value = "card"}});
 /// try testing.expect(z.hasAttribute(element, "class"));
 /// ---
 /// ```
@@ -150,7 +150,7 @@ pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8
 ///
 /// ## Example
 /// ```
-/// const element = try z.createElementAttr(doc, "div", &.{});
+/// const element = try z.createElementWithAttrs(doc, "div", &.{});
 /// try z.setAttributes(element, &.{
 ///     .{.name = "id", .value = "main"},
 ///     ?{.name = "id", .value = "main"}
@@ -251,7 +251,7 @@ fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 ///   defer z.destroyDocument(doc);
 ///
 ///   const body = z.bodyNode(doc).?;
-///   const button = try z.createElementAttr(
+///   const button = try z.createElementWithAttrs(
 ///       doc,
 ///        "button",
 ///        &.{

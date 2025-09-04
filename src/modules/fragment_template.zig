@@ -1,23 +1,28 @@
-//! Template module for handling HTML templates
-//! 1) You can create templates programmatically, and append to their content, reached via the template's document fragment.
+//! Fragments and Template module for handling HTML templates and document fragments.
 //!
-//! You can also clone the template content and append it to the document.
+//! Document fragments are _nodes_ that have the type `.fragment` whilst templates are _elements_ with tag name `template`.
 //!
-//! 2) Templates are most probably present in the DOM. You can retrieve their content
-//! and clone it to the document with `useTemplateElement()`.
+//! You can append only programmatically nodes to a document fragment.
 //!
-//! 3) Templates can also be parsed from string. This option is available in the
-//! FragmentParser engine.
+//! Templates store their content in a document fragment.
+//!
+//! You can create templates programmatically, and append children to their content. You grab the content via the template's document fragment.
+//!
+//! Templates content can be populated from a parsed string.
+//! This option is available in the FragmentParser engine. This content is cloned into the given document.
+//!
+//! Templates are most probably already present in the DOM.
+//!
+//! You can retrieve their content and clone it to the document with `useTemplateElement` (via an instance of a parser engine or directly).
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
 const Err = z.Err;
 
-pub const Template = z.Template;
-
 const testing = std.testing;
 const print = std.debug.print;
 
+// ===
 extern "c" fn lxb_html_create_template_element_wrapper(doc: *z.HTMLDocument) ?*z.HTMLTemplateElement;
 extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HTMLTemplateElement) *z.HTMLTemplateElement;
 
@@ -65,42 +70,48 @@ pub fn appendFragment(parent: *z.DomNode, fragment: ?*z.DomNode) void {
     while (fragment_child != null) {
         // capture next_sibling before moving it!!
         const next_sibling = z.nextSibling(fragment_child.?);
-        // Remove from fragment first, then append to parent (this moves the node)
+        // Remove from fragment first, then append to parent: this moves the node
         z.removeNode(fragment_child.?);
         z.appendChild(parent, fragment_child.?);
         fragment_child = next_sibling;
     }
 }
 
-test "append to DocumentFragment  - programmatically only" {
+test "DocumentFragment  - append programmatically only" {
     const allocator = testing.allocator;
     const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
 
+    const fragment = try createDocumentFragment(doc);
+    const fragment_root = z.fragmentToNode(fragment);
+
+    try testing.expectEqualStrings(
+        "#document-fragment",
+        z.nodeName_zc(fragment_root),
+    );
+    try testing.expect(z.isNodeEmpty(fragment_root));
+    try testing.expect(z.nodeType(fragment_root) == .fragment);
+
     const p: *z.DomNode = @ptrCast(try z.createElement(doc, "p"));
     const div_elt = try z.createElement(doc, "div");
 
-    try testing.expect(z.isNodeEmpty(body));
-
-    const fragment = try createDocumentFragment(doc);
-    const fragment_root = z.fragmentToNode(fragment);
-    try testing.expect(z.isNodeEmpty(fragment_root));
-
+    // insert programmatically into the document-fragment
     z.appendChild(fragment_root, p);
     z.appendChild(fragment_root, z.elementToNode(div_elt));
 
     try testing.expect(!z.isNodeEmpty(fragment_root));
     try testing.expect(z.firstChild(fragment_root) == p);
 
+    // move (not copy) the document-fragment children to the body element of the document
     z.appendFragment(body, fragment_root);
 
-    const nodes = try z.childNodes(allocator, body);
-    defer allocator.free(nodes);
-    try testing.expect(nodes.len == 2);
-
-    // After appendFragment, the fragment should be empty (nodes were moved, not copied)
+    // fragment is now empty
     try testing.expect(z.isNodeEmpty(fragment_root));
+
+    const body_nodes = try z.childNodes(allocator, body);
+    defer allocator.free(body_nodes);
+    try testing.expect(body_nodes.len == 2);
 
     // The nodes should now be in the body, not the fragment
     try testing.expect(z.firstChild(body) == p);
@@ -115,38 +126,9 @@ test "append to DocumentFragment  - programmatically only" {
     try testing.expect(nodes_after.len == 2);
 
     z.destroyNode(fragment_root);
-    z.appendFragment(body, fragment_root); // handled gracefully
-}
 
-test "usage of DocumentFragment" {
-    const doc = try z.createDocFromString("");
-    defer z.destroyDocument(doc);
-
-    const fragment = try createDocumentFragment(doc);
-    try testing.expect(z.isNodeEmpty(z.fragmentToNode(fragment)));
-
-    const fragment_root = z.fragmentToNode(fragment);
-    try testing.expectEqualStrings(
-        "#document-fragment",
-        z.nodeName_zc(fragment_root),
-    );
-
-    const p = try z.createElement(doc, "p");
-    z.appendChild(fragment_root, z.elementToNode(p));
-
-    try testing.expect(!z.isNodeEmpty(z.fragmentToNode(fragment)));
-
-    const body = z.bodyNode(doc).?;
+    // no-op handled gracefully
     z.appendFragment(body, fragment_root);
-
-    z.destroyDocumentFragment(fragment); // safe to destroy
-
-    // Check the body now has the <p> element
-    // try z.prettyPrint(body); // <- you see <body><p></p></body>
-    try testing.expectEqualStrings(
-        "P",
-        z.nodeName_zc(z.firstChild(body).?),
-    );
 }
 
 // === TEMPLATES ======================
@@ -211,17 +193,26 @@ pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) 
     }
 }
 
-test "create templates programmatically" {
+test "create template programmatically" {
     const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
 
     const template = try z.createTemplate(doc);
+    const template_elt = z.templateToElement(template);
+    try testing.expectEqualStrings("template", z.qualifiedName_zc(template_elt));
+
+    const template_node = z.templateToNode(template);
+    try testing.expectEqualStrings("TEMPLATE", z.nodeName_zc(template_node));
+    try testing.expect(z.nodeType(template_node) == .element);
 
     const p = try z.createElement(doc, "p");
 
     const innerContent = templateContent(template);
     const content_node = z.fragmentToNode(innerContent);
+
+    try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(content_node));
+
     z.appendChild(content_node, z.elementToNode(p));
 
     try testing.expect(z.isNodeEmpty(body));

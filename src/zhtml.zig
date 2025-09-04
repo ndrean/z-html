@@ -76,7 +76,7 @@ pub const genSearchElement = walker.genSearchElement;
 pub const genSearchElements = walker.genSearchElements;
 
 //=====================================
-// Opaque structs
+// Opaque lexbor structs
 //=====================================
 pub const HTMLDocument = opaque {};
 pub const DomNode = opaque {};
@@ -84,8 +84,14 @@ pub const HTMLElement = opaque {};
 pub const Comment: type = opaque {};
 pub const DocumentFragment = opaque {};
 pub const HTMLTemplateElement = opaque {};
-pub const HtmlParser = opaque {};
 pub const DomAttr = opaque {};
+
+pub const HtmlParser = opaque {};
+
+pub const CssParser = opaque {};
+pub const CssSelectors = opaque {};
+pub const CssSelectorList = opaque {};
+pub const CssSelectorSpecificity = opaque {};
 
 //=====================================
 // Core
@@ -98,7 +104,7 @@ pub const cleanDocument = lxb.cleanDocument;
 // Create / Destroy Node / Element
 //=====================================
 pub const createElement = lxb.createElement;
-pub const createElementAttr = lxb.createElementAttr;
+pub const createElementWithAttrs = lxb.createElementWithAttrs;
 pub const createTextNode = lxb.createTextNode;
 
 pub const removeNode = lxb.removeNode;
@@ -240,11 +246,13 @@ pub const setInnerSafeHTML = parse.setInnerSafeHTML;
 pub const setInnerSafeHTMLStrict = parse.setInnerSafeHTMLStrict;
 pub const setInnerSafeHTMLPermissive = parse.setInnerSafeHTMLPermissive;
 
-// Parser engine for templates and fragment chunk processing
+// Parser engine for fragment processing
 pub const FragmentParser = parse.FragmentParser;
 
-// Parser engine for chunk processing
-pub const ChunkParser = chunks.ChunkParser;
+//=====================================
+// Stream parser for chunk processing
+//=====================================
+pub const Stream = chunks.Stream;
 
 //=====================================
 // Fragments & Template element
@@ -330,13 +338,12 @@ pub const prettyPrint = serialize.prettyPrint;
 //=========================================
 // CSS selectors
 //=========================================
-// pub const CssSelectorEngine = css.CssSelectorEngine;
-// pub const CssParser = opaque {};
-// pub const CssSelectors = opaque {};
-// pub const CssSelectorList = opaque {};
-// pub const CssSelectorSpecificity = opaque {};
-// pub const querySelectorAll = css.querySelectorAll;
-// pub const querySelector = css.querySelector;
+pub const CssSelectorEngine = css.CssSelectorEngine;
+pub const createCssEngine = css.createCssEngine;
+
+pub const querySelectorAll = css.querySelectorAll;
+pub const querySelector = css.querySelector;
+pub const filter = css.filter;
 
 //=========================================
 // Class & ClassList

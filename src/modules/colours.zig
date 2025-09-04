@@ -223,6 +223,7 @@ pub fn isKnownAttribute(attr: []const u8) bool {
         std.mem.eql(u8, attr, "method") or
         std.mem.eql(u8, attr, "target") or
         std.mem.eql(u8, attr, "rel") or
+        std.mem.eql(u8, attr, "scope") or
         std.mem.eql(u8, attr, "role"))
     {
         return true;

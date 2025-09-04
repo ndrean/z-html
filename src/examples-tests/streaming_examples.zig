@@ -1,6 +1,6 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
-const ChunkParser = @import("../chunks.zig").ChunkParser;
+const Stream = @import("../chunks.zig").Stream;
 
 const testing = std.testing;
 const print = std.debug.print;
@@ -9,7 +9,7 @@ const print = std.debug.print;
 test "HTTP streaming response simulation" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -54,7 +54,7 @@ test "HTTP streaming response simulation" {
 test "large file chunk processing simulation" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -93,7 +93,7 @@ test "large file chunk processing simulation" {
 test "real-time HTML fragment streaming" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -141,7 +141,7 @@ test "real-time HTML fragment streaming" {
 test "SSR template streaming" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();
@@ -199,7 +199,7 @@ test "SSR template streaming" {
 test "chunk parsing with malformed HTML recovery" {
     const allocator = testing.allocator;
 
-    var chunk_parser = try ChunkParser.init(allocator);
+    var chunk_parser = try Stream.init(allocator);
     defer chunk_parser.deinit();
 
     try chunk_parser.beginParsing();

@@ -11,6 +11,7 @@ pub const LexborError = error{
     FragmentParseFailed,
     FragmentCreateFailed,
     FragmentEmpty,
+    ReplaceAllFailed,
     InsertChildFailed,
     CollectionFailed,
     SearchFailed,

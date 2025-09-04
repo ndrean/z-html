@@ -28,6 +28,7 @@ pub const allowed_input = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value
 pub const allowed_label = AttrSet.initComptime(.{.{"for"}});
 pub const allowed_form = AttrSet.initComptime(.{ .{"action"}, .{"method"}, .{"enctype"}, .{"target"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
 pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"disabled"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+pub const allowed_table = AttrSet.initComptime(.{ .{"scope"}, .{"id"}, .{"class"} });
 
 // SVG attribute whitelists
 pub const allowed_svg_common = AttrSet.initComptime(.{
@@ -77,6 +78,14 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "blockquote", &allowed_common },
     .{ "button", &allowed_button },
     .{ "i", &allowed_common },
+    .{ "table", &allowed_table },
+    .{ "thead", &allowed_table },
+    .{ "tbody", &allowed_table },
+    .{ "tr", &allowed_table },
+    .{ "th", &allowed_table },
+    .{ "td", &allowed_table },
+    .{ "caption", &allowed_table },
+    .{ "tfoot", &allowed_table },
 
     // SVG elements (safe ones) - defined in centralized HtmlTag enum
     .{ "svg", &allowed_svg_common },
@@ -366,7 +375,6 @@ fn handleUnknownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element
             return z._STOP;
         };
     } else {
-        print("unknown in SVG or CE: ---{s}\n", .{tag_name});
         // Unknown element and custom elements not allowed - remove
         return removeAndContinue(context_ptr, node);
     }

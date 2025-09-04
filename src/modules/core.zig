@@ -31,12 +31,11 @@ extern "c" fn lxb_html_document_body_element_noi(doc: *z.HTMLDocument) ?*z.HTMLE
 extern "c" fn lxb_dom_document_root(doc: *z.HTMLDocument) ?*z.DomNode;
 extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HTMLDocument;
 extern "c" fn lxb_dom_node_parent_noi(node: *z.DomNode) ?*z.DomNode;
-// extern "c" fn lxb_dom_document_create_element(doc: *z.HTMLDocument, local_name: [*]const u8, lname_len: usize, reserved_for_opt: ?*anyopaque) ?*z.HTMLElement;
+extern "c" fn lxb_dom_node_replace_all(parent: *z.DomNode, node: *z.DomNode) c_int;
 
 extern "c" fn lxb_dom_document_destroy_element(element: *z.HTMLElement) *z.HTMLElement;
 extern "c" fn lexbor_dom_interface_node_wrapper(obj: *anyopaque) *z.DomNode;
 extern "c" fn lexbor_dom_interface_element_wrapper(node: *z.DomNode) ?*z.HTMLElement;
-// extern "c" fn lxb_html_template_to_element(template: *z.Template) *z.HTMLElement;
 extern "c" fn lxb_dom_node_name(node: *z.DomNode, len: ?*usize) [*:0]const u8;
 extern "c" fn lxb_dom_element_tag_name(element: *z.HTMLElement, len: ?*usize) [*:0]const u8;
 extern "c" fn lxb_dom_element_qualified_name(element: *z.HTMLElement, len: *usize) [*:0]const u8;
@@ -95,7 +94,7 @@ pub fn cleanDocument(doc: *z.HTMLDocument) void {
 /// ---
 /// ```
 pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
-    return z.createElementAttr(doc, name, &.{});
+    return z.createElementWithAttrs(doc, name, &.{});
 }
 
 /// [core] Element creation with attributes options
@@ -106,15 +105,15 @@ pub fn createElement(doc: *z.HTMLDocument, name: []const u8) !*z.HTMLElement {
 /// ## Example
 ///
 /// ```
-/// const span: *z.HTMLElement = try createElementAttr(doc, "span", &.{});
-/// const button: *z.HTMLElement = try createElementAttr(doc, "button",
+/// const span: *z.HTMLElement = try createElementWithAttrs(doc, "span", &.{});
+/// const button: *z.HTMLElement = try createElementWithAttrs(doc, "button",
 ///     &.{
 ///         .{.name = "phx-click", .value = "submit"},
 ///         .{.name = "disabled", .value= ""}
 ///     });
 /// ---
 /// ```
-pub fn createElementAttr(
+pub fn createElementWithAttrs(
     doc: *z.HTMLDocument,
     name: []const u8,
     attrs: []const z.AttributePair,
@@ -144,7 +143,7 @@ test "create elt" {
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
-    const button = try z.createElementAttr(
+    const button = try z.createElementWithAttrs(
         doc,
         "button",
         &.{
@@ -155,6 +154,14 @@ test "create elt" {
     z.appendChild(body, z.elementToNode(button));
 
     const allocator = testing.allocator;
+    const html = try z.innerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(html);
+
+    try testing.expectEqualStrings(
+        "<button phx-click=\"increment\" hidden=\"\"></button>",
+        html,
+    );
+
     const attrs = try z.getAttributes_bf(allocator, button);
     defer {
         for (attrs) |attr| {
@@ -274,7 +281,7 @@ test "getBodyElement/node & error returned" {
 }
 
 // ------------------------------------------------------------------------------
-// Element / Node conversions
+// Element / Node type casting
 // ------------------------------------------------------------------------------
 
 /// [core] Internal: convert any lexbor object to DOM node
@@ -306,13 +313,13 @@ pub fn nodeToElement(node: *z.DomNode) ?*z.HTMLElement {
 
 test "element/node/element" {
     const doc = try createDocument();
-    const div_elt = try createElementAttr(doc, "div", &.{});
+    const div_elt = try createElementWithAttrs(doc, "div", &.{});
     const div_node = elementToNode(div_elt);
     const element = nodeToElement(div_node);
     try testing.expect(element == div_elt);
 }
 
-/// [core] Cast Node of type `.comment` into *z.Comment
+/// [core] Cast Node of type `.comment` into *z.Comment that is a comment
 ///
 /// Returns NULL if the node is not a comment
 pub fn nodeToComment(node: *z.DomNode) ?*z.Comment {
@@ -333,7 +340,7 @@ test "creation & convertions" {
     const first_comment = nodeToComment(first_comment_node.?);
     try testing.expect(first_comment != null);
 
-    const div_elt = try createElementAttr(doc, "div", &.{});
+    const div_elt = try createElementWithAttrs(doc, "div", &.{});
     const comment = try createComment(doc, "Hello, comment!");
     const text = try createTextNode(doc, "Hello, text!");
 
@@ -358,7 +365,7 @@ test "create element and comment" {
     const allocator = std.testing.allocator;
     const doc = try createDocument();
     defer destroyDocument(doc);
-    const element = try createElementAttr(doc, "div", &.{});
+    const element = try createElementWithAttrs(doc, "div", &.{});
     defer destroyNode(elementToNode(element));
     const name = tagName_zc(element);
     try testing.expectEqualStrings("DIV", name);
@@ -387,14 +394,14 @@ test "create element and comment" {
 /// - returns the `nodeType` (#text, #comment) for non-elements nodes,
 /// - returns the `tagName` in UPPERCASE for element nodes.
 ///
-/// ⚠️ Unsafe : to be used only within the lifetime of the function call
+/// Unsafe : to be used only within the lifetime of the function call
 ///
 /// Use the allocated `z.nodeName()` if you need to store the result.
 /// ## Example
 /// ```
 /// test "nodeType/tagname" {
 ///     const doc = try createDocument();
-///     const div_elt = try createElementAttr(doc, "div", &.{});
+///     const div_elt = try createElementWithAttrs(doc, "div", &.{});
 ///     const div_name = z.nodeName_zc(elementToNode(div_elt));
 ///     try testing.expectEqualStrings(div_name, "DIV");
 /// }
@@ -419,7 +426,7 @@ pub fn nodeName_zc(node: *z.DomNode) []const u8 {
 /// defer allocator.free(text_name);
 /// try testing.expectEqualStrings(text_name, "#text");
 ///
-/// const div = try createElementAttr(doc, "div", &.{}); // an element
+/// const div = try createElementWithAttrs(doc, "div", &.{}); // an element
 /// const name = try nodeName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
@@ -434,7 +441,7 @@ test "nodeName/_zc" {
     const allocator = testing.allocator;
     const doc = try createDocument();
 
-    const div_elt = try createElementAttr(doc, "div", &.{});
+    const div_elt = try createElementWithAttrs(doc, "div", &.{});
     const div_name = z.nodeName_zc(elementToNode(div_elt));
     try testing.expectEqualStrings(div_name, "DIV");
     const node_type = z.nodeType(elementToNode(div_elt));
@@ -455,12 +462,12 @@ test "nodeName/_zc" {
 ///
 /// Use tagName() if you need to store the result.
 ///
-/// ⚠️ Unsafe : to be used only within the lifetime of the function call
+/// Unsafe : to be used only within the lifetime of the function call
 /// ## Example
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try createElementAttr(doc, "div", &.{});
+/// const div = try createElementWithAttrs(doc, "div", &.{});
 /// const name = tagName_zc(elementToNode(div));
 /// try testing.expectEqualStrings(name, "DIV");
 /// ---
@@ -479,7 +486,7 @@ pub fn tagName_zc(element: *z.HTMLElement) []const u8 {
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try createElementAttr(doc, "div", &.{});
+/// const div = try createElementWithAttrs(doc, "div", &.{});
 /// const name = try tagName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "DIV");
@@ -499,7 +506,7 @@ pub fn tagName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
 /// ```
 /// const allocator = testing.allocator;
 /// const doc = try createDocument();
-/// const div = try z.createElementAttr(doc, "div", &.{});
+/// const div = try z.createElementWithAttrs(doc, "div", &.{});
 /// const name = try qualifiedName(allocator, elementToNode(div));
 /// defer allocator.free(name);
 /// try testing.expectEqualStrings(name, "div");
@@ -517,7 +524,7 @@ pub fn qualifiedName(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u
 test "qualified name" {
     const allocator = testing.allocator;
     const doc = try createDocument();
-    const div = try createElementAttr(doc, "div", &.{});
+    const div = try createElementWithAttrs(doc, "div", &.{});
     const owned_name = try qualifiedName(allocator, div);
     defer allocator.free(owned_name);
     try testing.expectEqualStrings(owned_name, "div");
@@ -527,11 +534,11 @@ test "qualified name" {
 
 /// [core] Get the qualified name (lowercased) of an _element_ (borrowed, zero-copy version)
 ///
-/// ⚠️ Unsafe : to be used only within the lifetime of the function call
+/// Unsafe : to be used only within the lifetime of the function call
 /// ## Example
 /// ```zig
 /// const doc = try createDocument();
-/// const div_elt = try createElementAttr(doc, "div", &.{});
+/// const div_elt = try createElementWithAttrs(doc, "div", &.{});
 /// const name = qualifiedName_zc(div_elt);
 /// try testing.expectEqualStrings(name, "div");
 /// ---
@@ -712,10 +719,11 @@ pub fn lastElementChild(element: *z.HTMLElement) ?*z.HTMLElement {
     return null;
 }
 
-test "firstElementChild" {
+test "firstChild - firstElementChild" {
     const doc = try z.createDocFromString("hello <div>world <p></p></div>");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
+
     const first_text = z.firstChild(body);
     try testing.expectEqualStrings(
         "#text",
@@ -730,6 +738,12 @@ test "firstElementChild" {
     try testing.expectEqualStrings(
         "DIV",
         z.tagName_zc(div.?),
+    );
+
+    const p = z.firstElementChild(div.?);
+    try testing.expectEqualStrings(
+        "P",
+        z.tagName_zc(p.?),
     );
 }
 
@@ -772,34 +786,31 @@ pub fn nextElementSibling(element: *z.HTMLElement) ?*z.HTMLElement {
     return null;
 }
 
-test "nextElementSibling" {
-    const doc = try z.createDocFromString("<div>test</div><br/><code></code>");
+test "first / last / nextElementSibling" {
+    const doc = try z.createDocFromString("<div>test</div><br><code></code>");
     defer z.destroyDocument(doc);
     const body = z.bodyElement(doc).?;
     var current_elt = z.firstElementChild(body);
 
-    // const elements = [_]struct { tag: []const u8 }{
-    //     .{ .tag = "DIV" },
-    //     .{ .tag = "BR" },
-    //     .{ .tag = "CODE" },
-    // };
     const elements: [3][]const u8 = .{ "DIV", "BR", "CODE" };
 
+    const first_elt_child = z.firstElementChild(body).?;
+    try testing.expectEqualStrings(
+        "div",
+        z.qualifiedName_zc(first_elt_child),
+    );
+    const last_elt_child = z.lastElementChild(body).?;
+    try testing.expect(
+        z.tagFromElement(last_elt_child) == .code,
+    );
+
     var index: usize = 0;
-    while (current_elt != null and index < elements.len) {
-        if (z.tagFromQualifiedName(z.tagName_zc(current_elt.?)) == .div) {
-            const first_child = z.firstChild(elementToNode(current_elt.?));
-            try testing.expectEqualStrings(
-                "#text",
-                z.nodeTypeName(first_child.?),
-            );
-        }
+    while (current_elt != null and index < elements.len) : (index += 1) {
         try testing.expectEqualStrings(
             elements[index],
             z.tagName_zc(current_elt.?),
         );
         current_elt = z.nextElementSibling(current_elt.?);
-        index += 1;
     }
 
     try testing.expect(index == elements.len);
@@ -832,6 +843,14 @@ test "childNodes" {
     defer allocator.free(child_nodes);
 
     try testing.expect(child_nodes.len == 3);
+
+    const node_names = [_][]const u8{ "P", "#text", "DIV" };
+    for (child_nodes, 0..) |child, i| {
+        try testing.expectEqualStrings(
+            node_names[i],
+            z.nodeName_zc(child),
+        );
+    }
 }
 
 /// [core] Helper: Collect only element children from an element
@@ -903,9 +922,9 @@ pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
 /// ## Example
 /// ```
 /// const parentNode: *z.DomNode = z.bodyNode(doc).?;
-/// const child1: *z.HTMLElement = try createElementAttr(doc, "div", &.{});
+/// const child1: *z.HTMLElement = try createElementWithAttrs(doc, "div", &.{});
 /// const div = elementToNode(child1);
-/// const child2: *z.HTMLElement = try createElementAttr(doc, "p", &.{});
+/// const child2: *z.HTMLElement = try createElementWithAttrs(doc, "p", &.{});
 /// const p = elementToNode(child2);
 /// const childNodes: []const *z.DomNode = &.{div, p};
 /// appendChildren(parentNode, childNodes);
@@ -923,9 +942,9 @@ test "appendChild/dren" {
     defer destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
-    const child1 = try createElementAttr(doc, "div", &.{});
+    const child1 = try createElementWithAttrs(doc, "div", &.{});
     const div = elementToNode(child1);
-    const child2 = try createElementAttr(doc, "p", &.{});
+    const child2 = try createElementWithAttrs(doc, "p", &.{});
     const p = elementToNode(child2);
     const child_nodes: []const *z.DomNode = &.{ div, p };
     appendChildren(body, child_nodes);
@@ -934,6 +953,36 @@ test "appendChild/dren" {
     defer allocator.free(html);
     try testing.expectEqualStrings(
         "<body><div></div><p></p></body>",
+        html,
+    );
+}
+
+pub fn replaceAll(parent: *z.DomNode, node: *z.DomNode) !void {
+    if (lxb_dom_node_replace_all(parent, node) != z._OK) {
+        return Err.ReplaceAllFailed;
+    }
+    return;
+}
+
+test "replaceAll" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<html><body><ul><li id=\"1\">First</li><li id=\"2\">Second</li></ul></body></html>");
+    defer z.destroyDocument(doc);
+
+    const body = z.bodyNode(doc).?;
+
+    const new_li = try z.createElementWithAttrs(
+        doc,
+        "li",
+        &.{.{ .name = "id", .value = "0" }},
+    );
+    const ul = z.getElementByTag(body, .ul).?;
+
+    try replaceAll(elementToNode(ul), elementToNode(new_li));
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(html);
+    try testing.expectEqualStrings(
+        "<body><ul><li id=\"0\"></li></ul></body>",
         html,
     );
 }
@@ -955,12 +1004,12 @@ test "insertBefore / insertAfter" {
 
     const body = z.bodyNode(doc).?;
     const first_li = z.getElementById(body, "1");
-    const new_li = try z.createElementAttr(
+    const new_li = try z.createElementWithAttrs(
         doc,
         "li",
         &.{.{ .name = "id", .value = "0" }},
     );
-    const last_li = try z.createElementAttr(
+    const last_li = try z.createElementWithAttrs(
         doc,
         "li",
         &.{.{ .name = "id", .value = "2" }},
@@ -1019,7 +1068,7 @@ test "InsertPosition.fromString" {
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// const new_div = try z.createElementAttr(doc, "div", &.{});
+/// const new_div = try z.createElementWithAttrs(doc, "div", &.{});
 /// try insertAdjacentElement(target.?, .beforebegin, new_div);
 /// try insertAdjacentElement(target.?, "beforeend", new_div);
 /// ---
@@ -1030,16 +1079,17 @@ pub fn insertAdjacentElement(
     element: *z.HTMLElement,
 ) !void {
     const T = @TypeOf(position);
-    const pos_enum: InsertPosition = if (T == InsertPosition)
-        position // if InsertPosition.beforebegin
-    else switch (@typeInfo(T)) {
-        .enum_literal => position, // if .beforebegin
-        // you want to return a value for `pos_enum`. You can't use `return` otherwise the function will return. `break` requires a labelled block to break from.
-        else => blk: {
-            const str: []const u8 = position[0..];
-            break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
-        },
-    };
+    const pos_enum: InsertPosition = if (@typeInfo(T) == .enum_literal)
+        // handle .afterbegin
+        position
+    else if (@typeInfo(T) == .@"enum")
+        // handle InsertPosition.afterend
+        position
+    else if (@typeInfo(T) == .pointer) blk: {
+        // Handle string literals (*const [N:0]u8)
+        const str: []const u8 = position;
+        break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
+    } else return Err.InvalidPosition;
 
     const target_node = elementToNode(target);
     const element_node = elementToNode(element);
@@ -1076,7 +1126,7 @@ test "insertAdjacentElement - all positions & invalid" {
     const target = z.getElementById(body, "target");
 
     // Test beforebegin - insert before the target element
-    const before_element = try z.createElementAttr(
+    const before_element = try z.createElementWithAttrs(
         doc,
         "p",
         &.{.{ .name = "id", .value = "before" }},
@@ -1088,19 +1138,19 @@ test "insertAdjacentElement - all positions & invalid" {
     );
 
     // Test afterbegin - insert as first child
-    const afterbegin_element = try z.createElementAttr(
+    const afterbegin_element = try z.createElementWithAttrs(
         doc,
         "span",
         &.{.{ .name = "id", .value = "first" }},
     );
     try insertAdjacentElement(
         target.?,
-        .afterbegin,
+        "afterbegin",
         afterbegin_element,
     );
 
     // Test beforeend - insert as last child
-    const beforeend_element = try z.createElementAttr(
+    const beforeend_element = try z.createElementWithAttrs(
         doc,
         "span",
         &.{.{ .name = "id", .value = "last" }},
@@ -1112,18 +1162,22 @@ test "insertAdjacentElement - all positions & invalid" {
     );
 
     // Test afterend - insert after the target element
-    const after_element = try z.createElementAttr(
+    const after_element = try z.createElementWithAttrs(
         doc,
         "p",
         &.{.{ .name = "id", .value = "after" }},
     );
     try insertAdjacentElement(
         target.?,
-        .afterend,
+        "afterend",
         after_element,
     );
 
-    const invalid = insertAdjacentElement(target.?, "invalid", after_element);
+    const invalid = insertAdjacentElement(
+        target.?,
+        "invalid",
+        after_element,
+    );
     try testing.expectError(Err.InvalidPosition, invalid);
 
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
@@ -1144,7 +1198,7 @@ test "insertAdjacentElement - all positions & invalid" {
     try testing.expectEqualStrings(expected, html);
 }
 
-test "insertAdjacentElement - empty target & cloning" {
+test "insertAdjacentElement - cloning into an empty target" {
     const allocator = testing.allocator;
 
     const doc = try z.createDocFromString("<div id=\"target\"><p id=\"1\"></p></div>");
@@ -1154,13 +1208,18 @@ test "insertAdjacentElement - empty target & cloning" {
     const target = z.getElementById(body, "target");
 
     // Test afterbegin on empty element
-    const child_element = try z.createElementAttr(
+    const child_element = try z.createElementWithAttrs(
         doc,
         "p",
         &.{.{ .name = "class", .value = "child" }},
     );
 
-    const positions = [_]InsertPosition{ .afterbegin, .beforeend, .beforebegin, .afterend };
+    const positions = [_]InsertPosition{
+        .afterbegin,
+        .beforeend,
+        .beforebegin,
+        .afterend,
+    };
     for (positions) |position| {
         const cloned_node = z.cloneNode(
             z.elementToNode(child_element),
@@ -1242,15 +1301,23 @@ pub fn insertAdjacentHTML(
     sanitizer_enabled: bool,
 ) !void {
     const T = @TypeOf(position);
-    const pos_enum: InsertPosition =
-        switch (@typeInfo(T)) {
-            .enum_literal => position,
-            // this need to return, so need break, which in turn need a block
-            else => blk: {
-                const str: []const u8 = position[0..];
+    const pos_enum: InsertPosition = switch (@typeInfo(T)) {
+        .enum_literal => position,
+        .@"enum" => position, // Handle InsertPosition enum values
+        .pointer => |ptr_info| blk: {
+            if (ptr_info.size == .slice) {
+                // Handle []const u8
+                break :blk InsertPosition.fromString(position) orelse return Err.InvalidPosition;
+            } else if (ptr_info.size == .one and @typeInfo(ptr_info.child) == .array) {
+                // Handle *const [N:0]u8 (string literals)
+                const str: []const u8 = position;
                 break :blk InsertPosition.fromString(str) orelse return Err.InvalidPosition;
-            },
-        };
+            } else {
+                return Err.InvalidPosition;
+            }
+        },
+        else => return Err.InvalidPosition,
+    };
 
     const target_node = elementToNode(target);
 
@@ -1502,7 +1569,7 @@ test "insertAdjacent demo" {
     const target = z.getElementById(body, "target");
 
     // Demo 1: insertAdjacentElement with all positions
-    const before_elem = try z.createElementAttr(
+    const before_elem = try z.createElementWithAttrs(
         doc,
         "h2",
         &.{.{ .name = "class", .value = "before" }},
@@ -1515,7 +1582,7 @@ test "insertAdjacent demo" {
         before_elem,
     );
 
-    const after_elem = try z.createElementAttr(
+    const after_elem = try z.createElementWithAttrs(
         doc,
         "h2",
         &.{.{ .name = "class", .value = "after" }},
@@ -1652,7 +1719,7 @@ test "isVoid" {
 /// ## Examples
 /// ```
 /// test "isNodeEmpty" {
-///     const img_elt = try z.createElementAttr(doc, "img", &.{.name = "src", .value = "image.png"});
+///     const img_elt = try z.createElementWithAttrs(doc, "img", &.{.name = "src", .value = "image.png"});
 ///     const img = z.elementToNode(img_elt);
 ///     try testing.expect(z.isVoid(img);
 ///     try testing.expect(z.isNodeEmpty(img));
@@ -1682,7 +1749,7 @@ test "isNodeEmpty" {
     const body = z.bodyNode(doc).?;
     try testing.expect(z.isNodeEmpty(body));
 
-    const img_elt = try z.createElementAttr(doc, "img", &.{.{ .name = "src", .value = "image.png" }});
+    const img_elt = try z.createElementWithAttrs(doc, "img", &.{.{ .name = "src", .value = "image.png" }});
     const img = z.elementToNode(img_elt);
     try testing.expect(z.isVoid(img));
     try testing.expect(z.isNodeEmpty(img));
@@ -1863,7 +1930,7 @@ test "memory safety: nodeName vs nodeNameOwned" {
     const doc = try createDocument();
     defer destroyDocument(doc);
 
-    const element = try createElementAttr(doc, "div", &.{});
+    const element = try createElementWithAttrs(doc, "div", &.{});
     defer destroyNode(elementToNode(element));
 
     // Test immediate use (safe with both versions)
@@ -1879,7 +1946,7 @@ test "memory safety: nodeName vs nodeNameOwned" {
     try testing.expectEqualStrings(unsafe_name, owned_name);
 
     // The owned version can be safely used after modifications
-    const another_element = try createElementAttr(doc, "span", &.{});
+    const another_element = try createElementWithAttrs(doc, "span", &.{});
     defer destroyNode(elementToNode(another_element));
 
     // owned_name is still valid and safe to use
@@ -1889,10 +1956,10 @@ test "memory safety: nodeName vs nodeNameOwned" {
 test "insertChild" {
     const doc = try createDocument();
     defer destroyDocument(doc);
-    const parent = try createElementAttr(doc, "div", &.{});
+    const parent = try createElementWithAttrs(doc, "div", &.{});
     defer destroyNode(elementToNode(parent));
 
-    const child = try createElementAttr(doc, "span", &.{});
+    const child = try createElementWithAttrs(doc, "span", &.{});
     defer destroyNode(elementToNode(child));
     appendChild(elementToNode(parent), elementToNode(child));
 
@@ -1974,7 +2041,7 @@ test "createTextNode and appendChild" {
     const doc = try z.createDocFromString("<html><body></body></html>");
     defer destroyDocument(doc);
 
-    const div = try createElementAttr(doc, "div", &.{});
+    const div = try createElementWithAttrs(doc, "div", &.{});
     const text_node = try createTextNode(doc, "Hello, World!");
     appendChild(elementToNode(div), text_node);
     const body = z.bodyElement(doc).?;
@@ -1997,9 +2064,9 @@ test "insertNodeBefore and insertNodeAfter" {
 
     const body_node = z.bodyNode(doc).?;
 
-    const div1 = try createElementAttr(doc, "div", &.{});
-    const div2 = try createElementAttr(doc, "div", &.{});
-    const div3 = try createElementAttr(doc, "div", &.{});
+    const div1 = try createElementWithAttrs(doc, "div", &.{});
+    const div2 = try createElementWithAttrs(doc, "div", &.{});
+    const div3 = try createElementWithAttrs(doc, "div", &.{});
 
     appendChild(body_node, elementToNode(div1));
     appendChild(body_node, elementToNode(div2));
@@ -2031,9 +2098,9 @@ test "appendChildren helper" {
 
     const body_node = z.bodyNode(doc).?;
 
-    const div1 = try createElementAttr(doc, "div", &.{});
-    const div2 = try createElementAttr(doc, "p", &.{});
-    const div3 = try createElementAttr(doc, "span", &.{});
+    const div1 = try createElement(doc, "div");
+    const div2 = try createElement(doc, "p");
+    const div3 = try createElement(doc, "span");
 
     const child_nodes = [_]*z.DomNode{ elementToNode(div1), elementToNode(div2), elementToNode(div3) };
 
@@ -2116,7 +2183,7 @@ test "create Html element, tagFromQualifiedName, custom element" {
     const doc = try z.createDocFromString("<p></p>");
     const body_node = z.bodyNode(doc).?;
 
-    const span_element = try createElementAttr(doc, "span", &.{});
+    const span_element = try createElementWithAttrs(doc, "span", &.{});
     const tag = tagName_zc(span_element);
     const span_tag = z.tagFromQualifiedName("span");
     try testing.expectEqualStrings(tag, "SPAN");
@@ -2124,7 +2191,7 @@ test "create Html element, tagFromQualifiedName, custom element" {
     try testing.expect(z.tagFromQualifiedName("span") == .span);
 
     // Test custom element creation
-    const custom_elt = try createElementAttr(
+    const custom_elt = try createElementWithAttrs(
         doc,
         "custom-element",
         &.{.{ .name = "data-id", .value = "123" }},
@@ -2190,8 +2257,8 @@ test "create Html element, tagFromQualifiedName, custom element" {
 test "void vs empty element detection" {
     const html =
         \\<div>
-        \\  <br/>
-        \\  <img src="test.jpg"/>
+        \\  <br>
+        \\  <img src="test.jpg">
         \\  <p>Not void</p>
         \\  <div>  </div>
         \\  <p><span></span></>
@@ -2252,7 +2319,7 @@ test "void vs empty element detection" {
     try testing.expect(empty_non_self_closing_non_text_nodes_count == 1); // 1 empty non-self-closing non-text element
 }
 
-test "practical string-to-DOM scenarios" {
+test "bigger test with string-to-DOM scenarios" {
     {
         // 1: Full page `z.createDocFromString()` and `outerHTML()` round-trip test
         const allocator = testing.allocator;
@@ -2360,21 +2427,13 @@ test "practical string-to-DOM scenarios" {
             "<div class=\"alert alert-info\">Information message</div>",
         };
 
-        const app_doc = try z.createDocFromString("<html><body><div id=\"app\"></div></body></html>");
+        const app_doc = try z.createDocFromString("<div id=\"app\"></div>");
         defer destroyDocument(app_doc);
         const app_root = z.documentRoot(app_doc);
 
         const app_div = z.getElementById(app_root.?, "app");
 
         for (components, 0..) |component, i| {
-            // const current_content = try z.innerHTML(allocator, app_div.?);
-            // defer allocator.free(current_content);
-
-            // const updated_content = try std.fmt.allocPrint(
-            //     allocator,
-            //     "{s}<div class=\"component-{d}\">{s}</div>",
-            //     .{ current_content, i, component },
-            // );
             const updated_content = try std.fmt.allocPrint(
                 allocator,
                 "<div class=\"component-{d}\">{s}</div>",
@@ -2383,7 +2442,13 @@ test "practical string-to-DOM scenarios" {
 
             defer allocator.free(updated_content);
 
-            try z.insertAdjacentHTML(allocator, app_div.?, .beforeend, updated_content, false);
+            try z.insertAdjacentHTML(
+                allocator,
+                app_div.?,
+                .beforeend,
+                updated_content,
+                false,
+            );
             // _ = try z.setInnerHTML(
             //     allocator,
             //     app_div.?,
@@ -2415,7 +2480,7 @@ test "practical string-to-DOM scenarios" {
     }
     {
         // 4. Template rendering - TODO
-        // const template = try z.createElementAttr(allocator, "template");
+        // const template = try z.createElementWithAttrs(allocator, "template");
         // defer allocator.free(template);
     }
 }

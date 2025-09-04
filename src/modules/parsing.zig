@@ -1,8 +1,6 @@
 //! A module to parse strings. You can parse a string into a document, or create and parse a string into its body.
 //!
-//! You havea parser engine with provides utility functions for parsing strings, including templates as strings. It also gives access to a sanitizer process.
-//!
-//! The parser engin can also parse chunks as streamed
+//! You have parser engine with provides utility functions for parsing strings, including templates as strings. It also gives access to a sanitizer process.
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
@@ -22,7 +20,6 @@ extern "c" fn lxb_html_element_inner_html_set(
     inner_len: usize,
 ) ?*z.HTMLElement;
 
-extern "c" fn lxb_dom_node_replace_all(parent: *z.DomNode, node: *z.DomNode) c_int;
 // parser
 extern "c" fn lxb_html_parser_create() ?*z.HtmlParser;
 extern "c" fn lxb_html_parser_destroy(parser: *z.HtmlParser) *z.HtmlParser;
@@ -58,11 +55,6 @@ extern "c" fn lxb_html_document_parse_fragment(
     html: [*]const u8,
     html_len: usize,
 ) ?*z.DomNode;
-
-// Chunk parsing for streaming
-extern "c" fn lxb_html_parse_chunk_begin(parser: *z.HtmlParser) ?*z.HTMLDocument;
-extern "c" fn lxb_html_parse_chunk_process(parser: *z.HtmlParser, html: [*]const u8, html_len: usize) c_int;
-extern "c" fn lxb_html_parse_chunk_end(parser: *z.HtmlParser) c_int;
 
 // === Parsing ==========================================================
 
@@ -130,7 +122,7 @@ test "first tests setInnerHTML" {
     defer z.destroyDocument(doc);
 
     // Create a container element
-    var div = try z.createElementAttr(doc, "div", &.{});
+    var div = try z.createElementWithAttrs(doc, "div", &.{});
 
     // test 1 --------------
     div = try setInnerHTML(div, "<p id=\"1\">Hello <strong>World</strong></p>");
@@ -688,8 +680,7 @@ pub const FragmentParser = struct {
             context,
             sanitizer_enabled,
         );
-        defer z.destroyNode(fragment_root);
-
+        // Note: appendFragment already destroys fragment_root, no defer needed
         self.appendFragment(parent, fragment_root);
     }
 
@@ -711,38 +702,6 @@ pub const FragmentParser = struct {
         defer z.destroyNode(fragment_root);
 
         return z.childNodes(allocator, fragment_root);
-    }
-
-    /// Stream parsing - begin parsing a large document in chunks
-    pub fn parseChunkBegin(self: *FragmentParser) !*z.HTMLDocument {
-        if (!self.initialized) return Err.HtmlParserNotInitialized;
-
-        return lxb_html_parse_chunk_begin(self.html_parser) orelse Err.ParseFailed;
-    }
-
-    /// Stream parsing - process a chunk of HTML
-    pub fn parseChunkProcess(self: *FragmentParser, html_chunk: []const u8) !void {
-        if (!self.initialized) return Err.HtmlParserNotInitialized;
-
-        const status = lxb_html_parse_chunk_process(
-            self.html_parser,
-            html_chunk.ptr,
-            html_chunk.len,
-        );
-
-        if (status != z._OK) {
-            return Err.ParseFailed;
-        }
-    }
-
-    /// Stream parsing - finish parsing and get the document
-    pub fn parseChunkEnd(self: *FragmentParser) !void {
-        if (!self.initialized) return Err.HtmlParserNotInitialized;
-
-        const status = lxb_html_parse_chunk_end(self.html_parser);
-        if (status != z._OK) {
-            return Err.ParseFailed;
-        }
     }
 };
 
@@ -823,7 +782,7 @@ test "Serializer sanitation" {
     // try z.prettyPrint(body);
 }
 
-test "inserFragment in one go" {
+test "insertFragment in one go" {
     const doc = try createDocFromString("<div id=\"1\"></div>");
     defer z.destroyDocument(doc);
 
@@ -849,6 +808,31 @@ test "inserFragment in one go" {
 
     const expected = "<div id=\"1\"><p> some text</p><div> more <i>text</i><span></span></div><ul><li></li></ul></div>";
     try testing.expectEqualStrings(expected, result);
+}
+
+test "multiple inserts" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<div><ul></ul></div>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    const ul_elt = z.getElementByTag(body, .ul).?;
+    const ul = z.elementToNode(ul_elt);
+
+    var parser = try z.FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    for (0..10) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<li id=\"item-{}\">Item {}</li>",
+            .{ i, i },
+        );
+        defer allocator.free(li);
+
+        try parser.insertFragment(ul, li, .ul, false);
+    }
+    try z.prettyPrint(body);
 }
 
 test "template parsing and use template element" {
@@ -1718,102 +1702,6 @@ test "parseTemplates - multiple template parsing" {
         search_pos = pos + 17;
     }
     try testing.expectEqual(@as(usize, 2), item_count);
-}
-
-test "chunk parsing - stream large HTML" {
-    const allocator = testing.allocator;
-
-    var parser = try FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    // Begin chunk parsing
-    const doc = try parser.parseChunkBegin();
-    defer z.destroyDocument(doc);
-
-    // Process HTML in chunks (simulating streaming)
-    const chunk1 = "<html><head><title>Test</title></head><body>";
-    const chunk2 = "<h1>Chunk Parsing Test</h1>";
-    const chunk3 = "<p>This HTML was processed in multiple chunks.</p>";
-    const chunk4 = "<ul><li>Item 1</li><li>Item 2</li></ul>";
-    const chunk5 = "</body></html>";
-
-    try parser.parseChunkProcess(chunk1);
-    try parser.parseChunkProcess(chunk2);
-    try parser.parseChunkProcess(chunk3);
-    try parser.parseChunkProcess(chunk4);
-    try parser.parseChunkProcess(chunk5);
-
-    // Finish chunk parsing
-    try parser.parseChunkEnd();
-
-    // Verify the document was parsed correctly
-    const body = z.bodyNode(doc).?;
-    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
-    defer allocator.free(result);
-
-    try testing.expect(std.mem.indexOf(u8, result, "Chunk Parsing Test") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "multiple chunks") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Item 1") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Item 2") != null);
-}
-
-test "chunk parsing - simulate network streaming" {
-    const allocator = testing.allocator;
-
-    var parser = try FragmentParser.init(allocator);
-    defer parser.deinit();
-
-    // Simulate receiving a large HTML document over network in small chunks
-    const large_html =
-        \\<!DOCTYPE html>
-        \\<html>
-        \\<head><title>Large Document</title></head>
-        \\<body>
-        \\<main>
-        \\  <section id="content">
-        \\    <h1>Streaming Large HTML</h1>
-        \\    <p>This demonstrates processing HTML as it arrives from network.</p>
-        \\    <div class="data">
-        \\      <table>
-        \\        <thead><tr><th>Name</th><th>Value</th></tr></thead>
-        \\        <tbody>
-        \\          <tr><td>Item 1</td><td>Value 1</td></tr>
-        \\          <tr><td>Item 2</td><td>Value 2</td></tr>
-        \\          <tr><td>Item 3</td><td>Value 3</td></tr>
-        \\        </tbody>
-        \\      </table>
-        \\    </div>
-        \\  </section>
-        \\</main>
-        \\</body>
-        \\</html>
-    ;
-
-    const doc = try parser.parseChunkBegin();
-    defer z.destroyDocument(doc);
-
-    // Process in 50-byte chunks (simulating slow network)
-    const chunk_size = 50;
-    var offset: usize = 0;
-
-    while (offset < large_html.len) {
-        const end = @min(offset + chunk_size, large_html.len);
-        const chunk = large_html[offset..end];
-        try parser.parseChunkProcess(chunk);
-        offset = end;
-    }
-
-    try parser.parseChunkEnd();
-
-    // Verify complete parsing
-    const section = z.getElementById(z.bodyNode(doc).?, "content").?;
-    const content = try z.outerHTML(allocator, section);
-    defer allocator.free(content);
-
-    try testing.expect(std.mem.indexOf(u8, content, "Streaming Large HTML") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "Item 1") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "Item 3") != null);
-    try testing.expect(std.mem.indexOf(u8, content, "<table>") != null);
 }
 
 test "fragment contexts: audio sources" {

@@ -63,7 +63,7 @@ test "Append fragment" {
   const fragment = try z.createDocumentFragment(doc);
 
   // create with attributes
-  const div_elt = try z.createElementAttr(doc,"div",
+  const div_elt = try z.createElementWithAttrs(doc,"div",
       &.{.{ .name = "class", .value = "container-list" }},
   );
 
@@ -71,7 +71,7 @@ test "Append fragment" {
   const comment = try z.createComment(doc, "a comment");
   z.appendChild(div, z.commentToNode(comment));
 
-  const ul_elt = try z.createElementAttr(doc, "ul", &.{});
+  const ul_elt = try z.createElementWithAttrs(doc, "ul", &.{});
   const ul = z.elementToNode(ul_elt);
 
   for (1..4) |i| {
@@ -81,7 +81,7 @@ test "Append fragment" {
       );
     defer allocator.free(content);
 
-    const temp_elt = try z.createElementAttr(doc, "div", &.{});
+    const temp_elt = try z.createElementWithAttrs(doc, "div", &.{});
     const temp_div = z.elementToNode(temp_elt);
 
     // we inject the <li> string as innerHTML into the temp <div>

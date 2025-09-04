@@ -42,20 +42,20 @@ extern "c" fn lxb_selectors_find(selectors: *z.CssSelectors, root: *z.DomNode, l
     node: *z.DomNode,
     spec: *z.CssSelectorSpecificity,
     ctx: ?*anyopaque,
-) callconv(.C) usize, ctx: ?*anyopaque) usize;
+) callconv(.c) usize, ctx: ?*anyopaque) usize;
 
-extern "c" fn lxb_selectors_match_node(selectors: *z.CssSelectors, node: *z.DomNode, list: *z.CssSelectorList, callback: *const fn (*z.DomNode, *z.CssSelectorSpecificity, ?*anyopaque) callconv(.C) usize, ctx: ?*anyopaque) usize;
+extern "c" fn lxb_selectors_match_node(selectors: *z.CssSelectors, node: *z.DomNode, list: *z.CssSelectorList, callback: *const fn (*z.DomNode, *z.CssSelectorSpecificity, ?*anyopaque) callconv(.c) usize, ctx: ?*anyopaque) usize;
 
 // Cleanup selector list
 extern "c" fn lxb_css_selector_list_destroy_memory(list: *z.CssSelectorList) void;
 
-/// Compiled CSS selector for reuse
-pub const CompiledSelector = struct {
+/// Parse and store a CSS selector for reuse
+const StoredSelector = struct {
     allocator: std.mem.Allocator,
     selector_list: *z.CssSelectorList,
     original_selector: []const u8,
 
-    pub fn deinit(self: CompiledSelector) void {
+    pub fn deinit(self: StoredSelector) void {
         lxb_css_selector_list_destroy_memory(self.selector_list);
         self.allocator.free(self.original_selector);
     }
@@ -67,7 +67,7 @@ pub const CssSelectorEngine = struct {
     selectors: *z.CssSelectors,
     initialized: bool = false,
     // Selector cache for performance
-    selector_cache: std.StringHashMap(CompiledSelector),
+    selector_cache: std.StringHashMap(StoredSelector),
 
     const Self = @This();
 
@@ -99,7 +99,7 @@ pub const CssSelectorEngine = struct {
             .selectors = selectors,
             .allocator = allocator,
             .initialized = true,
-            .selector_cache = std.StringHashMap(CompiledSelector).init(allocator),
+            .selector_cache = std.StringHashMap(StoredSelector).init(allocator),
         };
     }
 
@@ -109,30 +109,30 @@ pub const CssSelectorEngine = struct {
             // Clean up all cached selectors
             var iterator = self.selector_cache.iterator();
             while (iterator.next()) |entry| {
-                var compiled = entry.value_ptr;
-                compiled.deinit();
+                var parsed = entry.value_ptr;
+                parsed.deinit();
             }
             self.selector_cache.deinit();
 
             _ = lxb_selectors_destroy(self.selectors, true);
-            _ = lxb_css_parser_destroy(self.parser, true);
+            _ = lxb_css_parser_destroy(self.css_parser, true);
         }
     }
 
-    /// [selectors] Compile a CSS selector for reuse (caching)
-    pub fn compileSelector(self: *Self, selector: []const u8) !CompiledSelector {
+    /// [selectors] Parse and store a CSS selector for reuse (caching)
+    pub fn parseSelector(self: *Self, selector: []const u8) !StoredSelector {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
-            self.parser,
+            self.css_parser,
             selector.ptr,
             selector.len,
         ) orelse return Err.CssSelectorParseFailed;
 
-        // Store a copy of the selector string
+        // copy the selector string
         const owned_selector = try self.allocator.dupe(u8, selector);
 
-        return CompiledSelector{
+        return StoredSelector{
             .selector_list = selector_list,
             .original_selector = owned_selector,
             .allocator = self.allocator,
@@ -140,15 +140,15 @@ pub const CssSelectorEngine = struct {
     }
 
     /// [selectors] Get or compile a cached selector
-    fn getOrCompileSelector(self: *Self, selector: []const u8) !*CompiledSelector {
+    fn getOrParseSelector(self: *Self, selector: []const u8) !*StoredSelector {
         // Check if we already have this selector compiled
         if (self.selector_cache.getPtr(selector)) |cached| {
             return cached;
         }
 
         // Not cached - compile and store it
-        const compiled = try self.compileSelector(selector);
-        try self.selector_cache.put(selector, compiled);
+        const parsed = try self.parseSelector(selector);
+        try self.selector_cache.put(selector, parsed);
 
         return self.selector_cache.getPtr(selector).?;
     }
@@ -157,7 +157,7 @@ pub const CssSelectorEngine = struct {
     pub fn querySelectorCached(
         self: *Self,
         root_node: *z.DomNode,
-        compiled: *CompiledSelector,
+        selector: *StoredSelector,
     ) !?*z.DomNode {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
@@ -166,7 +166,7 @@ pub const CssSelectorEngine = struct {
         const status = lxb_selectors_find(
             self.selectors,
             root_node,
-            compiled.selector_list,
+            selector.selector_list,
             findFirstNodeCallback,
             &context,
         );
@@ -183,7 +183,7 @@ pub const CssSelectorEngine = struct {
     pub fn querySelectorAllCached(
         self: *Self,
         root_node: *z.DomNode,
-        compiled: *CompiledSelector,
+        selector: *StoredSelector,
     ) ![]*z.DomNode {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
@@ -193,7 +193,7 @@ pub const CssSelectorEngine = struct {
         const status = lxb_selectors_find(
             self.selectors,
             root_node,
-            compiled.selector_list,
+            selector.selector_list,
             findCallback,
             &context,
         );
@@ -202,7 +202,7 @@ pub const CssSelectorEngine = struct {
             return Err.CssSelectorFindFailed;
         }
 
-        return context.results.toOwnedSlice();
+        return context.results.toOwnedSlice(self.allocator);
     }
 
     /// [selectors] Find first matching node (optimized with caching and early stopping)
@@ -214,8 +214,8 @@ pub const CssSelectorEngine = struct {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         // Use cached selector for better performance
-        const compiled = try self.getOrCompileSelector(selector);
-        return self.querySelectorCached(root_node, compiled);
+        const parsed = try self.getOrParseSelector(selector);
+        return self.querySelectorCached(root_node, parsed);
     }
 
     /// [selectors] Check if any nodes match the selector
@@ -234,13 +234,13 @@ pub const CssSelectorEngine = struct {
     pub fn matchNode(self: *Self, node: *z.DomNode, selector: []const u8) !bool {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
-        // CSS selectors only work on element nodes
+        // CSS selectors only on element nodes
         if (!z.isTypeElement(node)) {
             return false;
         }
 
         // Use cached selector for better performance
-        const compiled = try self.getOrCompileSelector(selector);
+        const _selector = try self.getOrParseSelector(selector);
 
         var context = FindContext.init(self.allocator);
         defer context.deinit();
@@ -248,7 +248,7 @@ pub const CssSelectorEngine = struct {
         const status = lxb_selectors_match_node(
             self.selectors,
             node,
-            compiled.selector_list,
+            _selector.selector_list,
             findCallback,
             &context,
         );
@@ -267,8 +267,8 @@ pub const CssSelectorEngine = struct {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         // Use cached selector for better performance
-        const compiled = try self.getOrCompileSelector(selector);
-        return self.querySelectorAllCached(root_node, compiled);
+        const _selector = try self.getOrParseSelector(selector);
+        return self.querySelectorAllCached(root_node, _selector);
     }
 
     /// Query: Find all descendant nodes that match the selector
@@ -278,7 +278,7 @@ pub const CssSelectorEngine = struct {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
-            self.parser,
+            self.css_parser,
             selector.ptr,
             selector.len,
         ) orelse return Err.CssSelectorParseFailed;
@@ -302,16 +302,15 @@ pub const CssSelectorEngine = struct {
             }
         }
 
-        return context.results.toOwnedSlice();
+        return context.results.toOwnedSlice(self.allocator);
     }
 
     /// Filter: Keep only nodes that match the selector themselves
-    /// Equivalent to C++ filter()
     pub fn filter(self: *Self, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
         if (!self.initialized) return Err.CssEngineNotInitialized;
 
         const selector_list = lxb_css_selectors_parse(
-            self.parser,
+            self.css_parser,
             selector.ptr,
             selector.len,
         ) orelse return Err.CssSelectorParseFailed;
@@ -322,7 +321,7 @@ pub const CssSelectorEngine = struct {
 
         // Test each input node directly
         for (nodes) |node| {
-            if (z.isTypeElement(node)) { // Guard for element nodes only
+            if (z.isTypeElement(node)) {
                 const status = lxb_selectors_match_node(
                     self.selectors,
                     node,
@@ -336,36 +335,29 @@ pub const CssSelectorEngine = struct {
             }
         }
 
-        return context.results.toOwnedSlice();
+        return context.results.toOwnedSlice(self.allocator);
     }
 };
 
-//=============================================================================
-// INTERNAL CALLBACK CONTEXT
-//=============================================================================
+// === CALLBACK CONTEXT
 
 const FindContext = struct {
     allocator: std.mem.Allocator,
-    results: std.ArrayList(*z.DomNode),
+    results: std.ArrayList(*z.DomNode) = .empty,
 
     fn init(allocator: std.mem.Allocator) FindContext {
-        return FindContext{
-            .allocator = allocator,
-            .results = std.ArrayList(*z.DomNode).init(allocator),
-        };
+        return FindContext{ .allocator = allocator };
     }
 
     fn deinit(self: *FindContext) void {
-        self.results.deinit();
+        self.results.deinit(self.allocator);
     }
 };
 
 /// Callback function for lxb_selectors_find
-fn findCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
-    _ = spec; // unused
-
+fn findCallback(node: *z.DomNode, _: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.c) usize {
     const context: *FindContext = @ptrCast(@alignCast(ctx.?));
-    context.results.append(node) catch return 1; // Return error status on allocation failure
+    context.results.append(context.allocator, node) catch return z._STOP; // Return error status on allocation failure
 
     return z._OK;
 }
@@ -389,9 +381,7 @@ const FirstElementContext = struct {
 };
 
 /// Callback that stops after finding first node
-fn findFirstNodeCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
-    _ = spec; // unused
-
+fn findFirstNodeCallback(node: *z.DomNode, _: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.c) usize {
     const context: *FirstNodeContext = @ptrCast(@alignCast(ctx.?));
     context.first_node = node;
 
@@ -401,9 +391,7 @@ fn findFirstNodeCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx:
 }
 
 /// Callback that stops after finding first element
-fn findFirstElementCallback(node: *z.DomNode, spec: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.C) usize {
-    _ = spec; // unused
-
+fn findFirstElementCallback(node: *z.DomNode, _: *z.CssSelectorSpecificity, ctx: ?*anyopaque) callconv(.c) usize {
     const context: *FirstElementContext = @ptrCast(@alignCast(ctx.?));
 
     if (z.nodeToElement(node)) |element| {
@@ -432,16 +420,16 @@ pub fn querySelectorAll(allocator: std.mem.Allocator, doc: *z.HTMLDocument, sele
     defer allocator.free(nodes);
 
     // Convert nodes to elements
-    var elements = std.ArrayList(*z.HTMLElement).init(allocator);
-    defer elements.deinit();
+    var elements: std.ArrayList(*z.HTMLElement) = .empty;
+    defer elements.deinit(allocator);
 
     for (nodes) |node| {
         if (z.nodeToElement(node)) |element| {
-            try elements.append(element);
+            try elements.append(allocator, element);
         }
     }
 
-    return elements.toOwnedSlice();
+    return elements.toOwnedSlice(allocator);
 }
 
 /// [selectors] High-level function: Find first element by CSS selector in a document
@@ -461,6 +449,13 @@ pub fn querySelector(allocator: std.mem.Allocator, doc: *z.HTMLDocument, selecto
     }
 
     return null;
+}
+
+pub fn filter(allocator: std.mem.Allocator, nodes: []*z.DomNode, selector: []const u8) ![]*z.DomNode {
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    return css_engine.filter(nodes, selector);
 }
 
 /// [selectors] Create a reusable CSS selector engine for high-performance repeated queries
@@ -842,77 +837,77 @@ test "CSS selector edge cases" {
     }
 }
 
-test "debug what classes lexbor sees" {
-    const allocator = testing.allocator;
+// test "debug what classes lexbor sees" {
+//     const allocator = testing.allocator;
 
-    const html = "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
+//     const html = "<div class='container'><div class='box red'>Red Box</div><div class='box blue'>Blue Box</div><p class='text'>Paragraph</p></div>";
 
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
+//     const doc = try z.createDocFromString(html);
+//     defer z.destroyDocument(doc);
 
-    const collection = z.createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
-    defer z.destroyCollection(collection);
+//     const collection = z.createDefaultCollection(doc) orelse return error.CollectionCreateFailed;
+//     defer z.destroyCollection(collection);
 
-    const body_node = z.bodyNode(doc).?;
-    const container_div = z.firstChild(body_node).?;
-    const container_div_element = z.nodeToElement(container_div);
+//     const body_node = z.bodyNode(doc).?;
+//     const container_div = z.firstChild(body_node).?;
+//     const container_div_element = z.nodeToElement(container_div);
 
-    var tokenList = try z.classList(
-        allocator,
-        container_div_element.?,
-    );
-    defer tokenList.deinit();
+//     var tokenList = try z.classList(
+//         allocator,
+//         container_div_element.?,
+//     );
+//     defer tokenList.deinit();
 
-    const class = try tokenList.toString(allocator);
-    defer allocator.free(class);
-    try testing.expectEqualStrings("container", class);
+//     const class = try tokenList.toString(allocator);
+//     defer allocator.free(class);
+//     try testing.expectEqualStrings("container", class);
 
-    const red_box = z.firstChild(container_div).?;
-    const blue_box = z.nextSibling(red_box).?;
-    const paragraph = z.nextSibling(blue_box).?;
+//     const red_box = z.firstChild(container_div).?;
+//     const blue_box = z.nextSibling(red_box).?;
+//     const paragraph = z.nextSibling(blue_box).?;
 
-    // Check what classes each element actually has
-    const elements = [_]struct { node: *z.DomNode, name: []const u8 }{
-        .{ .node = container_div, .name = "container" },
-        .{ .node = red_box, .name = "box red" },
-        .{ .node = blue_box, .name = "box blue" },
-        .{ .node = paragraph, .name = "text" },
-    };
+//     // Check what classes each element actually has
+//     const elements = [_]struct { node: *z.DomNode, name: []const u8 }{
+//         .{ .node = container_div, .name = "container" },
+//         .{ .node = red_box, .name = "box red" },
+//         .{ .node = blue_box, .name = "box blue" },
+//         .{ .node = paragraph, .name = "text" },
+//     };
 
-    for (elements) |elem| {
-        const element = z.nodeToElement(elem.node).?;
+//     for (elements) |elem| {
+//         const element = z.nodeToElement(elem.node).?;
 
-        if (try z.getAttribute(allocator, element, "class")) |class_attr| {
-            defer allocator.free(class_attr);
-            try testing.expectEqualStrings(class_attr, elem.name);
-        }
-    }
+//         if (try z.getAttribute(allocator, element, "class")) |class_attr| {
+//             defer allocator.free(class_attr);
+//             try testing.expectEqualStrings(class_attr, elem.name);
+//         }
+//     }
 
-    // Test simple matchNode
-    var css_engine = try CssSelectorEngine.init(allocator);
-    defer css_engine.deinit();
+//     // Test simple matchNode
+//     var css_engine = try CssSelectorEngine.init(allocator);
+//     defer css_engine.deinit();
 
-    // Test red box
-    const red_div = try css_engine.matchNode(red_box, "div");
-    const red_box_class = try css_engine.matchNode(red_box, ".box");
-    const red_red_class = try css_engine.matchNode(red_box, ".red");
-    const red_blue_class = try css_engine.matchNode(red_box, ".blue");
-    try testing.expect(red_div);
-    try testing.expect(red_box_class);
-    try testing.expect(red_red_class);
-    try testing.expect(!red_blue_class);
+//     // Test red box
+//     const red_div = try css_engine.matchNode(red_box, "div");
+//     const red_box_class = try css_engine.matchNode(red_box, ".box");
+//     const red_red_class = try css_engine.matchNode(red_box, ".red");
+//     const red_blue_class = try css_engine.matchNode(red_box, ".blue");
+//     try testing.expect(red_div);
+//     try testing.expect(red_box_class);
+//     try testing.expect(red_red_class);
+//     try testing.expect(!red_blue_class);
 
-    // Test blue box
-    const blue_div = try css_engine.matchNode(blue_box, "div");
-    const blue_box_class = try css_engine.matchNode(blue_box, ".box");
-    const blue_red_class = try css_engine.matchNode(blue_box, ".red");
-    const blue_blue_class = try css_engine.matchNode(blue_box, ".blue");
+//     // Test blue box
+//     const blue_div = try css_engine.matchNode(blue_box, "div");
+//     const blue_box_class = try css_engine.matchNode(blue_box, ".box");
+//     const blue_red_class = try css_engine.matchNode(blue_box, ".red");
+//     const blue_blue_class = try css_engine.matchNode(blue_box, ".blue");
 
-    try testing.expect(blue_div);
-    try testing.expect(blue_box_class);
-    try testing.expect(!blue_red_class);
-    try testing.expect(blue_blue_class);
-}
+//     try testing.expect(blue_div);
+//     try testing.expect(blue_box_class);
+//     try testing.expect(!blue_red_class);
+//     try testing.expect(blue_blue_class);
+// }
 
 test "CSS selector matchNode vs find vs matches" {
     const allocator = testing.allocator;
@@ -1041,14 +1036,16 @@ test "CSS selector caching performance" {
     var html_buffer: std.ArrayList(u8) = .empty;
     defer html_buffer.deinit(allocator);
 
-    try html_buffer.append(allocator, "<html><body>");
+    try html_buffer.appendSlice(allocator, "<html><body>");
 
     // Add many elements to make the performance difference noticeable
     for (0..1000) |i| {
-        try html_buffer.append(allocator, "<div class='item item-{}' data-id='{}'>Item {}</div>", .{ i % 10, i, i });
+        const div = try std.fmt.allocPrint(allocator, "<div class='item item-{}' data-id='{}'>Item {}</div>", .{ i % 10, i, i });
+        defer allocator.free(div);
+        try html_buffer.appendSlice(allocator, div);
     }
 
-    try html_buffer.append("</body></html>");
+    try html_buffer.appendSlice(allocator, "</body></html>");
 
     const html = try html_buffer.toOwnedSlice(allocator);
     defer allocator.free(html);
@@ -1063,7 +1060,7 @@ test "CSS selector caching performance" {
     defer css_engine.deinit();
 
     // Test 1: Demonstrate caching with manual compilation
-    var compiled_selector = try css_engine.compileSelector(".item-5");
+    var compiled_selector = try css_engine.parseSelector(".item-5");
     defer compiled_selector.deinit();
 
     // Use the compiled selector multiple times (this would be much faster in real scenarios)

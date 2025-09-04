@@ -8,11 +8,71 @@ const print = std.debug.print;
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
 
-    std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
+    try demoParser(allocator);
+    try demoStreamParser(allocator);
+    // std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
+    // try runNormalizeBenchmark(allocator);
+    // try newNormalizeBencharmark(allocator);
+    // try runPerformanceBenchmark(allocator);
+}
 
-    try runNormalizeBenchmark(allocator);
-    try newNormalizeBencharmark(allocator);
-    try runPerformanceBenchmark(allocator);
+fn demoParser(allocator: std.mem.Allocator) !void {
+    const doc = try z.createDocFromString("<div><ul></ul></div>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    const ul_elt = z.getElementByTag(body, .ul).?;
+    const ul = z.elementToNode(ul_elt);
+
+    var parser = try z.FragmentParser.init(allocator);
+    defer parser.deinit();
+
+    for (0..5) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<li id='item-{}'>Item {}</li>",
+            .{ i, i },
+        );
+        defer allocator.free(li);
+
+        try parser.insertFragment(ul, li, .ul, false);
+    }
+    print("\nInserting multiple fragments into <ul> element with the parser engine\n", .{});
+    try z.prettyPrint(body);
+    print("\n", .{});
+}
+
+fn demoStreamParser(allocator: std.mem.Allocator) !void {
+    var streamer = try z.Stream.init(allocator);
+    defer streamer.deinit();
+
+    try streamer.beginParsing();
+
+    try streamer.processChunk("<!DOCTYPE html><html><head><title>Large Document");
+    try streamer.processChunk("</title></head><body>");
+    try streamer.processChunk("<table id=\"producttable\">");
+    try streamer.processChunk("<caption>Company data</caption><thead>");
+    try streamer.processChunk("<tr><th scope=\"col\">Items>UPC_Code</th><th>Product_Name</th>");
+    try streamer.processChunk("</tr></thead><tbody>");
+
+    for (0..2) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<tr id={}><th >Code: {}</th> <td>Name: {}</td></tr>",
+            .{ i, i, i },
+        );
+        defer allocator.free(li);
+
+        try streamer.processChunk(li);
+    }
+    try streamer.processChunk("</tbody></table></body></html>;");
+    try streamer.endParsing();
+    const html = streamer.getDocument();
+    defer z.destroyDocument(html);
+    const body = z.bodyNode(html).?;
+    print("\nStream processing engine: parse chunks on-the-fly and consolidates into a created document\n", .{});
+    try z.prettyPrint(body);
+    print("\n", .{});
 }
 
 fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
@@ -157,7 +217,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
         \\    <meta charset="UTF-8">
         \\    <meta name="viewport" content="width=device-width, initial-scale=1.0">
         \\    <link rel="stylesheet" href="styles.css">
-        \\    <script src="app.js"></script>
+        \\    <script src="app.js"></scrip>
         \\  </head>
         \\  <body class="main-body">
         \\    <header id="main-header" class="sticky-header">
