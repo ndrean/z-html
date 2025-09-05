@@ -106,8 +106,8 @@ chunk:  </tbody></table></body></html>;
 and the HTML document:
 
 <p align="center">
-  <img src="https://github.com/ndrean/images/tree-table.png" width="300"/>
-  <img src="https://github.com/ndrean/z-html/images/html-table.png" width="300"/>
+  <img src="https://github.com/ndrean/z-html/src/images/tree-table.png" width="300"/>
+  <img src="https://github.com/ndrean/z-html/src/images/html-table.png" width="300"/>
 </p>
 
 
