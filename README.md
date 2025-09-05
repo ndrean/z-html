@@ -3,9 +3,6 @@
 > [!WARNING]
 > Work in progress
 
-![loc](https://sloc.xyz/github/ndrean/z-html)
-[![Zig](https://img.shields.io/badge/Zig-0.15-1)](https://ziglang.org/)
-
 `zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
 
 This is useful for web scapping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
@@ -105,6 +102,31 @@ chunk:  <tr id=0><th >Code: 0</th><td>Name: 0</td></tr>
 chunk:  <tr id=1><th >Code: 1</th><td>Name: 1</td></tr>
 chunk:  </tbody></table></body></html>;
 ```
+
+head
+  title
+    #text
+body
+  table
+    caption
+      #text
+    thead
+      tr
+        th
+          #text
+        th
+          #text
+    tbody
+      tr
+        td
+          #text
+        td
+          #text
+      tr
+        td
+          #text
+        td
+          #text
 
 and the HTML document:
 

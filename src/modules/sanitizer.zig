@@ -785,28 +785,28 @@ test "comprehensive HTML and SVG sanitization" {
     try testing.expect(std.mem.indexOf(u8, permissive_result, "onclick") == null);
 }
 
-test "get and print your thread" {
-    var client: std.http.Client = .{
-        .allocator = std.testing.allocator,
-    };
-    defer client.deinit();
+// test "get and print your thread" {
+//     var client: std.http.Client = .{
+//         .allocator = std.testing.allocator,
+//     };
+//     defer client.deinit();
 
-    const stdout_writer_buf: []u8 = try std.testing.allocator.alloc(u8, 4096);
-    defer std.testing.allocator.free(stdout_writer_buf);
+//     const stdout_writer_buf: []u8 = try std.testing.allocator.alloc(u8, 4096);
+//     defer std.testing.allocator.free(stdout_writer_buf);
 
-    var file_writer: std.fs.File.Writer = std.fs.File.stdout().writer(stdout_writer_buf);
+//     var file_writer: std.fs.File.Writer = std.fs.File.stdout().writer(stdout_writer_buf);
 
-    const writer_ptr = &file_writer.interface;
+//     const writer_ptr = &file_writer.interface;
 
-    const fetch: std.http.Client.FetchResult = try client.fetch(.{
-        // Print to stdout
-        .method = .GET,
-        .response_writer = writer_ptr,
-        .location = .{
-            .url = "https://example.com",
-        },
-    });
-    try std.testing.expect(fetch.status == .ok);
+//     const fetch: std.http.Client.FetchResult = try client.fetch(.{
+//         // Print to stdout
+//         .method = .GET,
+//         .response_writer = writer_ptr,
+//         .location = .{
+//             .url = "https://example.com",
+//         },
+//     });
+//     try std.testing.expect(fetch.status == .ok);
 
-    try file_writer.interface.flush();
-}
+//     try file_writer.interface.flush();
+// }
