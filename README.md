@@ -19,13 +19,12 @@ This project exposes a significant / essential subset of all available `lexbor` 
 - Parsing with a parser engine
   - document
   - fragment context-aware parsing
-  - chunk processing
+- streaming and chunk processing
 - Serialization
 - Sanitization (not)
-- DOM_tree and back
 - CSS selectors search with cached CSS selectors parsing
 - Support of `<template>` elements.
-- attribute search
+- Attribute search
 - Collections and _exact string matching_:
 - DOM manipulation
 - DOM normalization with options (remove comments, whitespace, empty nodes)
@@ -37,6 +36,43 @@ This project exposes a significant / essential subset of all available `lexbor` 
 > With allocated versions, the data can outlive the current function.
 
 ## Examples
+
+### Receiving streams
+
+```c
+const z = @import("zhtml");
+
+var streamer = try z.Stream.init(allocator);
+defer streamer.deinit();
+
+try streamer.beginParsing();
+
+try streamer.processChunk("<!DOCTYPE html><html><head><title>Large Document");
+try streamer.processChunk("</title></head><body>");
+try streamer.processChunk("<table id=\"producttable\">");
+try streamer.processChunk("<caption>Company data</caption><thead>");
+try streamer.processChunk("<tr><th scope=\"col\">Items>UPC_Code</th><th>Product_Name</th>");
+try streamer.processChunk("</tr></thead><tbody>");
+
+for (0..2) |i| {
+    const li = try std.fmt.allocPrint(
+        allocator,
+        "<tr id={}><th >Code: {}</th> <td>Name: {}</td></tr>",
+        .{ i, i, i },
+    );
+    defer allocator.free(li);
+
+    try streamer.processChunk(li);
+}
+
+try streamer.processChunk("</tbody></table></body></html>;");
+try streamer.endParsing();
+
+const html_doc = streamer.getDocument();
+defer z.destroyDocument(html_doc);
+
+try z.prettyPrint(z.bodyNode(html_doc));
+```
 
 ### Build a fragment, inject it and serialization
 

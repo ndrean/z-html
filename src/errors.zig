@@ -10,6 +10,7 @@ pub const LexborError = error{
     CreateTextNodeFailed,
     FragmentParseFailed,
     FragmentCreateFailed,
+    FragmentCloneFailed,
     FragmentEmpty,
     ReplaceAllFailed,
     InsertChildFailed,

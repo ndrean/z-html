@@ -1,6 +1,5 @@
 //! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
-const log = @import("global_writer.zig");
 const lxb = @import("modules/core.zig");
 const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
@@ -19,6 +18,7 @@ const text = @import("modules/text_content.zig");
 const sanitize = @import("modules/sanitizer.zig");
 const parse = @import("modules/parsing.zig");
 const colours = @import("modules/colours.zig");
+const html_spec = @import("modules/html_spec.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
@@ -109,7 +109,7 @@ pub const createTextNode = lxb.createTextNode;
 
 pub const removeNode = lxb.removeNode;
 pub const destroyNode = lxb.destroyNode;
-pub const destroyElement = lxb.destroyElement;
+// pub const destroyElement = lxb.destroyElement;
 
 // DOM access
 pub const documentRoot = lxb.documentRoot;
@@ -185,7 +185,7 @@ pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For cust
 pub const commentToNode = lxb.commentToNode;
 pub const nodeToComment = lxb.nodeToComment;
 pub const createComment = lxb.createComment;
-pub const destroyComment = lxb.destroyComment;
+// pub const destroyComment = lxb.destroyComment;
 
 //=====================================
 // Text  / comment content
@@ -204,6 +204,7 @@ pub const escapeHtml = text.escapeHtml;
 // ====================================
 pub const normalize = norm.normalize;
 pub const normalizeWithOptions = norm.normalizeWithOptions;
+pub const normalizeForDisplay = norm.normalizeForDisplay;
 pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
 pub const normalizeText = cleaner.normalizeText;
 
@@ -329,6 +330,10 @@ pub const sanitizeNode = sanitize.sanitizeNode;
 pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;
 pub const sanitizeStrict = sanitize.sanitizeStrict;
 pub const sanitizePermissive = sanitize.sanitizePermissive;
+
+// Unified HTML specification functions
+pub const isElementAttributeAllowed = sanitize.isElementAttributeAllowed;
+pub const isElementAttributeValueValid = sanitize.isElementAttributeValueValid;
 
 // ===================================================================
 // Debug printing utilities

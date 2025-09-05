@@ -172,7 +172,6 @@ test "first tests setInnerHTML" {
     // Test 3: Get outer HTML (includes the div itself) --------------
     const outer = try z.outerHTML(allocator, div);
     defer allocator.free(outer);
-    // print("{s}\n", .{outer});
 
     // Should contain the root div tag
     try testing.expect(
@@ -456,7 +455,7 @@ pub const FragmentParser = struct {
 
         const context_tag = context.toTagName();
         const context_element = try z.createElement(doc, context_tag);
-        defer z.destroyElement(context_element);
+        defer z.destroyNode(z.elementToNode(context_element));
 
         const fragment_root = lxb_html_document_parse_fragment(
             doc,
@@ -654,8 +653,8 @@ pub const FragmentParser = struct {
         const template_content = z.templateContent(template_element);
         const content_node = z.fragmentToNode(template_content);
 
-        const template_doc = z.ownerDocument(z.templateToNode(template_element));
-        const cloned_content = z.cloneNode(content_node, template_doc) orelse return Err.FragmentParseFailed;
+        // const template_doc = z.ownerDocument(z.templateToNode(template_element));
+        const cloned_content = z.cloneNode(content_node) orelse return Err.FragmentParseFailed;
 
         // Apply sanitization if requested
         if (sanitizer_enabled) {
@@ -832,7 +831,7 @@ test "multiple inserts" {
 
         try parser.insertFragment(ul, li, .ul, false);
     }
-    try z.prettyPrint(body);
+    // try z.prettyPrint(body);
 }
 
 test "template parsing and use template element" {
@@ -876,8 +875,6 @@ test "template parsing and use template element" {
     // Test that everything is properly in the body
     const result_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result_html);
-
-    // print("Final document body: {s}\n", .{result_html});
 
     // Verify all items are present
     try testing.expect(std.mem.indexOf(u8, result_html, "Item 1: First") != null);
@@ -923,8 +920,6 @@ test "useTemplate string reuses same template" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Reused template result: {s}\n", .{result});
-
     // Should have two <li>Item</li> elements
     var li_count: usize = 0;
     var search_pos: usize = 0;
@@ -950,8 +945,6 @@ test "parseFragmentNodes - direct usage of returned nodes" {
     const nodes = try parser.parseFragmentNodes(allocator, doc, task_html, .ul, false);
     defer allocator.free(nodes);
 
-    // print("Found {} total nodes\n", .{nodes.len});
-
     // Get target containers
     const body = z.bodyNode(doc).?;
     const high_ul = z.getElementById(body, "high").?;
@@ -961,22 +954,17 @@ test "parseFragmentNodes - direct usage of returned nodes" {
     for (nodes) |node| {
         if (z.nodeType(node) == .element) {
             const element = z.nodeToElement(node).?;
-            // print("Processing element: {s}\n", .{z.nodeName_zc(node)});
 
             // Try to read the priority attribute - this might segfault
             const priority = z.getAttribute_zc(element, "data-priority");
-            // print("Priority: {s}\n", .{priority orelse "none"});
 
             // Try to get text content - this might segfault
             // const text = z.textContent_zc(node);
-            // print("Text: {s}\n", .{text});
 
             // Try to insert directly without cloning - let's see what happens
             if (std.mem.eql(u8, priority orelse "", "high")) {
-                // print("Moving to high priority list\n", .{});
                 z.appendChild(z.elementToNode(high_ul), node);
             } else {
-                // print("Moving to low priority list\n", .{});
                 z.appendChild(z.elementToNode(low_ul), node);
             }
         }
@@ -985,8 +973,6 @@ test "parseFragmentNodes - direct usage of returned nodes" {
     // Verify the nodes were actually inserted
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Final result: {s}\n", .{result});
 
     // Check if our nodes made it into the document
     try testing.expect(std.mem.indexOf(u8, result, "Critical fix") != null);
@@ -1079,10 +1065,7 @@ test "parseFragmentNodes - moving SVG elements" {
                 svg_count += 1;
 
                 // Route to graphics container
-                const cloned_svg = z.cloneNode(
-                    node,
-                    doc,
-                ).?;
+                const cloned_svg = z.cloneNode(node).?;
                 z.appendChild(
                     z.elementToNode(graphics_div),
                     cloned_svg,
@@ -1090,12 +1073,12 @@ test "parseFragmentNodes - moving SVG elements" {
             } else if (z.tagFromElement(element) == .div and z.hasClass(element, "icon-wrapper")) {
                 regular_html_count += 1;
                 // Route to icons container
-                const cloned = z.cloneNode(node, doc).?;
+                const cloned = z.cloneNode(node).?;
                 z.appendChild(z.elementToNode(icons_div), cloned);
             } else {
                 regular_html_count += 1;
                 // Route to icons container (default)
-                const cloned = z.cloneNode(node, doc).?;
+                const cloned = z.cloneNode(node).?;
                 z.appendChild(z.elementToNode(icons_div), cloned);
             }
         }
@@ -1172,8 +1155,6 @@ test "useTemplateElement with existing template" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Template element result: {s}\n", .{result});
-
     // Should have two rows added
     var tr_count: usize = 0;
     var search_pos: usize = 0;
@@ -1216,8 +1197,6 @@ test "fragment contexts: select options" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Select options result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "United States") != null);
     try testing.expect(std.mem.indexOf(u8, result, "optgroup") != null);
     try testing.expect(std.mem.indexOf(u8, result, "United Kingdom") != null);
@@ -1255,8 +1234,6 @@ test "fragment contexts: table rows" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Table rows result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "<td>John</td>") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<td>Jane</td>") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Developer") != null);
@@ -1286,8 +1263,6 @@ test "fragment contexts: list items" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("List items result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "Complete project") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Review pull") != null);
@@ -1320,8 +1295,6 @@ test "fragment contexts: form elements" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Form elements result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "type=\"email\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "type=\"password\"") != null);
@@ -1356,8 +1329,6 @@ test "fragment contexts: definition lists" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Definition list result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "<dt>HTML</dt>") != null);
     try testing.expect(std.mem.indexOf(u8, result, "HyperText Markup") != null);
     try testing.expect(std.mem.indexOf(u8, result, "JavaScript programming") != null);
@@ -1388,8 +1359,6 @@ test "fragment contexts: media elements" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Media elements result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "video.webm") != null);
     try testing.expect(std.mem.indexOf(u8, result, "captions.vtt") != null);
@@ -1422,8 +1391,6 @@ test "fragment contexts: malformed HTML recovery" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Malformed HTML recovery: {s}\n", .{result});
 
     // lexbor should auto-fix the malformed HTML
     try testing.expect(std.mem.indexOf(u8, result, "<h3>Title</h3>") != null);
@@ -1458,8 +1425,6 @@ test "fragment contexts: fieldset legend" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Fieldset result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "<legend>Contact Information</legend>") != null);
     try testing.expect(std.mem.indexOf(u8, result, "type=\"text\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "type=\"tel\"") != null);
@@ -1493,8 +1458,6 @@ test "fragment contexts: details summary" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Details result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "<summary>Click to expand") != null);
     try testing.expect(std.mem.indexOf(u8, result, "hidden by default") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Question 1 answer") != null);
@@ -1526,8 +1489,6 @@ test "fragment contexts: optgroup nested options" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Optgroup result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "New York") != null);
     try testing.expect(std.mem.indexOf(u8, result, "California") != null);
     try testing.expect(std.mem.indexOf(u8, result, "value=\"tx\"") != null);
@@ -1557,8 +1518,6 @@ test "fragment contexts: map areas" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Map areas result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "shape=\"rect\"") != null);
     try testing.expect(std.mem.indexOf(u8, result, "shape=\"circle\"") != null);
@@ -1590,8 +1549,6 @@ test "fragment contexts: figure caption" {
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
 
-    // print("Figure result: {s}\n", .{result});
-
     try testing.expect(std.mem.indexOf(u8, result, "sales-chart.png") != null);
     try testing.expect(std.mem.indexOf(u8, result, "<figcaption>Monthly sales") != null);
     try testing.expect(std.mem.indexOf(u8, result, "15% growth") != null);
@@ -1621,8 +1578,6 @@ test "fragment contexts: picture responsive" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Picture result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "hero-large.jpg") != null);
     try testing.expect(std.mem.indexOf(u8, result, "min-width: 800px") != null);
@@ -1686,8 +1641,6 @@ test "parseTemplates - multiple template parsing" {
     const final_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(final_html);
 
-    // print("Multiple templates result: {s}\n", .{final_html});
-
     // Verify each template was injected correctly
     try testing.expect(std.mem.indexOf(u8, final_html, "<li class=\"item\">Template Item</li>") != null);
     try testing.expect(std.mem.indexOf(u8, final_html, "<h3>Card Title</h3>") != null);
@@ -1729,8 +1682,6 @@ test "fragment contexts: audio sources" {
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
-
-    // print("Audio result: {s}\n", .{result});
 
     try testing.expect(std.mem.indexOf(u8, result, "podcast.ogg") != null);
     try testing.expect(std.mem.indexOf(u8, result, "podcast.mp3") != null);

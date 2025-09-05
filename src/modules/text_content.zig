@@ -233,7 +233,6 @@ test "text content" {
         strong_node.?,
     );
     defer allocator.free(strong_text);
-    // print("Strong text: {s}\n", .{strong_text});
     try testing.expectEqualStrings("World", strong_text);
 }
 

@@ -14,7 +14,24 @@ const print = std.debug.print;
 // Lexbor string comparison functions for zero-copy operations
 extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
 
-/// Fast whitespace-only detection using lexbor's optimized memory access
+/// Enhanced whitespace detection for different normalization strategies
+/// Returns true if text contains ONLY unwanted whitespace characters
+/// Strategy 1: Only \r (minimal/surgical)  
+/// Strategy 2: \r, \n, \t (browser-like - these collapse to single space anyway)
+fn isUndesirableWhitespace(text: []const u8) bool {
+    if (text.len == 0) return true;
+    
+    // Check if text contains ONLY problematic whitespace (\r, \n, \t)
+    // These are whitespace characters that browsers collapse anyway
+    for (text) |char| {
+        if (char != '\r' and char != '\n' and char != '\t') {
+            return false;  // Contains non-collapsible content
+        }
+    }
+    return true; // All characters are collapsible whitespace
+}
+
+/// Fast whitespace-only detection using lexbor's optimized memory access  
 /// Returns true if text contains ONLY whitespace characters (\n\t\r )
 fn isWhitespaceOnly(text: []const u8) bool {
     if (text.len == 0) return true;
@@ -186,17 +203,39 @@ fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
 
 /// [normalize] Standard browser Node.normalize()
 ///
-/// Trims text nodes only and removes empty text nodes for non-special elements (not `<script>` or `<style>`)
+/// Browser-like behavior: removes collapsible whitespace (\r, \n, \t) but preserves meaningful spaces
+/// Always preserves whitespace in special elements (<pre>, <code>, <script>, <style>, <textarea>)
 ///
-/// Use `normalizeWithOptions` to customize behavior:
+/// Use `normalizeWithOptions` to customize comment handling:
 pub fn normalize(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) (std.mem.Allocator.Error || z.Err)!void {
     return normalizeWithOptions(allocator, root_elt, .{});
 }
 
+/// [normalizeForDisplay] Aggressive normalization for clean terminal/display output
+///
+/// Removes ALL whitespace-only text nodes and comments for clean visual output
+/// Used internally by prettyPrint for clean TTY display
+pub fn normalizeForDisplay(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) (std.mem.Allocator.Error || z.Err)!void {
+    var context = Context.init(allocator, .{ .skip_comments = true }); // Remove comments for clean display
+    defer context.deinit();
+
+    z.simpleWalk(
+        z.elementToNode(root_elt),
+        aggressiveCollectorCallback,
+        &context,
+    );
+
+    try PostWalkOperations(
+        allocator,
+        &context,
+        .{ .skip_comments = true },
+    );
+}
+
 pub const NormalizeOptions = struct {
-    skip_comments: bool = false,
-    remove_whitespace_text_nodes: bool = true,
-    preserve_special_elements: bool = true,
+    skip_comments: bool = false,  // Only option: whether to remove comments or not
+    // Note: Special elements (<pre>, <code>, <script>, <style>, <textarea>) are always preserved
+    // Note: Collapsible whitespace (\r, \n, \t) is always removed (browser-like behavior)
 };
 
 // Context for the callback normalization walk
@@ -303,13 +342,8 @@ pub fn normalizeWithOptions(
     );
 }
 
-/// Callback function in `lexbor` format that runs on each node during the "simple_walk". Uses a "context" argument to access "external" data
-///
-/// Switch on the node type and collects for post-processing by populating the "context"
-///
-/// It is a two-step process (you can't modify the DOM during the walk):
-/// - traverse the DOM with "simple_walk" and collect nodes for post-processing
-/// - post-process the collected nodes
+/// Browser-like collector callback for standard normalization
+/// Removes collapsible whitespace (\r, \n, \t) but preserves meaningful spaces
 fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
     const context_ptr: *Context = castContext(Context, ctx);
 
@@ -332,12 +366,7 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             }
         },
         .text => {
-            // Early exit: no processing needed
-            if (!context_ptr.options.remove_whitespace_text_nodes) {
-                return z._CONTINUE;
-            }
-
-            // Early exit: whitespace preserved (don't remove whitespace in <pre>, <script>, etc.)
+            // Always preserve whitespace in special elements (<pre>, <script>, etc.)
             if (context_ptr.shouldPreserveWhitespace(node)) {
                 return z._CONTINUE;
             }
@@ -345,14 +374,56 @@ fn collectorCallBack(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             // Use zero-copy text access
             const original_content = z.textContent_zc(node);
 
-            // Fast whitespace-only detection using lexbor optimized functions
-            if (isWhitespaceOnly(original_content)) {
-                // Only remove nodes that are 100% whitespace (\n\t\r )
+            // Browser-like behavior: remove collapsible whitespace (\r, \n, \t) but preserve spaces
+            if (isUndesirableWhitespace(original_content)) {
                 context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
                     return z._STOP;
                 };
             }
-            // Don't modify content - preserve all non-whitespace text as-is
+        },
+
+        else => {},
+    }
+
+    return z._CONTINUE;
+}
+
+/// Aggressive collector callback for display/TTY output
+/// Removes ALL whitespace-only text nodes (including spaces) and comments for clean visual output
+fn aggressiveCollectorCallback(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
+    const context_ptr: *Context = castContext(Context, ctx);
+
+    switch (z.nodeType(node)) {
+        .comment => {
+            // Always remove comments for clean display
+            context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                return z._STOP;
+            };
+        },
+        .element => {
+            if (z.isTemplate(node)) {
+                // Collect template nodes for post-processing
+                context_ptr.template_nodes.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
+                };
+                return z._CONTINUE;
+            }
+        },
+        .text => {
+            // Always preserve whitespace in special elements (<pre>, <script>, etc.)
+            if (context_ptr.shouldPreserveWhitespace(node)) {
+                return z._CONTINUE;
+            }
+
+            // Use zero-copy text access
+            const original_content = z.textContent_zc(node);
+
+            // Aggressive: remove ALL whitespace-only text nodes (including spaces)
+            if (isWhitespaceOnly(original_content)) {
+                context_ptr.nodes_to_remove.append(context_ptr.allocator, node) catch {
+                    return z._STOP;
+                };
+            }
         },
 
         else => {},
@@ -425,7 +496,6 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
             allocator,
             body_elt,
             .{
-                .remove_whitespace_text_nodes = true,
                 .skip_comments = true,
             },
         );
@@ -434,7 +504,7 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
         defer allocator.free(serialized);
 
         try testing.expectEqualStrings(
-            "<div><script> console.log(\"hello\"); </script><div> Some <i> bold and italic   </i> text</div></div>",
+            "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>",
             serialized,
         );
     }
@@ -452,7 +522,6 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
             allocator,
             body_elt,
             .{
-                .remove_whitespace_text_nodes = true,
                 .skip_comments = true,
             },
         );
@@ -461,7 +530,7 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
         defer allocator.free(serialized);
 
         try testing.expectEqualStrings(
-            "<div><script> console.log(\"hello\"); </script><div> Some <i> bold and italic   </i> text</div></div>",
+            "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>",
             serialized,
         );
     }
@@ -479,7 +548,6 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
             allocator,
             body_elt,
             .{
-                .remove_whitespace_text_nodes = false,
                 .skip_comments = true,
             },
         );
@@ -513,7 +581,6 @@ test "normalize, context preservation, comments removed" {
             allocator,
             body_elt,
             NormalizeOptions{
-                .remove_whitespace_text_nodes = true,
                 .skip_comments = true,
             },
         );
@@ -524,7 +591,7 @@ test "normalize, context preservation, comments removed" {
         );
         defer allocator.free(result);
 
-        const expected = "<body><div>\n  Some   more\n  text\n  <span></span><pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em><i>maybe</i></div></body>";
+        const expected = "<body><div>\n  Some   more\n  text\n  <span> \t </span>\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em><i>maybe</i></div></body>";
         try testing.expectEqualStrings(expected, result);
     }
     {
@@ -540,7 +607,6 @@ test "normalize, context preservation, comments removed" {
             allocator,
             body_elt,
             NormalizeOptions{
-                .remove_whitespace_text_nodes = true,
                 .skip_comments = false,
             },
         );
@@ -551,7 +617,7 @@ test "normalize, context preservation, comments removed" {
         );
         defer allocator.free(result);
 
-        const expected = "<body><div>\n  Some   more\n  text\n  <span></span><!-- a comment to be removed --><pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em></div></body>";
+        const expected = "<body><div>\n  Some   more\n  text\n  <span> \t </span><!-- a comment to be removed -->\n  <pre>  Preserve   spaces  </pre>\n  More   text\n  to <em> come </em></div></body>";
         try testing.expectEqualStrings(expected, result);
     }
 }
@@ -597,7 +663,6 @@ test "template normalize" {
             allocator,
             z.nodeToElement(root).?,
             .{
-                .remove_whitespace_text_nodes = true,
                 .skip_comments = true,
             },
         );
@@ -605,7 +670,7 @@ test "template normalize" {
         const serialized = try z.outerHTML(allocator, z.nodeToElement(root).?);
         defer allocator.free(serialized);
 
-        const expected = "<html><head></head><body><div><p>Before template</p><template id=\"test\"><span>  Template content  </span><em></em><strong>  Bold text</strong></template><p>After template</p></div></body></html>";
+        const expected = "<html><head></head><body><div>\n    <p>Before template</p>\n    <template id=\"test\">\n         \n        <span>  Template content  </span><em>  </em>\n        <strong>  Bold text</strong>\n\n    </template>\n    <p>After template</p></div></body></html>";
 
         try testing.expectEqualStrings(expected, serialized);
 
@@ -617,9 +682,7 @@ test "template normalize" {
         const template_content_node_after = z.fragmentToNode(template_content_after);
         const child_nodes_after = try z.childNodes(allocator, template_content_node_after);
         defer allocator.free(child_nodes_after);
-        try testing.expect(child_nodes_after.len == 3);
-        // try z.printDocStruct(doc); // only sees the template element
-        // try z.prettyPrint(root); // sees everything
+        try testing.expect(child_nodes_after.len == 7);
     }
 }
 
@@ -716,8 +779,7 @@ test "template normalize" {
 //             allocator,
 //             body_elt,
 //             .{
-//                 .remove_whitespace_text_nodes = true,
-//                 .skip_comments = true,
+// //                 .skip_comments = true,
 //             },
 //         );
 //         z.destroyDocument(temp_doc);
@@ -783,6 +845,70 @@ test "string-based HTML normalization" {
 
     const expected3 = "<div><script>\n  console.log('test');\n  </script><span>Text</span></div>";
     try testing.expectEqualStrings(expected3, normalized3);
+}
+
+test "browser-like normalization" {
+    const allocator = testing.allocator;
+
+    // Create HTML with various whitespace types 
+    const html = "<div>\r<p>Text</p>\r\n<span> Regular space </span>\n\t<em>Tab and newline</em>\r</div>";
+    
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    const body_elt = z.bodyElement(doc).?;
+
+    // Standard browser-like normalization
+    try normalize(allocator, body_elt);
+
+    const result = try z.innerHTML(allocator, body_elt);
+    defer allocator.free(result);
+
+    // Should remove \r, \n, \t patterns but preserve meaningful spaces
+    const expected = "<div><p>Text</p><span> Regular space </span><em>Tab and newline</em></div>";
+    try testing.expectEqualStrings(expected, result);
+}
+
+test "collapsible whitespace detection accuracy" {
+    // Test the isUndesirableWhitespace function for browser-like behavior
+    
+    // Should detect collapsible whitespace patterns (\r, \n, \t)
+    try testing.expect(isUndesirableWhitespace("\r"));
+    try testing.expect(isUndesirableWhitespace("\n"));  
+    try testing.expect(isUndesirableWhitespace("\t"));
+    try testing.expect(isUndesirableWhitespace("\r\n"));
+    try testing.expect(isUndesirableWhitespace("\n\t"));
+    try testing.expect(isUndesirableWhitespace("\t\r\n"));
+    try testing.expect(isUndesirableWhitespace(""));  // empty strings
+    
+    // Should NOT detect spaces (preserve meaningful spacing)
+    try testing.expect(!isUndesirableWhitespace(" "));
+    try testing.expect(!isUndesirableWhitespace(" \n"));  // space with newline
+    try testing.expect(!isUndesirableWhitespace("text"));
+    try testing.expect(!isUndesirableWhitespace(" text "));
+    try testing.expect(!isUndesirableWhitespace("a"));
+}
+
+test "aggressive normalization for display" {
+    const allocator = testing.allocator;
+
+    // Create HTML with comments and various whitespace
+    const html = "<div><!-- comment -->\n<p>Text</p> \n<span> Keep spaces </span>\t</div>";
+    
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    const body_elt = z.bodyElement(doc).?;
+
+    // Aggressive normalization for display
+    try normalizeForDisplay(allocator, body_elt);
+
+    const result = try z.innerHTML(allocator, body_elt);
+    defer allocator.free(result);
+
+    // Should remove comments and ALL whitespace-only nodes (including spaces)
+    const expected = "<div><p>Text</p><span> Keep spaces </span></div>";
+    try testing.expectEqualStrings(expected, result);
 }
 
 test "string-based normalization with comment removal" {

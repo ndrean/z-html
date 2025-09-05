@@ -179,17 +179,19 @@ pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
     return lxb_html_template_content_wrapper(template);
 }
 
-/// [template] Clone then content of a template element into a target node
+/// [template] Clone the content of a template element into a target node
 pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
     const template_content = templateContent(template);
     const content_node = z.fragmentToNode(template_content);
 
-    const template_doc = z.ownerDocument(z.templateToNode(template));
-    // same document => cloneNode()
-    const cloned_content = z.cloneNode(content_node, template_doc);
+    // const template_doc = z.ownerDocument(z.templateToNode(template));
+
+    const cloned_content = z.cloneNode(content_node);
 
     if (cloned_content) |content| {
         z.appendFragment(target, content);
+    } else {
+        return Err.FragmentCloneFailed;
     }
 }
 
@@ -228,8 +230,6 @@ test "create template programmatically" {
     defer testing.allocator.free(child_nodes);
 
     try testing.expect(child_nodes.len == 2);
-
-    // try z.prettyPrint(body); //
 
     z.destroyTemplate(template);
 }

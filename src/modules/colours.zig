@@ -1,5 +1,6 @@
 const std = @import("std");
 const z = @import("../zhtml.zig");
+const html_spec = @import("html_spec.zig");
 const Err = z.Err;
 // const print = z.Writer.print;
 const print = std.debug.print;
@@ -203,58 +204,42 @@ pub const SyntaxStyle = struct {
 
 /// Check if the attribute is a known HTML attribute,
 ///
-/// including ARIA or data-* attribute or other framework (Phoenix, Alpine, Vue, HTMX)
+/// Check if attribute is known, including ARIA, data-*, or framework attributes (Phoenix, Alpine, Vue, HTMX)
+/// This is a fallback function when no element context is available
 pub fn isKnownAttribute(attr: []const u8) bool {
-    // Standard HTML attributes
-    if (std.mem.eql(u8, attr, "id") or
-        std.mem.eql(u8, attr, "class") or
-        std.mem.eql(u8, attr, "href") or
-        std.mem.eql(u8, attr, "src") or
-        std.mem.eql(u8, attr, "alt") or
-        std.mem.eql(u8, attr, "disabled") or
-        std.mem.eql(u8, attr, "hidden") or
-        std.mem.eql(u8, attr, "required") or
-        std.mem.eql(u8, attr, "checked") or
-        std.mem.eql(u8, attr, "value") or
-        std.mem.eql(u8, attr, "name") or
-        std.mem.eql(u8, attr, "type") or
-        std.mem.eql(u8, attr, "placeholder") or
-        std.mem.eql(u8, attr, "action") or
-        std.mem.eql(u8, attr, "method") or
-        std.mem.eql(u8, attr, "target") or
-        std.mem.eql(u8, attr, "rel") or
-        std.mem.eql(u8, attr, "scope") or
-        std.mem.eql(u8, attr, "role"))
-    {
+    // Primary: Use unified specification 
+    if (isStandardHtmlAttribute(attr)) {
         return true;
     }
-
-    // ARIA attributes
+    
+    // Fallback: Handle dynamic framework attribute patterns when no element context available
+    // These are now mostly covered by the unified spec, but kept for backwards compatibility
+    
+    // ARIA and data attributes (handled by unified spec prefix matching)
     if (std.mem.startsWith(u8, attr, "aria-") and attr.len > 5) {
         return true; // aria-*
     }
-
-    // Data attributes using startsWith
     if (std.mem.startsWith(u8, attr, "data-") and attr.len > 5) {
         return true; // data-*
     }
-    // Framework attributes
-    if (std.mem.startsWith(u8, attr, "phx-") and attr.len > 4) {
-        return true; // phx-*
+    
+    // Framework dynamic attributes (x-on:click, v-bind:value, etc.)
+    if (std.mem.startsWith(u8, attr, "x-on:") or std.mem.startsWith(u8, attr, "x-bind:")) {
+        return true; // Alpine.js dynamic
     }
-    // Vue.js attributes
-    if (std.mem.startsWith(u8, attr, "v-") and attr.len > 2) {
-        return true; // v-*
+    if (std.mem.startsWith(u8, attr, "v-on:") or std.mem.startsWith(u8, attr, "v-bind:")) {
+        return true; // Vue.js dynamic
     }
-    // HTMX attributes
+    if (std.mem.startsWith(u8, attr, "phx-value-")) {
+        return true; // Phoenix dynamic
+    }
+    
+    // HTMX (not yet in unified spec)
     if (std.mem.startsWith(u8, attr, "hx-") and attr.len > 3) {
         return true; // hx-*
     }
-    // Alpine.js attributes
-    if (std.mem.startsWith(u8, attr, "x-") and attr.len > 2) {
-        return true; // x-* (Alpine.js)
-    }
 
+    // Explicitly reject dangerous event handlers
     if (std.mem.startsWith(u8, attr, "on") and attr.len > 2) {
         return false; // onclick, onload, etc.
     }
@@ -262,7 +247,32 @@ pub fn isKnownAttribute(attr: []const u8) bool {
     return false;
 }
 
+/// Check if an attribute is a standard HTML attribute used across any element
+/// This uses the unified specification to determine validity
+pub fn isStandardHtmlAttribute(attr: []const u8) bool {
+    // Check all element specs to see if this attribute is used anywhere
+    for (html_spec.element_specs) |spec| {
+        for (spec.allowed_attrs) |attr_spec| {
+            if (std.mem.eql(u8, attr_spec.name, attr)) {
+                return true;
+            }
+            // Handle aria-* attributes (prefix match)
+            if (std.mem.eql(u8, attr_spec.name, "aria") and std.mem.startsWith(u8, attr, "aria-")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
+    // First check if element exists in HTML specification  
+    if (html_spec.getElementSpec(element_name) == null) {
+        // Element not recognized in HTML spec, no styling
+        return null;
+    }
+    
+    // Apply specific styling for elements (all elements from HTML spec get some styling)
     if (std.mem.eql(u8, element_name, "html")) return ElementStyles.html;
     if (std.mem.eql(u8, element_name, "head")) return ElementStyles.head;
     if (std.mem.eql(u8, element_name, "body")) return ElementStyles.body;
@@ -274,6 +284,8 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
     if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;
     if (std.mem.eql(u8, element_name, "h6")) return ElementStyles.h6;
+    if (std.mem.eql(u8, element_name, "p")) return ElementStyles.p;
+    if (std.mem.eql(u8, element_name, "div")) return ElementStyles.div;
     if (std.mem.eql(u8, element_name, "span")) return ElementStyles.span;
     if (std.mem.eql(u8, element_name, "img")) return ElementStyles.img;
     if (std.mem.eql(u8, element_name, "br")) return ElementStyles.br;
@@ -346,8 +358,13 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "audio")) return Style.PURPLE;
     if (std.mem.eql(u8, element_name, "canvas")) return Style.PURPLE;
     if (std.mem.eql(u8, element_name, "svg")) return Style.PURPLE;
+    
+    // Add missing anchor element
+    if (std.mem.eql(u8, element_name, "a")) return Style.UNDERLINE_BLUE;
 
-    return null;
+    // Default styling for any element that's in HTML spec but not explicitly styled above
+    // This ensures all valid HTML elements get context tracking for attribute validation
+    return Style.WHITE;
 }
 
 pub fn isDangerousAttributeValue(value: []const u8) bool {

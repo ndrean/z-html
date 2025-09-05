@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
+const html_spec = @import("html_spec.zig");
 const Err = z.Err;
 
 pub const print = std.debug.print;
@@ -130,6 +131,9 @@ const ProcessCtx = struct {
     opt: usize = 0,
     expect_attr_value: bool,
     found_equal: bool,
+    current_element_tag: ?[]const u8 = null,
+    current_attribute: ?[]const u8 = null,
+    expect_element_next: bool = false,  // Next token after < should be element name
 
     pub fn init(
         indent: usize,
@@ -139,6 +143,9 @@ const ProcessCtx = struct {
             .opt = 0,
             .expect_attr_value = false,
             .found_equal = false,
+            .current_element_tag = null,
+            .current_attribute = null,
+            .expect_element_next = false,
         };
     }
 };
@@ -158,6 +165,18 @@ const ProcessCtx = struct {
 /// ---
 ///```
 pub fn prettyPrint(node: *z.DomNode) !void {
+    // First, apply aggressive normalization for clean TTY display
+    if (z.nodeToElement(node)) |element| {
+        // Only normalize if we have an allocator available - prettyPrint is used in tests
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        defer _ = gpa.deinit();
+        const allocator = gpa.allocator();
+        
+        z.normalizeForDisplay(allocator, element) catch {
+            // If normalization fails, continue with original content
+        };
+    }
+
     const result = prettyPrintOpt(
         node,
         defaultStyler,
@@ -209,26 +228,44 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
     }
 
     // open & closing symbols
-    if (std.mem.eql(u8, text, "<") or std.mem.eql(u8, text, ">") or std.mem.eql(u8, text, "</") or std.mem.eql(u8, text, "/>")) {
-        ctx_ptr.expect_attr_value = false; // Reset state
+    if (std.mem.eql(u8, text, "<") or std.mem.eql(u8, text, "</")) {
+        // Opening bracket - next token should be element name
+        ctx_ptr.expect_element_next = true;
+        ctx_ptr.expect_attr_value = false;
+        ctx_ptr.found_equal = false;
+        applyStyle(z.SyntaxStyle.brackets, text);
+        return 0;
+    }
+    
+    if (std.mem.eql(u8, text, ">") or std.mem.eql(u8, text, "/>")) {
+        // Closing bracket - done parsing this element and its attributes
+        ctx_ptr.expect_element_next = false;
+        ctx_ptr.current_element_tag = null;
+        ctx_ptr.expect_attr_value = false;
         ctx_ptr.found_equal = false;
         applyStyle(z.SyntaxStyle.brackets, text);
         return 0;
     }
 
-    // Handle tags
-    const maybeTagStyle = z.getStyleForElement(text);
-    if (maybeTagStyle != null) {
-        ctx_ptr.expect_attr_value = false;
-        applyStyle(maybeTagStyle.?, text);
-        return 0;
+    // Handle element names (only immediately after < or </)
+    if (ctx_ptr.expect_element_next) {
+        const maybeTagStyle = z.getStyleForElement(text);
+        if (maybeTagStyle != null) {
+            ctx_ptr.expect_element_next = false;
+            ctx_ptr.current_element_tag = text; // Track current element for attribute validation
+            applyStyle(maybeTagStyle.?, text);
+            return 0;
+        }
     }
 
-    // Handle attributes
-    const isAttr = z.isKnownAttribute(text);
+    // Handle attributes using unified specification (with intelligent fallback)
+    const isAttr = if (ctx_ptr.current_element_tag) |element_tag|
+        html_spec.isAttributeAllowed(element_tag, text)
+    else
+        z.isKnownAttribute(text);
 
     if (isAttr) {
-        // ctx_ptr.current_attribute = text;
+        ctx_ptr.current_attribute = text; // Track current attribute for value validation
         ctx_ptr.expect_attr_value = true; // Set flag for potential attr_value
         applyStyle(z.SyntaxStyle.attribute, text);
         return 0;
@@ -247,11 +284,29 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
     if (ctx_ptr.expect_attr_value and ctx_ptr.found_equal) {
         ctx_ptr.found_equal = false;
         ctx_ptr.expect_attr_value = false;
-        if (z.isDangerousAttributeValue(text)) {
+        
+
+        // Enhanced attribute value validation using unified specification
+        const is_dangerous = z.isDangerousAttributeValue(text);
+        var is_valid = true;
+
+        if (ctx_ptr.current_element_tag) |element_tag| {
+            if (ctx_ptr.current_attribute) |attr_name| {
+                is_valid = html_spec.isAttributeValueValid(element_tag, attr_name, text);
+            }
+        }
+
+        if (is_dangerous) {
             applyStyle(z.SyntaxStyle.danger, text);
+        } else if (!is_valid) {
+            // Invalid attribute value - use warning style (yellow)
+            applyStyle(z.Style.YELLOW, text);
         } else {
             applyStyle(z.SyntaxStyle.attr_value, text); // Normal styling
         }
+
+        // Reset attribute context
+        ctx_ptr.current_attribute = null;
         return 0;
     }
 

@@ -1067,7 +1067,6 @@ test "named attribute operations" {
     if (try z.getAttribute(allocator, div_element, "data-value")) |data_value| {
         defer allocator.free(data_value);
         try testing.expectEqualStrings("123", data_value);
-        // print("Data (borrowed): '{s}'\n", .{data_value});
     }
 
     // Test non-existent attribute
@@ -1176,8 +1175,6 @@ test "attribute edge cases" {
     const div_node = z.firstChild(body_node).?;
     const div_element = z.nodeToElement(div_node).?;
 
-    // print("\n=== Attribute Edge Cases ===\n", .{});
-
     // Empty attribute value
     if (try getAttribute(
         allocator,
@@ -1186,7 +1183,6 @@ test "attribute edge cases" {
     )) |empty_value| {
         defer allocator.free(empty_value);
         try testing.expectEqualStrings("", empty_value);
-        // print("Empty attribute: '{s}' (length: {d})\n", .{ empty_value, empty_value.len });
     }
 
     // Attribute with spaces
@@ -1197,7 +1193,6 @@ test "attribute edge cases" {
     )) |title_value| {
         defer allocator.free(title_value);
         try testing.expectEqualStrings("  spaces  ", title_value);
-        // print("Spaced attribute: '{s}' (length: {})\n", .{ title_value, title_value.len });
     }
 
     // Test setting empty value

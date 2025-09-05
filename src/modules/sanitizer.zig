@@ -7,6 +7,7 @@
 //! - ensure safe URI usage
 const std = @import("std");
 const z = @import("../zhtml.zig");
+const html_spec = @import("html_spec.zig");
 const Err = z.Err;
 const print = std.debug.print;
 
@@ -122,9 +123,33 @@ fn shouldRemoveSvgDescendant(tag_name: []const u8) bool {
         std.mem.eql(u8, tag_name, "set");
 }
 
-/// [sanitize] Check if an attribute is allowed by the whitelist
+/// [sanitize] Check if an attribute is allowed by the whitelist (legacy)
 fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
     return attr_set.has(attr_name) or special_common.has(attr_name);
+}
+
+/// [sanitize] Check if an element and attribute combination is allowed using unified specification
+pub fn isElementAttributeAllowed(element_tag: []const u8, attr_name: []const u8) bool {
+    return html_spec.isAttributeAllowed(element_tag, attr_name);
+}
+
+/// [sanitize] Check if an attribute value is valid using unified specification
+pub fn isElementAttributeValueValid(element_tag: []const u8, attr_name: []const u8, attr_value: []const u8) bool {
+    return html_spec.isAttributeValueValid(element_tag, attr_name, attr_value);
+}
+
+/// [sanitize] Validate an element using unified specification
+pub fn validateElementWithSpec(element: *z.HTMLElement) bool {
+    const tag_name = z.tagName_zc(element);
+    const lowercase_tag = std.ascii.lowerString(tag_name, tag_name);
+
+    // Check if element itself is allowed
+    const spec = html_spec.getElementSpec(lowercase_tag);
+    if (spec == null) {
+        return false; // Element not in specification
+    }
+
+    return true;
 }
 
 /// Helper to set the parent context to avoid walking up the DOM tree
@@ -679,6 +704,14 @@ test "comprehensive HTML and SVG sanitization" {
         .strict_uri_validation = true,
         .allow_custom_elements = false,
     });
+    try z.prettyPrint(body);
+    
+    // Normalize to clean up empty text nodes left by element removal
+    const body_element = z.nodeToElement(body) orelse return;
+    try z.normalize(allocator, body_element);  // Standard browser-like normalization
+    
+    print("\n=== After normalization ===\n", .{});
+    try z.prettyPrint(body);
 
     const strict_result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(strict_result);
@@ -724,6 +757,9 @@ test "comprehensive HTML and SVG sanitization" {
         .strict_uri_validation = true,
         .allow_custom_elements = true,
     });
+
+    print("\n=== Permissive Sanitization (custom elements enabled) ===\n", .{});
+    try z.prettyPrint(body2);
 
     const permissive_result = try z.outerNodeHTML(allocator, body2);
     defer allocator.free(permissive_result);
