@@ -47,38 +47,51 @@ fn demoParser(allocator: std.mem.Allocator) !void {
 }
 
 fn demoStreamParser(allocator: std.mem.Allocator) !void {
+    print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
     var streamer = try z.Stream.init(allocator);
     defer streamer.deinit();
 
     try streamer.beginParsing();
 
-    try streamer.processChunk("<!DOCTYPE html><html><head><title>Large Document");
-    try streamer.processChunk("</title></head><body>");
-    try streamer.processChunk("<table id=\"producttable\">");
-    try streamer.processChunk("<caption>Company data</caption><thead>");
-    try streamer.processChunk("<tr><th scope=\"col\">Items>UPC_Code</th><th>Product_Name</th>");
-    try streamer.processChunk("</tr></thead><tbody>");
+    const streams = [_][]const u8{
+        "<!DOCTYPE html><html><head><title>Large",
+        " Document</title></head><body>",
+        "<table id=\"producttable\">",
+        "<caption>Company data</caption><thead>",
+        "<tr><th scope=\"col\">",
+        "Code</th><th>Product_Name</th>",
+        "</tr></thead><tbody>",
+    };
+    for (streams) |chunk| {
+        print("chunk:  {s}\n", .{chunk});
+        try streamer.processChunk(chunk);
+    }
 
     for (0..2) |i| {
         const li = try std.fmt.allocPrint(
             allocator,
-            "<tr id={}><th >Code: {}</th><td>Name: {}</td></tr>",
+            "<tr id={}><td >Code: {}</td><td>Name: {}</td></tr>",
             .{ i, i, i },
         );
         defer allocator.free(li);
+        print("chunk:  {s}\n", .{li});
 
         try streamer.processChunk(li);
     }
-    try streamer.processChunk("</tbody></table></body></html>;");
+    const end_chunk = "</tbody></table></body></html>";
+    print("chunk:  {s}\n", .{end_chunk});
+    try streamer.processChunk(end_chunk);
     try streamer.endParsing();
-    const html = streamer.getDocument();
-    defer z.destroyDocument(html);
-    const body = z.bodyNode(html).?;
-    print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
+
+    const html_doc = streamer.getDocument();
+    defer z.destroyDocument(html_doc);
+    const html_node = z.documentRoot(html_doc).?;
 
     print("\n\n", .{});
-    try z.prettyPrint(body);
-    print("\n", .{});
+    try z.prettyPrint(html_node);
+    print("\n\n", .{});
+    try z.printDocStruct(html_doc);
+    print("\n\n", .{});
 }
 
 fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {

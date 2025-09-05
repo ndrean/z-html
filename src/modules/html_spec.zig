@@ -174,6 +174,7 @@ pub const framework_attrs = [_]AttrSpec{
 /// HTML element specifications
 pub const element_specs = [_]ElementSpec{
     // Text elements (commonly used with frameworks)
+    .{ .tag = "body", .allowed_attrs = &common_attrs },
     .{ .tag = "p", .allowed_attrs = &framework_attrs },
     .{ .tag = "span", .allowed_attrs = &framework_attrs },
     .{ .tag = "div", .allowed_attrs = &framework_attrs },

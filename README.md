@@ -37,42 +37,77 @@ This project exposes a significant / essential subset of all available `lexbor` 
 
 ## Examples
 
-### Receiving streams
+### Processing streams
 
 ```c
 const z = @import("zhtml");
+const print = std.debug.print;
 
-var streamer = try z.Stream.init(allocator);
-defer streamer.deinit();
+fn demoStreamParser(allocator: std.mem.Allocator) !void {
+    print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
+    var streamer = try z.Stream.init(allocator);
+    defer streamer.deinit();
 
-try streamer.beginParsing();
+    try streamer.beginParsing();
 
-try streamer.processChunk("<!DOCTYPE html><html><head><title>Large Document");
-try streamer.processChunk("</title></head><body>");
-try streamer.processChunk("<table id=\"producttable\">");
-try streamer.processChunk("<caption>Company data</caption><thead>");
-try streamer.processChunk("<tr><th scope=\"col\">Items>UPC_Code</th><th>Product_Name</th>");
-try streamer.processChunk("</tr></thead><tbody>");
+    const streams = [_][]const u8{
+        "<!DOCTYPE html><html><head><title>Large",
+        " Document</title></head><body>",
+        "<table id=\"producttable\">",
+        "<caption>Company data</caption><thead>",
+        "<tr><th scope=\"col\">",
+        "Code</th><th>Product_Name</th>",
+        "</tr></thead><tbody>",
+    };
+    for (streams) |chunk| {
+        print("chunk:  {s}\n", .{chunk});
+        try streamer.processChunk(chunk);
+    }
 
-for (0..2) |i| {
-    const li = try std.fmt.allocPrint(
-        allocator,
-        "<tr id={}><th >Code: {}</th> <td>Name: {}</td></tr>",
-        .{ i, i, i },
-    );
-    defer allocator.free(li);
+    for (0..2) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<tr id={}><th >Code: {}</th><td>Name: {}</td></tr>",
+            .{ i, i, i },
+        );
+        defer allocator.free(li);
+        print("chunk:  {s}\n", .{li});
 
-    try streamer.processChunk(li);
+        try streamer.processChunk(li);
+    }
+    const end_chunk = "</tbody></table></body></html>;";
+    print("chunk:  {s}\n", .{end_chunk});
+    try streamer.processChunk(end_chunk);
+    try streamer.endParsing();
+
+    const html_doc = streamer.getDocument();
+    defer z.destroyDocument(html_doc);
+    const html_node = z.documentRoot(html_doc).?;
+
+    print("\n\n", .{});
+    try z.prettyPrint(html_node);
+    print("\n", .{});
+    try z.printDocStruct(html_doc);
 }
-
-try streamer.processChunk("</tbody></table></body></html>;");
-try streamer.endParsing();
-
-const html_doc = streamer.getDocument();
-defer z.destroyDocument(html_doc);
-
-try z.prettyPrint(z.bodyNode(html_doc));
 ```
+
+You get the output:
+
+```txt
+chunk:  <!DOCTYPE html><html><head><title>Large
+chunk:   Document</title></head><body>
+chunk:  <table id="producttable">
+chunk:  <caption>Company data</caption><thead>
+chunk:  <tr><th scope="col">Items</th><th>
+chunk:  Code</th><th>Product_Name</th>
+chunk:  </tr></thead><tbody>
+chunk:  <tr id=0><th >Code: 0</th><td>Name: 0</td></tr>
+chunk:  <tr id=1><th >Code: 1</th><td>Name: 1</td></tr>
+chunk:  </tbody></table></body></html>;
+```
+
+and the HTML document:
+
 
 ### Build a fragment, inject it and serialization
 

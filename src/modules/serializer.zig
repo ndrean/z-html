@@ -133,7 +133,7 @@ const ProcessCtx = struct {
     found_equal: bool,
     current_element_tag: ?[]const u8 = null,
     current_attribute: ?[]const u8 = null,
-    expect_element_next: bool = false,  // Next token after < should be element name
+    expect_element_next: bool = false, // Next token after < should be element name
 
     pub fn init(
         indent: usize,
@@ -171,7 +171,7 @@ pub fn prettyPrint(node: *z.DomNode) !void {
         var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         defer _ = gpa.deinit();
         const allocator = gpa.allocator();
-        
+
         z.normalizeForDisplay(allocator, element) catch {
             // If normalization fails, continue with original content
         };
@@ -236,7 +236,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
         applyStyle(z.SyntaxStyle.brackets, text);
         return 0;
     }
-    
+
     if (std.mem.eql(u8, text, ">") or std.mem.eql(u8, text, "/>")) {
         // Closing bracket - done parsing this element and its attributes
         ctx_ptr.expect_element_next = false;
@@ -244,7 +244,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
         ctx_ptr.expect_attr_value = false;
         ctx_ptr.found_equal = false;
         applyStyle(z.SyntaxStyle.brackets, text);
-        return 0;
+        return z._CONTINUE;
     }
 
     // Handle element names (only immediately after < or </)
@@ -254,7 +254,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
             ctx_ptr.expect_element_next = false;
             ctx_ptr.current_element_tag = text; // Track current element for attribute validation
             applyStyle(maybeTagStyle.?, text);
-            return 0;
+            return z._CONTINUE;
         }
     }
 
@@ -268,7 +268,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
         ctx_ptr.current_attribute = text; // Track current attribute for value validation
         ctx_ptr.expect_attr_value = true; // Set flag for potential attr_value
         applyStyle(z.SyntaxStyle.attribute, text);
-        return 0;
+        return z._CONTINUE;
     }
 
     // Handle the tricky =" sign to signal a potential following attribute value
@@ -277,14 +277,13 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
     if (containsEqualSign) {
         ctx_ptr.found_equal = true;
         applyStyle(z.Style.DIM_WHITE, text);
-        return 0;
+        return z._CONTINUE;
     }
 
     // text following the =" token with whitelisted attribute
     if (ctx_ptr.expect_attr_value and ctx_ptr.found_equal) {
         ctx_ptr.found_equal = false;
         ctx_ptr.expect_attr_value = false;
-        
 
         // Enhanced attribute value validation using unified specification
         const is_dangerous = z.isDangerousAttributeValue(text);
@@ -307,7 +306,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
 
         // Reset attribute context
         ctx_ptr.current_attribute = null;
-        return 0;
+        return z._CONTINUE;
     }
 
     // text following the =" token without whitelisted attribute: suspicious attribute case
@@ -315,12 +314,12 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
         ctx_ptr.expect_attr_value = false;
         ctx_ptr.found_equal = false;
         applyStyle(z.SyntaxStyle.danger, text);
-        return 0;
+        return z._CONTINUE;
     }
 
     ctx_ptr.expect_attr_value = false; // Reset state as attributes may have no value
     applyStyle(z.SyntaxStyle.text, text);
-    return 0;
+    return z._CONTINUE;
 }
 
 fn applyStyle(style: []const u8, text: []const u8) void {

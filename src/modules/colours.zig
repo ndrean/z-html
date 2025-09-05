@@ -116,7 +116,8 @@ pub const Style = struct {
     pub const DIM_WHITE = "\x1b[2;37m";
 
     // with background
-    pub const BODY = "\x1b[1;30;47m";
+
+    pub const BODY = "\x1b[1;7;37m";
     pub const WHITE_BLACK = "\x1b[1;37;40m";
     pub const YELLOW_BLACK = "\x1b[1;33;40m";
     pub const BLACK_YELLOW = "\x1b[1;30;43m";
@@ -132,7 +133,7 @@ pub const Style = struct {
 pub const ElementStyles = struct {
     pub const html = Style.BOLD_CYAN;
     pub const head = Style.INVERSE_CYAN;
-    pub const body = Style.BODY;
+    pub const body = Style.INVERSE_GREEN;
     pub const title = Style.BOLD_BLUE;
     pub const meta = Style.BLUE;
     pub const link = Style.UNDERLINE_GREEN;
@@ -167,7 +168,7 @@ pub const ElementStyles = struct {
     pub const table = Style.BOLD_CYAN;
     pub const tr = Style.CYAN;
     pub const td = Style.WHITE;
-    pub const th = Style.BOLD_ITALIC_WHITE;
+    pub const th = Style.ITALIC_WHITE;
 
     pub const form = Style.GREEN;
     pub const input = Style.GREEN;
@@ -207,14 +208,14 @@ pub const SyntaxStyle = struct {
 /// Check if attribute is known, including ARIA, data-*, or framework attributes (Phoenix, Alpine, Vue, HTMX)
 /// This is a fallback function when no element context is available
 pub fn isKnownAttribute(attr: []const u8) bool {
-    // Primary: Use unified specification 
+    // Primary: Use unified specification
     if (isStandardHtmlAttribute(attr)) {
         return true;
     }
-    
+
     // Fallback: Handle dynamic framework attribute patterns when no element context available
     // These are now mostly covered by the unified spec, but kept for backwards compatibility
-    
+
     // ARIA and data attributes (handled by unified spec prefix matching)
     if (std.mem.startsWith(u8, attr, "aria-") and attr.len > 5) {
         return true; // aria-*
@@ -222,7 +223,7 @@ pub fn isKnownAttribute(attr: []const u8) bool {
     if (std.mem.startsWith(u8, attr, "data-") and attr.len > 5) {
         return true; // data-*
     }
-    
+
     // Framework dynamic attributes (x-on:click, v-bind:value, etc.)
     if (std.mem.startsWith(u8, attr, "x-on:") or std.mem.startsWith(u8, attr, "x-bind:")) {
         return true; // Alpine.js dynamic
@@ -233,7 +234,7 @@ pub fn isKnownAttribute(attr: []const u8) bool {
     if (std.mem.startsWith(u8, attr, "phx-value-")) {
         return true; // Phoenix dynamic
     }
-    
+
     // HTMX (not yet in unified spec)
     if (std.mem.startsWith(u8, attr, "hx-") and attr.len > 3) {
         return true; // hx-*
@@ -266,12 +267,12 @@ pub fn isStandardHtmlAttribute(attr: []const u8) bool {
 }
 
 pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
-    // First check if element exists in HTML specification  
+    // First check if element exists in HTML specification
     if (html_spec.getElementSpec(element_name) == null) {
         // Element not recognized in HTML spec, no styling
         return null;
     }
-    
+
     // Apply specific styling for elements (all elements from HTML spec get some styling)
     if (std.mem.eql(u8, element_name, "html")) return ElementStyles.html;
     if (std.mem.eql(u8, element_name, "head")) return ElementStyles.head;
@@ -358,7 +359,7 @@ pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, element_name, "audio")) return Style.PURPLE;
     if (std.mem.eql(u8, element_name, "canvas")) return Style.PURPLE;
     if (std.mem.eql(u8, element_name, "svg")) return Style.PURPLE;
-    
+
     // Add missing anchor element
     if (std.mem.eql(u8, element_name, "a")) return Style.UNDERLINE_BLUE;
 
