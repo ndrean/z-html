@@ -103,32 +103,12 @@ chunk:  <tr id=1><th >Code: 1</th><td>Name: 1</td></tr>
 chunk:  </tbody></table></body></html>;
 ```
 
-head
-  title
-    #text
-body
-  table
-    caption
-      #text
-    thead
-      tr
-        th
-          #text
-        th
-          #text
-    tbody
-      tr
-        td
-          #text
-        td
-          #text
-      tr
-        td
-          #text
-        td
-          #text
-
 and the HTML document:
+
+<p align="center">
+  <img src="https://github.com/ndrean/images/tree-table.png" width="300"/>
+  <img src="https://github.com/ndrean/z-html/images/html-table.png" width="300"/>
+</p>
 
 
 ### Build a fragment, inject it and serialization
