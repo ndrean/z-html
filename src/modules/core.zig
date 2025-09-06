@@ -2465,14 +2465,6 @@ test "bigger test with string-to-DOM scenarios" {
     }
 }
 
-test "basic" {
-    const doc = try z.createDocument();
-    try z.parseString(doc, "<body></body>");
-
-    try z.printDocStruct(doc);
-    // const div_elt = try z.createElement(doc, "div");
-}
-
 // TODO
 test "Performance comparison: Character-based vs Lexbor-based HTML normalization" {
     // const allocator = testing.allocator;

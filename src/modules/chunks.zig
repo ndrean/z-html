@@ -280,7 +280,7 @@ test "parse interpolate" {
         "</tr></thead><tbody>",
     };
     for (streams) |chunk| {
-        print("chunk:  {s}\n", .{chunk});
+        // print("chunk:  {s}\n", .{chunk});
         try streamer.processChunk(chunk);
     }
 
@@ -291,12 +291,12 @@ test "parse interpolate" {
             .{ i, i, i },
         );
         defer allocator.free(li);
-        print("chunk:  {s}\n", .{li});
+        // print("chunk:  {s}\n", .{li});
 
         try streamer.processChunk(li);
     }
     const end_chunk = "</tbody></table></body></html>";
-    print("chunk:  {s}\n", .{end_chunk});
+    // print("chunk:  {s}\n", .{end_chunk});
     try streamer.processChunk(end_chunk);
     try streamer.endParsing();
 

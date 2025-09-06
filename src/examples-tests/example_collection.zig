@@ -38,7 +38,7 @@ pub fn runBasicCollectionExample() !void {
     ;
 
     // Parse the HTML
-    const doc = try z.printDocStruct(html);
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
     print("=== getElementById Examples ===\n", .{});

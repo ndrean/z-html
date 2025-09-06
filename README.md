@@ -39,28 +39,44 @@ When a node is NOT attached to any document, you must manually destroy it.
 
 Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
 
-We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with `qualifiedName(allocator, node)` or ``qualifiedName_zc(node)`. The non-allocated point to `lexbor` memory and must be consummed immediately whilst the allocated result can outlive the calling function.
+We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by ampping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consummed immediately whilst the allocated result can outlive the calling function.
 
 ## Examples
 
 ### Building a document & Parsing
 
-You have several methods available:
+You have several methods available.
 
-```c
+The `parseString` creates a `<head`> and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+
+```cpp
 const z = @import("zhtml");
 
-const doc = try z.createDocument();
+const doc: *HTMLDocument = try z.createDocument();
 defer z.destroyDocument(doc);
-try z.parseString("<body></body>");
-const body = z.bodyNode(doc);
-const div = try z.createElement(doc, "div");
-z.appendChild(body, div);
+try z.parseString(doc, "<div></div>");
+
+const body: *DomNode = z.bodyNode(doc).?;
+const p: *HTMLElement = try z.createElement(doc, "p");
+z.appendChild(body, z.elementToNode(p));
 ```
 
-```c
-const doc = try z.createDocFromString("<body><div></div></body>");
+Your document now contains this HTML:
+
+```html
+<head></head>
+<body>
+  <div></div>
+  <p></p>
+</body>
+```
+
+You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
+
+```cpp
+const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
 defer z.destroyDocument(doc);
+
 ```
 
 #### Processing streams
@@ -134,8 +150,6 @@ chunk:  <tr id=1><th >Code: 1</th><td>Name: 1</td></tr>
 chunk:  </tbody></table></body></html>;
 ```
 
-and the HTML document:
-
 <p align="center">
   <img src="https://github.com/ndrean/z-html/blob/main/src/images/html-table.png" width="300"/>
   <img src="https://github.com/ndrean/z-html/blob/main/src/images/tree-table.png" width="300"/>
@@ -194,6 +208,16 @@ test "setInnerHTML" {
 <p align="center" width="300">
   <img src="https://github.com/ndrean/z-html/blob/main/src/images/setinnerhtml.png">
 </p>
+
+#### Primary security on parsing
+
+Suppose you have the following HTML string:
+
+```html
+<script>alert('XSS')</script>
+<img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">
+<a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>
+```
 
 ### Serialize
 
