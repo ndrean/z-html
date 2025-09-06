@@ -34,14 +34,36 @@ This project exposes a significant / essential subset of all available `lexbor` 
 
 ## Examples
 
-### Processing streams
+### Building a document & Parsing
+
+You have several methods avialable:
+
+```c
+const z = @import("zhtml");
+
+const doc = try z.createDocument();
+defer z.destroyDocument(doc);
+try z.parseString("<body></body>");
+const body = z.bodyNode(doc);
+const div = try z.createElement(doc, "div");
+z.appendChild(body, div);
+```
+
+```c
+const doc = try z.createDocFromString("<body><div></div></body>");
+defer z.destroyDocument(doc);
+```
+
+#### Processing streams
+
+You receive chunks and build a document.
 
 ```c
 const z = @import("zhtml");
 const print = std.debug.print;
 
 fn demoStreamParser(allocator: std.mem.Allocator) !void {
-    print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
+
     var streamer = try z.Stream.init(allocator);
     defer streamer.deinit();
 
@@ -110,124 +132,136 @@ and the HTML document:
   <img src="https://github.com/ndrean/z-html/blob/main/src/images/tree-table.png" width="300"/>
 </p>
 
+#### Building fragments
 
-### Build a fragment, inject it and serialization
+You can use the "parser engine" with `insertFragment`.
 
-We create a fragment, populate it and append it to a document.
+```c
+fn demoParser(allocator: std.mem.Allocator) !void {
+    const doc = try z.createDocFromString("<div><ul></ul></div>");
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
 
-We test the result with:
+    const ul_elt = z.getElementByTag(body, .ul).?;
+    const ul = z.elementToNode(ul_elt);
 
-- a collection count as a result of a _search by attribute_
-- string comparison using _serialization_
+    var parser = try z.FragmentParser.init(allocator);
+    defer parser.deinit();
 
-```cpp
-const std = @import("std");
-const z = @import("zhtml.zig");
-
-test "Append fragment" {
-  const allocator = std.testing.allocator;
-
-  // create the skeleton <html><body></body></html>
-  const doc = try z.printDocStruct("");
-  defer z.destroyDocument(doc);
-
-  const body = z.bodyNode(doc).?;
-
-  const fragment = try z.createDocumentFragment(doc);
-
-  // create with attributes
-  const div_elt = try z.createElementWithAttrs(doc,"div",
-      &.{.{ .name = "class", .value = "container-list" }},
-  );
-
-  const div = elementToNode(div_elt);
-  const comment = try z.createComment(doc, "a comment");
-  z.appendChild(div, z.commentToNode(comment));
-
-  const ul_elt = try z.createElementWithAttrs(doc, "ul", &.{});
-  const ul = z.elementToNode(ul_elt);
-
-  for (1..4) |i| {
-    const content = try std.fmt.allocPrint(allocator,
-            "<li data-id=\"{d}\">Item {d}</li>",
+    for (0..3) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<li id='item-{}'>Item {}</li>",
             .{ i, i },
-      );
-    defer allocator.free(content);
+        );
+        defer allocator.free(li);
 
-    const temp_elt = try z.createElementWithAttrs(doc, "div", &.{});
-    const temp_div = z.elementToNode(temp_elt);
+        try parser.insertFragment(ul, li, .ul, false);
+    }
 
-    // we inject the <li> string as innerHTML into the temp <div>
-    _ = try z.setInnerHTML(allocator, temp_elt, content, .{});
-
-    // and append the new <li> node to the <ul> node
-    if (z.firstChild(temp_div)) |li|
-          Z.appendChild(ul, li);
-      
-    z.destroyNode(temp_div);
-  }
-
-  z.appendChild(div, ul);
-  z.appendChild(fragment, div);
-  z.appendFragment(body, fragment);
-
-  // first test: count check using collection
-  const lis = try z.getElementsByTagName(doc, "LI");
-  defer if (lis) |collection| {
-        z.destroyCollection(collection);
-    };
-
-  const li_count = z.collectionLength(lis);
-  try testing.expect(li_count == 3);
-
-  // second test: we check that the full string is what we expect
-  const serialized_fragment = try z.outerHTML(allocator, div);
-  defer allocator.free(serialized_fragment);
-
-  const expected_fragment =
-        \\<div class="container-list">
-        \\  <!--a comment-->
-        \\  <ul>
-        \\      <li data-id="1">Item 1</li>
-        \\      <li data-id="2">Item 2</li>
-        \\      <li data-id="3">Item 3</li>
-        \\  </ul>
-        \\</div>
-    ;
-
-  // collapse whitespace-only text nodes
-  const expected = try z.normalizeWhitespace(allocator, expected_fragment, .{});
-  defer allocator.free(expected)
-  
-  try testing.expectEqualStrings(expected, serialized_fragment);
+    try z.prettyPrint(body);
 }
 ```
 
-### DOM structure
+<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/parse-engine.png" with="300">
+</p>
 
-We can print the document structure:
+You can use `setInnerHTML`:
 
-```cpp
-  // continue
-  try z.debugDocumentStructure(doc);
+```c
+test "setInnerHTML" {
+  const doc = try z.createDocFromString("<div id=\"target\"></div>");
+    defer z.destroyDocument(doc);
+
+    const body = z.bodyNode(doc).?;
+    const div = z.getElementById(body, "target").?;
+
+    const new_div = try z.setInnerHTML(div, "<p class=\"new-content\">New Content</p>");
+
+    try z.prettyPrint(new_div);
+}
 ```
 
-The output is:
+<p align="center" width="300">
+  <img src="https://github.com/ndrean/z-html/blob/main/src/images/setinnerhtml.png">
+</p>
+
+### Serialize
+
+You can also use `insertAdjacentHTML` to insert HTML fragments.. To serialize the DOM, you can use `innerHTML` or `outerHTML`.
+
+```c
+test "insertAdjacentHTML and serialize" {
+  const allocator = std.testing.allocator;
+  const doc = try z.createDocFromString(
+    \\<div id="container">
+    \\  <p id="target">Target</p>
+    \\</div>
+    ;
+  );
+
+  defer z.destroyDocument(doc);
+
+  const body = z.bodyNode(doc).?;
+  const target = z.getElementById(body, "target").?;
+
+  try z.insertAdjacentHTML(
+        allocator,
+        target,
+        .beforeend,
+        "<span class=\"before end\"></span>",
+        false,
+  );
+
+  try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "afterend",
+        "<span class=\"after end\">After End</span>",
+        false,
+  );
+
+  try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "afterbegin",
+        "<span class=\"after begin\"></span>",
+        false,
+  );
+
+  try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "beforebegin",
+        "<span class=\"before begin\"></span>",
+        false,
+  );
+
+  // serialize
+  const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+  defer allocator.free(html);
+
+
+  // Normalize whitespace for easy comparison
+  const clean_html = try z.normalizeText(allocator, html, .{});
+  defer allocator.free(clean_html);
+
+  const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\">After End</span></div></body>";
+
+  std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
+
+  try z.prettyPrint()
+  print("{s}\n", .{clean_html});
+}
+```
+
+<p align="center" src="https://github.com/ndrean/z-html/blob/main/src/images/inseradjacenthtml-all-positions.png" with="300"></p>
 
 ```txt
---- DOCUMENT STRUCTURE ----
-DIV
-  #comment
-  UL
-    LI
-      #text
-    LI
-      #text
-    LI
-      #text
+<body><div id="container"><span class="before begin"></span><p id="target"><span class="after begin"></span>Target<span class="before end"></span></p><span class="after end">After End</span></div></body>
 ```
 
-### Pretty print
+### Pretty print & DOM structure utilities
 
 From the HTML string:
 
@@ -235,89 +269,11 @@ From the HTML string:
 <body><div><button phx-click="increment">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href="https://example.com">example.com</a></p></div></body>
 ```
 
-You can output a nice colourful log:
+You can output a nice colourful log with `prettyPrint`.
 
 <img width="305" height="395" alt="Screenshot 2025-08-26 at 19 48 34" src="https://github.com/user-attachments/assets/4081b736-0015-4a8e-997f-a886912c0e7b" />
 
-### DOM tree: tuple and W3C JSON
-
-- the tuple version: `{tagName, attributes, children}`
-
-```cpp
-  // continue
-  const tree = try z.documentToTupleTree(allocator, doc);
-  defer z.freeHtmlTree(allocator, tree);
-
-  for (tree) |node| {
-    z.printNode(node, 0);
-  }
-```
-
-gives the compressed "tuple" representation:
-
-```json
-[
-  {
-    "DIV", 
-    [{"class", "container-list"}], 
-    [
-      {"comment", "a comment"},
-      {"UL", [], 
-        [
-          {"LI", [{"data-id", "1"}], ["Item 1"]}, 
-          {"LI", [{"data-id", "2"}], ["Item 2"]},
-          {"LI", [{"data-id", "3"}], ["Item 3"]}
-        ]
-      }
-    ]
-  }
-]
-```
-
-- the JSON format: `{nodeType, tagName, attributes, children}` where element = 1, text = 3, comment = 8, document = 9, fragment = 11.
-
-```cpp
-  const json_tree = try z.documentToJsonTree(allocator, doc);
-  const json_string = try z.jsonNodeToString(allocator, json_tree[0]);
-  print("{s}", .{json_string});
-```
-
-gives the W3C JSON representation:
-
-```json
-{
-  "nodeType": 1, 
-  "tagName": "DIV", 
-  "attributes": [
-    {"name": "class", "value": "container-list"}
-  ], 
-  "children": [
-    {"nodeType": 8, "data": "a comment"}, 
-    {
-      "nodeType": 1, 
-      "tagName": "UL", 
-      "attributes": [], 
-      "children": [
-        {
-          "nodeType": 1, 
-          "tagName": "LI", 
-          "attributes": [{"name": "data-id", "value": "1"}], "children": [{"nodeType": 3, "data": "Item 1"}]
-        }, 
-        {
-          "nodeType": 1, 
-          "tagName": "LI", 
-          "attributes": [{"name": "data-id", "value": "2"}], "children": [{"nodeType": 3, "data": "Item 2"}]
-        },
-        {
-          "nodeType": 1, 
-          "tagName": "LI", 
-          "attributes": [{"name": "data-id", "value": "3"}], "children": [{"nodeType": 3, "data": "Item 3"}]
-        }
-      ]
-    }
-  ]
-}
-```
+We introduced a sanitization tool
 
 ### CSS selectors and attributes
 

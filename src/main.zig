@@ -1,17 +1,31 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const z = @import("zhtml.zig");
 const tree = @import("modules/dom_tree.zig");
 const tree_opt = @import("modules/dom_tree_optimized.zig");
-const normalize = @import("modules/normalize.zig");
+const native_os = builtin.os.tag;
 const print = std.debug.print;
 
-pub fn main() !void {
-    const allocator = std.heap.c_allocator;
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
-    try demoParser(allocator);
-    try demoStreamParser(allocator);
-    try demoInsertAdjacentHTML(allocator);
-    try demoSuspiciousAttributes(allocator);
+pub fn main() !void {
+    const gpa, const is_debug = gpa: {
+        if (native_os == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
+        break :gpa switch (builtin.mode) {
+            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.c_allocator, false },
+        };
+    };
+    defer if (is_debug) {
+        _ = debug_allocator.deinit();
+    };
+
+    try demoParser(gpa);
+    try demoStreamParser(gpa);
+    try demoInsertAdjacentElement(gpa);
+    try demoInsertAdjacentHTML(gpa);
+    try demoSetInnerHTML(gpa);
+    try demoSuspiciousAttributes(gpa);
     // std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
     // try runNormalizeBenchmark(allocator);
     // try newNormalizeBencharmark(allocator);
@@ -67,7 +81,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
         try streamer.processChunk(chunk);
     }
 
-    for (0..2) |i| {
+    for (0..3) |i| {
         const li = try std.fmt.allocPrint(
             allocator,
             "<tr id={}><td >Code: {}</td><td>Name: {}</td></tr>",
@@ -94,13 +108,11 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
     print("\n\n", .{});
 }
 
-fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
+fn demoInsertAdjacentElement(allocator: std.mem.Allocator) !void {
     const doc = try z.createDocFromString(
-        \\<html><body>
-        \\    <div id="container">
-        \\        <p id="target">Target</p>
-        \\    </div>
-        \\</body></html>
+        \\<div id="container">
+        \\ <p id="target">Target</p>
+        \\</div>
     );
     defer z.destroyDocument(doc);
     errdefer z.destroyDocument(doc);
@@ -108,14 +120,11 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
     const body = z.bodyNode(doc).?;
     const target = z.getElementById(body, "target").?;
 
-    // Demo 1: insertAdjacentElement with all positions
     const before_end_elem = try z.createElementWithAttrs(
         doc,
         "span",
         &.{.{ .name = "class", .value = "before end" }},
     );
-    // try z.setContentAsText(z.elementToNode(before_elem), "Before Begin");
-
     try z.insertAdjacentElement(
         target,
         .beforeend,
@@ -127,7 +136,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         "span",
         &.{.{ .name = "class", .value = "after end" }},
     );
-    // try z.setContentAsText(z.elementToNode(after_elem), "After End");
+    try z.setContentAsText(z.elementToNode(after_end_elem), "After End");
 
     try z.insertAdjacentElement(
         target,
@@ -140,7 +149,6 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         "span",
         &.{.{ .name = "class", .value = "after begin" }},
     );
-    // try z.setContentAsText(z.elementToNode(after_elem), "After End");
 
     try z.insertAdjacentElement(
         target,
@@ -152,12 +160,73 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         "span",
         &.{.{ .name = "class", .value = "before begin" }},
     );
-    // try z.setContentAsText(z.elementToNode(after_elem), "After End");
 
     try z.insertAdjacentElement(
         target,
         .beforebegin,
         before_begin_elem,
+    );
+
+    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(html);
+    print("\n=== Demonstrate insertAdjacentElement ===\n\n", .{});
+    try z.prettyPrint(body);
+
+    // Normalize whitespace for clean comparison
+    const clean_html = try z.normalizeText(allocator, html, .{});
+    defer allocator.free(clean_html);
+
+    const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\">After End</span></div></body>";
+
+    std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
+
+    print("\n--- Normalized HTML --- \n\n{s}\n", .{clean_html});
+    print("\n\n", .{});
+}
+
+fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
+    // const allocator = std.testing.allocator;
+    const doc = try z.createDocFromString(
+        \\<div id="container">
+        \\    <p id="target">Target</p>
+        \\</div>
+    );
+    defer z.destroyDocument(doc);
+    errdefer z.destroyDocument(doc);
+
+    const body = z.bodyNode(doc).?;
+    const target = z.getElementById(body, "target").?;
+
+    try z.insertAdjacentHTML(
+        allocator,
+        target,
+        .beforeend,
+        "<span class=\"before end\"></span>",
+        false,
+    );
+
+    try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "afterend",
+        "<span class=\"after end\">After End</span>",
+        false,
+    );
+
+    try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "afterbegin",
+        "<span class=\"after begin\"></span>",
+        false,
+    );
+
+    try z.insertAdjacentHTML(
+        allocator,
+        target,
+        "beforebegin",
+        "<span class=\"before begin\"></span>",
+        false,
     );
 
     // Show result after insertAdjacentElement
@@ -170,7 +239,39 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
     const clean_html = try z.normalizeText(allocator, html, .{});
     defer allocator.free(clean_html);
 
-    const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\"></span></div></body>";
+    const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\">After End</span></div></body>";
+
+    std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
+
+    print("\n--- Normalized HTML --- \n\n{s}\n", .{clean_html});
+    print("\n\n", .{});
+}
+
+fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
+    const doc = try z.createDocFromString("<div id=\"target\"></div>");
+    defer z.destroyDocument(doc);
+
+    const body = z.bodyNode(doc).?;
+    const div = z.getElementById(body, "target").?;
+
+    const new_div = try z.setInnerHTML(div, "<p class=\"new-content\">New Content</p>");
+
+    print("\n=== Demonstrate setInnerHTML & innerHTML ===\n\n", .{});
+
+    try z.prettyPrint(z.elementToNode(new_div));
+
+    // Show result after setInnerHTML
+    const html_new_div = try z.innerHTML(
+        allocator,
+        new_div,
+    );
+    defer allocator.free(html_new_div);
+
+    // Normalize whitespace for clean comparison
+    const clean_html = try z.normalizeText(allocator, html_new_div, .{});
+    defer allocator.free(clean_html);
+
+    const expected = "<p class=\"new-content\">New Content</p>";
 
     std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
 
@@ -296,7 +397,7 @@ fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
     // Test string-based normalization (no parsing needed)
     timer.reset();
     for (0..iterations) |_| {
-        const normalized = try normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
+        const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
@@ -484,7 +585,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
     // === Test 1.b: [Normalize-HTMLstring → DOM]
     timer.reset();
     for (0..iterations) |_| {
-        const normalized = try normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
+        const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
@@ -536,7 +637,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
     for (0..iterations) |i| {
         if (i > 0) allocator.free(tuple_v22_result);
 
-        const normalized = try normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
+        const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
@@ -566,7 +667,7 @@ fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
     const pure_dom_to_html_time = timer.read();
 
     // === Test 4.b: [DOM -> HTML] with parsing overhead (original test)
-    const normalized = try normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
+    const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
         .remove_comments = true,
         .remove_whitespace_text_nodes = true,
     });
@@ -804,7 +905,7 @@ fn newNormalizeBencharmark(allocator: std.mem.Allocator) !void {
     var tuple_v_norm: []u8 = undefined;
     for (0..iterations) |i| {
         // 1: Normalize HTML string (remove comments + whitespace)
-        const normalized = try normalize.normalizeHtmlStringWithOptions(allocator, medium_html, .{
+        const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, medium_html, .{
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });

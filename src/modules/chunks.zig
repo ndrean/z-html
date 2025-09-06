@@ -262,3 +262,44 @@ test "chunk parsing error handling" {
     const doc = chunk_parser.getDocument();
     z.destroyDocument(doc);
 }
+
+test "parse interpolate" {
+    const allocator = testing.allocator;
+    var streamer = try z.Stream.init(allocator);
+    defer streamer.deinit();
+
+    try streamer.beginParsing();
+
+    const streams = [_][]const u8{
+        "<!DOCTYPE html><html><head><title>Large",
+        " Document</title></head><body>",
+        "<table id=\"producttable\">",
+        "<caption>Company data</caption><thead>",
+        "<tr><th scope=\"col\">",
+        "Code</th><th>Product_Name</th>",
+        "</tr></thead><tbody>",
+    };
+    for (streams) |chunk| {
+        print("chunk:  {s}\n", .{chunk});
+        try streamer.processChunk(chunk);
+    }
+
+    for (0..3) |i| {
+        const li = try std.fmt.allocPrint(
+            allocator,
+            "<tr id={}><td >Code: {}</td><td>Name: {}</td></tr>",
+            .{ i, i, i },
+        );
+        defer allocator.free(li);
+        print("chunk:  {s}\n", .{li});
+
+        try streamer.processChunk(li);
+    }
+    const end_chunk = "</tbody></table></body></html>";
+    print("chunk:  {s}\n", .{end_chunk});
+    try streamer.processChunk(end_chunk);
+    try streamer.endParsing();
+
+    const html_doc = streamer.getDocument();
+    defer z.destroyDocument(html_doc);
+}
