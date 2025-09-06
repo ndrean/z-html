@@ -381,7 +381,7 @@ pub const getElementId_zc = attrs.getElementId_zc;
 pub const hasElementId = attrs.hasElementId;
 
 //=======================================
-// LEGACY SEARCH FUNCTIONS - Simple Walk - (now from simple_search.zig)
+// Single Element Search functions - Simple Walk
 // ======================================
 pub const getElementById = search.getElementById;
 pub const getElementByTag = search.getElementByTag;
@@ -393,17 +393,16 @@ pub const getElementByDataAttribute = search.getElementByDataAttribute;
 // pub const getElementsById = attrs.getElementsById;
 
 //=====================================
-// Element Search Functions (Walker-based, returns slices)
+// Multiple Element Search Functions (Walker-based, returns slices)
 //=====================================
 
 // Multiple element search functions (return []const *z.HTMLElement)
 pub const getElementsByClassName = search.getElementsByClassName;
-pub const getElementsByTagName = search.getElementsByTagName;  
+pub const getElementsByTagName = search.getElementsByTagName;
 pub const getElementsById = search.getElementsById;
 pub const getElementsByAttribute = search.getElementsByAttribute;
 pub const getElementsByName = search.getElementsByName;
 pub const getElementsByAttributeName = search.getElementsByAttributeName;
-
 
 //====================================================================
 // Utilities
