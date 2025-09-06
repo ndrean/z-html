@@ -239,16 +239,32 @@ test "setInnerHTML lexbor security sanitation" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
 
-    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>";
+    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>";
     const div = try z.createElement(doc, "div");
     _ = try setInnerHTML(div, malicious_content); //<-- lexbor sanitizes this in part
 
     const outer = try z.innerHTML(allocator, div);
     defer allocator.free(outer);
 
-    const expected = "<script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a>";
+    const expected = "<script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a>";
 
     try testing.expectEqualStrings(expected, outer);
+}
+
+test "setInnerHTML flavours" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>";
+    const div = try z.createElement(doc, "div");
+
+    try z.setInnerSafeHTMLStrict(allocator, div, malicious_content);
+
+    const outer = try z.innerHTML(allocator, div);
+    defer allocator.free(outer);
+    print("{s}\n", .{outer});
 }
 
 /// [parser] Set the inner HTML of an element with enhanced sanitization options.
@@ -301,7 +317,6 @@ pub fn setInnerSafeHTMLStrict(allocator: std.mem.Allocator, element: *z.HTMLElem
 /// [parser] Set the inner HTML with permissive sanitization preset.
 ///
 /// **Permissive Mode:** Allows custom elements and framework attributes while removing XSS vectors.
-/// Ideal for modern web applications using frameworks like Phoenix LiveView, Vue, React, etc.
 pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
     const node = z.elementToNode(element);
     const target_doc = z.ownerDocument(node);
@@ -329,7 +344,7 @@ test "setInnerSafeHTML" {
     try z.setInnerSafeHTML(
         allocator,
         body_elt,
-        "<!-- a comment --><script>alert('XSS')</script><p id=\"1\" phx-click=\"increment\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>",
+        "<!-- a comment --><script>alert('XSS')</script><p id=\"1\" phx-click=\"increment\" onclick=\"\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>",
         true,
     );
 

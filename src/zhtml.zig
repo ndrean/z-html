@@ -6,7 +6,7 @@ const chunks = @import("modules/chunks.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
 const tree = @import("modules/dom_tree.zig");
-const collection = @import("modules/collection.zig");
+const search = @import("modules/simple_search.zig");
 const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
@@ -44,9 +44,6 @@ pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
 pub const LXB_DOM_NODE_TYPE_DOCUMENT = 9;
 pub const LXB_DOM_NODE_TYPE_FRAGMENT = 11;
 pub const LXB_DOM_NODE_TYPE_UNKNOWN = 0;
-
-// Collection constant
-pub var default_collection_capacity: u8 = 10;
 
 pub const TextOptions = struct {
     escape: bool = false,
@@ -384,56 +381,34 @@ pub const getElementId_zc = attrs.getElementId_zc;
 pub const hasElementId = attrs.hasElementId;
 
 //=======================================
-// SEARCH byId / byClass / byTag/ byAttribute-{value}  - Simple Walk -
+// LEGACY SEARCH FUNCTIONS - Simple Walk - (now from simple_search.zig)
 // ======================================
-pub const getElementById = attrs.getElementById;
-pub const getElementByTag = attrs.getElementByTag;
-pub const getElementByClass = attrs.getElementByClass;
-pub const getElementByAttribute = attrs.getElementByAttribute;
-pub const getElementByDataAttribute = attrs.getElementByDataAttribute;
+pub const getElementById = search.getElementById;
+pub const getElementByTag = search.getElementByTag;
+pub const getElementByClass = search.getElementByClass;
+pub const getElementByAttribute = search.getElementByAttribute;
+pub const getElementByDataAttribute = search.getElementByDataAttribute;
 
-// multiple
-pub const getElementsById = attrs.getElementsById;
+// multiple (removed - now using walker-based version from collection.zig)
+// pub const getElementsById = attrs.getElementsById;
 
 //=====================================
-// Collection management
+// Element Search Functions (Walker-based, returns slices)
 //=====================================
-// pub const DomCollection = opaque {};
-// pub const createCollection = collection.createCollection;
-// pub const createDefaultCollection = collection.createDefaultCollection;
-// pub const createSingleElementCollection = collection.createSingleElementCollection;
-// pub const destroyCollection = collection.destroyCollection;
-// pub const clearCollection = collection.clearCollection;
-// pub const collectionLength = collection.collectionLength;
-// pub const getCollectionElementAt = collection.getCollectionElementAt;
-// pub const getFirstCollectionElement = collection.getCollectionFirstElement;
-// pub const getLastCollectionElement = collection.getCollectionLastElement;
-// pub const isCollectionEmpty = collection.isCollectionEmpty;
-// pub const appendElementToCollection = collection.appendElementToCollection;
-// pub const collectionIterator = collection.iterator;
-// pub const debugPrint = collection.debugPrint;
-// pub const collectionToSlice = collection.collectionToSlice;
-// pub const CollectionIterator = collection.CollectionIterator;
 
-// // Collection configuration
-// pub const setDefaultCapacity = collection.setDefaultCapacity;
-// pub const getDefaultCapacity = collection.getDefaultCapacity;
-// pub const resetDefaultCapacity = collection.resetDefaultCapacity;
+// Multiple element search functions (return []const *z.HTMLElement)
+pub const getElementsByClassName = search.getElementsByClassName;
+pub const getElementsByTagName = search.getElementsByTagName;  
+pub const getElementsById = search.getElementsById;
+pub const getElementsByAttribute = search.getElementsByAttribute;
+pub const getElementsByName = search.getElementsByName;
+pub const getElementsByAttributeName = search.getElementsByAttributeName;
 
-// //=========================================
-// // Collection based Elements Search
-// //=========================================
-// pub const getElementsByAttributePair = collection.getElementsByAttributePair;
-
-// pub const getElementsByClassName = collection.getElementsByClassName;
-// pub const getElementsByAttributeName = collection.getElementsByAttributeName;
-// pub const getElementsByTagName = collection.getElementsByTagName;
-// pub const getElementsByName = collection.getElementsByName;
 
 //====================================================================
 // Utilities
-pub const stringContains = attrs.stringContains;
-pub const stringEquals = attrs.stringEquals;
+pub const stringContains = search.stringContains;
+pub const stringEquals = search.stringEquals;
 
 // ***************************************************************************
 // ***************************************************************************

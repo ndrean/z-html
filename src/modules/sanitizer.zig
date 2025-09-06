@@ -58,9 +58,13 @@ pub const allowed_svg_animate = AttrSet.initComptime(.{ .{"attributeName"}, .{"v
 
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
 
+// iframe attributes with sandbox focus
+pub const allowed_iframe = AttrSet.initComptime(.{ .{"src"}, .{"sandbox"}, .{"srcdoc"}, .{"name"}, .{"loading"}, .{"width"}, .{"height"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+
 pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "a", &allowed_a },
     .{ "img", &allowed_img },
+    .{ "iframe", &allowed_iframe }, // Conditional support with sandbox validation
     .{ "div", &allowed_common },
     .{ "span", &allowed_common },
     .{ "p", &allowed_common },
@@ -113,6 +117,26 @@ pub fn isSafeUri(value: []const u8) bool {
 pub fn isCustomElement(tag_name: []const u8) bool {
     // Web Components spec: custom elements must contain a hyphen
     return std.mem.indexOf(u8, tag_name, "-") != null;
+}
+
+/// [sanitize] Check if iframe is safe (has sandbox attribute)
+fn isIframeSafe(element: *z.HTMLElement) bool {
+    // iframe is only safe if it has the sandbox attribute
+    if (!z.hasAttribute(element, "sandbox")) {
+        return false; // No sandbox = unsafe
+    }
+
+    // Additional validation: check src for dangerous protocols
+    if (z.getAttribute_zc(element, "src")) |src_value| {
+        // Block javascript: and data: protocols in src
+        if (std.mem.startsWith(u8, src_value, "javascript:") or
+            std.mem.startsWith(u8, src_value, "data:"))
+        {
+            return false;
+        }
+    }
+
+    return true; // Has sandbox and safe src
 }
 
 fn shouldRemoveSvgDescendant(tag_name: []const u8) bool {
@@ -374,9 +398,16 @@ fn handleKnownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: 
 
     // Standard HTML element - use strict whitelist
     if (ALLOWED_TAGS.get(tag_str)) |_| {
+        // Special handling for iframe - check sandbox requirement
+        if (std.mem.eql(u8, tag_str, "iframe")) {
+            if (!isIframeSafe(element)) {
+                // iframe without sandbox or with dangerous src - remove it
+                return removeAndContinue(context_ptr, node);
+            }
+        }
         collectDangerousAttributes(context_ptr, element, tag_str) catch return z._STOP;
     } else {
-        // Known tag but not in whitelist: eg script elements, iframe
+        // Known tag but not in whitelist: eg script elements
         return removeAndContinue(context_ptr, node);
     }
 
@@ -456,12 +487,12 @@ inline fn shouldRemoveTag(options: SanitizerOptions, tag: z.HtmlTag) bool {
     return switch (tag) {
         .script => options.remove_scripts,
         .style => options.remove_styles,
-        .iframe,
         .object,
         .embed,
         => true,
         else => false,
         // .form, .input, .button, .select, .textarea
+        // Note: iframe is handled separately with sandbox validation
     };
 }
 
@@ -656,6 +687,102 @@ pub fn sanitizePermissive(allocator: std.mem.Allocator, root_node: *z.DomNode) (
     });
 }
 
+test "iframe sandbox validation" {
+    const allocator = testing.allocator;
+
+    const test_html =
+        \\<iframe sandbox src="https://example.com">Safe iframe</iframe>
+        \\<iframe src="https://example.com">Unsafe - no sandbox</iframe>
+        \\<iframe sandbox src="javascript:alert('XSS')">Unsafe - dangerous src</iframe>
+        \\<iframe sandbox>Safe - empty sandbox, no src</iframe>
+    ;
+
+    const doc = try z.createDocFromString(test_html);
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    try sanitizeStrict(allocator, body);
+    const result = try z.outerNodeHTML(allocator, body);
+    defer allocator.free(result);
+
+    print("=== iframe test result ===\n{s}\n", .{result});
+
+    // Should keep safe sandboxed iframes
+    try testing.expect(std.mem.indexOf(u8, result, "Safe iframe") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Safe - empty sandbox") != null);
+
+    // Should remove unsafe iframes
+    try testing.expect(std.mem.indexOf(u8, result, "Unsafe - no sandbox") == null);
+    try testing.expect(std.mem.indexOf(u8, result, "Unsafe - dangerous src") == null);
+}
+
+test "big" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    const malicious =
+        \\<div style="background: url(javascript:alert('css'))">
+        \\  <button disabled hidden onclick="alert('XSS')" phx-click="increment">Potentially dangerous</button>
+        \\  <!-- a malicious comment -->
+        \\  <div data-time="{@current}"> The current value is: {@counter} </div>
+        \\  <a href="http://example.org/results?search=<img src=x onerror=alert('hello')>">URL Escaped</a>
+        \\  <a href="javascript:alert('XSS')">Dangerous, not escaped</a>
+        \\  <img src="javascript:alert('XSS')" alt="not escaped">
+        \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
+        \\  <iframe sandbox src="javascript:alert('XSS')" alt="not escaped"></iframe>
+        \\  <a href="data:text/html,<script>alert('XSS')</script>" alt="escaped">Safe escaped</a>
+        \\  <a href="https://example.com" class="link">Good link</a>
+        \\  <img src="data:text/html,<script>alert('XSS')</script>" alt="escaped">
+        \\  <iframe src="data:text/html,<script>alert('XSS')</script>" >Escaped</iframe>
+        \\  <iframe sandbox src="https://example.com" title"test iframe">Safe iframe</iframe>
+        \\  <img src="data:image/svg+xml,<svg onload=alert('XSS')" alt="escaped"></svg>">
+        \\  <img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==" alt="potential dangerous b64">
+        \\  <a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=">Potential dangerous b64</a>
+        \\  <img src="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=" alt="potential dangerous b64">
+        \\  <a href="file:///etc/passwd">Dangerous Local file access</a>
+        \\  <img src="file:///etc/passwd" alt="dangerous local file access">
+        \\  <p>Visit this link: <a href="https://example.com">example.com</a></p>
+        \\  <svg viewBox="0 0 100 100" onclick="alert('svg-xss')">
+        \\      <circle cx="50" cy="50" r="40" fill="blue"/>
+        \\      <script>alert('svg-script')</script>
+        \\      <foreignObject width="100" height="100">
+        \\        <div xmlns="http://www.w3.org/1999/xhtml">Evil content</div>
+        \\      </foreignObject>
+        \\      <animate attributeName="opacity" values="0;1" dur="2s" onbegin="alert('animate')"/>
+        \\      <path d="M10 10 L90 90" stroke="red"/>
+        \\      <text x="50" y="50" href="javascript:alert('text')">SVG Text</text>
+        \\  </svg>
+        \\  <my-button @click="handleClick" :disabled="isDisabled" class="btn">Custom Button</my-button>
+        \\  <pre> <code>push():</code>
+        \\ method adds one or more elements to the end of an array</pre>
+        \\</div>
+        \\<link href="/shared-assets/misc/link-element-example.css" rel="stylesheet">
+        \\<script>console.log("hi");</script>
+        \\<template><script>alert('XSS');</script><li id="{}">Item-"{}"</li></template>
+    ;
+
+    // try z.prettyPrint(z.elementToNode(body_elt));
+    // _ = try z.setInnerHTML(body_elt, malicious);
+    try z.parseString(doc, malicious);
+    const body = z.bodyNode(doc).?;
+    print("\n\n", .{});
+    // try z.prettyPrint(body);
+    print("\n\n", .{});
+    try sanitizeWithOptions(
+        allocator,
+        body,
+        .{
+            .skip_comments = true,
+            .remove_scripts = false,
+            .remove_styles = true,
+            .strict_uri_validation = true,
+            .allow_custom_elements = true,
+        },
+    );
+    try z.prettyPrint(body);
+}
+
 test "comprehensive HTML and SVG sanitization" {
     const allocator = testing.allocator;
 
@@ -666,7 +793,7 @@ test "comprehensive HTML and SVG sanitization" {
         \\  <p onmouseover="steal_data()" class="safe-class">Safe text</p>
         \\  <a href="javascript:alert('href')" title="Bad link">Bad link</a>
         \\  <a href="https://example.com" class="link">Good link</a>
-        \\  <!-- malicious comment -->
+        \\  <!-- potential malicious comment -->
         \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
         \\  <iframe src="evil.html"></iframe>
         \\  
@@ -688,14 +815,15 @@ test "comprehensive HTML and SVG sanitization" {
         \\    Custom Button
         \\  </my-button>
         \\  <vue-component v-if="showProfile" data-user-id="123">Vue Component</vue-component>
-        \\  <p> The <code>push()</code> method adds one or more elements to the end of an array
+        \\  <p> The <code>push()</code> method adds one or more elements to the end of an array</p>
         \\</div>
     ;
 
     const doc = try z.createDocFromString(malicious_input);
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
-    try z.prettyPrint(body);
+    print("\n=== initial\n", .{});
+    // try z.prettyPrint(body);
 
     // Test 1: Strict sanitization (no custom elements)
     try sanitizeWithOptions(allocator, body, .{
@@ -705,14 +833,15 @@ test "comprehensive HTML and SVG sanitization" {
         .strict_uri_validation = true,
         .allow_custom_elements = false,
     });
-    try z.prettyPrint(body);
+    print("\n=== After strict sanitization super strict ===\n", .{});
+    // try z.prettyPrint(body);
 
     // Normalize to clean up empty text nodes left by element removal
     const body_element = z.nodeToElement(body) orelse return;
     try z.normalize(allocator, body_element); // Standard browser-like normalization
 
-    print("\n=== After normalization ===\n", .{});
-    try z.prettyPrint(body);
+    // print("\n=== After normalization ===\n", .{});
+    // try z.prettyPrint(body);
 
     const strict_result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(strict_result);
@@ -760,7 +889,7 @@ test "comprehensive HTML and SVG sanitization" {
     });
 
     print("\n=== Permissive Sanitization (custom elements enabled) ===\n", .{});
-    try z.prettyPrint(body2);
+    // try z.prettyPrint(body2);
 
     const permissive_result = try z.outerNodeHTML(allocator, body2);
     defer allocator.free(permissive_result);

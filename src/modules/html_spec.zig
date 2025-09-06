@@ -31,6 +31,8 @@ pub const common_attrs = [_]AttrSpec{
     .{ .name = "style" },
     .{ .name = "title" },
     .{ .name = "lang" },
+    .{ .name = "width" },
+    .{ .name = "height" },
     .{ .name = "dir", .valid_values = &[_][]const u8{ "ltr", "rtl", "auto" } },
     .{ .name = "aria" }, // prefix match for aria-* attributes
     .{ .name = "data" }, // prefix match for data-* attributes
@@ -102,6 +104,8 @@ pub const img_attrs = [_]AttrSpec{
     .{ .name = "usemap" },
     .{ .name = "ismap", .valid_values = &[_][]const u8{""} }, // boolean
 } ++ common_attrs;
+
+pub const iframe_attrs = [_]AttrSpec{ .{ .name = "src" }, .{ .name = "sandbox" }, .{ .name = "srcdoc" }, .{ .name = "name" }, .{ .name = "loading" } } ++ common_attrs;
 
 /// Anchor-specific attributes
 pub const anchor_attrs = [_]AttrSpec{
@@ -192,6 +196,7 @@ pub const element_specs = [_]ElementSpec{
 
     // Media elements
     .{ .tag = "img", .allowed_attrs = &img_attrs, .void_element = true },
+    .{ .tag = "iframe", .allowed_attrs = &iframe_attrs, .void_element = true },
 
     // Table elements
     .{ .tag = "table", .allowed_attrs = &table_attrs },

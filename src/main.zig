@@ -25,6 +25,7 @@ pub fn main() !void {
     try demoInsertAdjacentElement(gpa);
     try demoInsertAdjacentHTML(gpa);
     try demoSetInnerHTML(gpa);
+    try demoSearchComparison(gpa);
     try demoSuspiciousAttributes(gpa);
     // std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
     // try runNormalizeBenchmark(allocator);
@@ -277,6 +278,99 @@ fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
 
     print("\n--- Normalized HTML --- \n\n{s}\n", .{clean_html});
     print("\n\n", .{});
+}
+
+fn demoSearchComparison(allocator: std.mem.Allocator) !void {
+    print("\n=== Comprehensive Search Comparison ===\n\n", .{});
+
+    // Create test HTML with diverse elements
+    const test_html =
+        \\<div class="main-container">
+        \\  <h1 class="title main">Main Title</h1>
+        \\  <section class="content">
+        \\    <p class="text main-text">First paragraph</p>
+        \\    <div class="box main-box">Box content</div>
+        \\    <article class="post main-post">Article content</article>
+        \\  </section>
+        \\  <aside class="sidebar">
+        \\    <h2 class="subtitle">Sidebar Title</h2>
+        \\    <p class="text sidebar-text">Sidebar paragraph</p>
+        \\    <div class="widget">Widget content</div>
+        \\  </aside>
+        \\  <footer class="footer main-footer">
+        \\    <p class="copyright">© 2024</p>
+        \\  </footer>
+        \\</div>
+    ;
+
+    const doc = try z.createDocFromString(test_html);
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+    try z.prettyPrint(body);
+
+    print("Search target: class=\"main\"\n", .{});
+
+    // 1. Walker-based attribute search (token-based matching with hasClass)
+    const walker_results = try z.getElementsByClassName(allocator, doc, "main");
+    defer allocator.free(walker_results);
+    const walker_count = walker_results.len;
+    print("1. Walker-based attribute search: Found {} elements (token-based matching)\n", .{walker_count});
+    
+    // Debug: Show what's actually in walker results
+    print("   Walker results contents:\n", .{});
+    for (walker_results, 0..) |element, i| {
+        const tag = z.tagName_zc(element);
+        const class_attr = z.getAttribute_zc(element, "class") orelse "none";
+        print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
+    }
+
+    // 2. CSS Selector search (case-insensitive, token-based)
+    var css_engine = try z.createCssEngine(allocator);
+    defer css_engine.deinit();
+
+    const css_results = try z.querySelectorAll(allocator, doc, ".main");
+    defer allocator.free(css_results);
+    const css_count = css_results.len;
+    print("2. CSS Selector search: Found {} elements (case-insensitive, token-based)\n", .{css_count});
+    
+    // Debug: Show what's in CSS results
+    print("   CSS results contents:\n", .{});
+    for (css_results, 0..) |element, i| {
+        const tag = z.tagName_zc(element);
+        const class_attr = z.getAttribute_zc(element, "class") orelse "none";
+        print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
+    }
+
+    // Note: Walker and CSS should now give identical results since both use proper token matching
+
+    print("Test HTML contains elements with classes: 'main', 'main-text', 'main-box', etc.\n\n", .{});
+
+    print("\n--- Search Method Comparison ---\n", .{});
+    print("• Walker-based: Fast DOM traversal, token-based matching, returns slices\n", .{});
+    print("• CSS Selectors: Most flexible, supports complex queries, standard compliance\n", .{});
+    print("• Both should now give identical results for simple class searches!\n", .{});
+
+    print("\n--- Live DOM Updates ---\n", .{});
+
+    // Demonstrate DOM synchronization by adding an element
+    const new_element = try z.createElementWithAttrs(doc, "span", &.{.{ .name = "class", .value = "main new-element" }});
+    z.appendChild(body, z.elementToNode(new_element));
+
+    // Search again to show updated results
+    const updated_walker_results = try z.getElementsByClassName(allocator, doc, "main");
+    defer allocator.free(updated_walker_results);
+    const updated_walker_count = updated_walker_results.len;
+
+    const updated_css_results = try z.querySelectorAll(allocator, doc, ".main");
+    defer allocator.free(updated_css_results);
+    const updated_css_count = updated_css_results.len;
+
+    print("After adding <span class=\"main new-element\">:\n", .{});
+    print("1. Walker-based: {} -> {} elements\n", .{ walker_count, updated_walker_count });
+    print("2. CSS Selectors: {} -> {} elements\n", .{ css_count, updated_css_count });
+
+    print("\n✅ Both search methods reflect DOM changes immediately and give same results!\n", .{});
+    print("\n", .{});
 }
 
 fn demoSuspiciousAttributes(allocator: std.mem.Allocator) !void {

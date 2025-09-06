@@ -5,7 +5,7 @@
 
 `zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
 
-This is useful for web scapping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
+This is useful for web scraping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
 
 The primitives exposed here stay as close as possible to `JavaScript` semantics.
 
@@ -18,7 +18,7 @@ This project exposes a significant / essential subset of all available `lexbor` 
   - fragment context-aware parsing
 - streaming and chunk processing
 - Serialization
-- Sanitization (not)
+- Sanitization
 - CSS selectors search with cached CSS selectors parsing
 - Support of `<template>` elements.
 - Attribute search
@@ -39,7 +39,7 @@ When a node is NOT attached to any document, you must manually destroy it.
 
 Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
 
-We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by ampping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consummed immediately whilst the allocated result can outlive the calling function.
+We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by mapping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consumed immediately whilst the allocated result can outlive the calling function.
 
 ## Examples
 
@@ -47,7 +47,7 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 You have several methods available.
 
-The `parseString` creates a `<head`> and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
 
 ```cpp
 const z = @import("zhtml");
@@ -119,7 +119,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
 
         try streamer.processChunk(li);
     }
-    const end_chunk = "</tbody></table></body></html>;";
+    const end_chunk = "</tbody></table></body></html>";
     print("chunk:  {s}\n", .{end_chunk});
     try streamer.processChunk(end_chunk);
     try streamer.endParsing();
@@ -186,7 +186,7 @@ fn demoParser(allocator: std.mem.Allocator) !void {
 }
 ```
 
-<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/parse-engine.png" with="300">
+<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/parse-engine.png" width="300">
 </p>
 
 You can use `setInnerHTML`:
@@ -209,15 +209,89 @@ test "setInnerHTML" {
   <img src="https://github.com/ndrean/z-html/blob/main/src/images/setinnerhtml.png">
 </p>
 
-#### Primary security on parsing
+### Security and parsing
 
-Suppose you have the following HTML string:
+#### Basic sanitation
+
+The `parseString` and `setInnerHTML` provide some basic HTML escaping.
+
+Suppose you have the following malicious HTML string:
 
 ```html
 <script>alert('XSS')</script>
 <img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">
+<p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p>
 <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>
 ```
+
+When you use `setInnerHTML` or `parseString`, you get this first barrier with escaped code:
+
+```html
+<script>alert('XSS')</script>
+<img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\">
+<p id=\"1\" phx-click=\"increment\" onclick="alert('XSS')">Click me</p>
+<a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a>
+```
+
+#### Enhanced sanitation
+
+You can go one step further with nuanced parsing that comes in different flavours:  `setInnerSafeHTML`, `setInnerSafeHTMLStrict`, `setInnerSafeHTMLPermissive`.
+
+Let's take a bigger HTML with `<svg>`, custom-elements with XSS injections coming mostly from `scr` and `href` attribute values.
+
+```html
+<div style="background: url(javascript:alert('css'))">
+  <button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\">Potentially dangerous</button>
+  <!-- a malicious comment -->
+  <div data-time=\"{@current}\"> The current value is: {@counter} </div>
+  <a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a>
+  <a href=\"javascript:alert('XSS')\">Dangerous, not escaped</a>
+  <img src=\"javascript:alert('XSS')\" alt=\"not escaped\">
+  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
+  <iframe src=\"javascript:alert('XSS')\" alt=\"not escaped\"></iframe>
+  <a href=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">Safe escaped</a>
+  <a href="https://example.com" class="link">Good link</a>
+  <img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\">
+  <iframe src=\"data:text/html,<script>alert('XSS')</script>\" >Escaped</iframe>
+  <iframe sandbox src="https://example.com" title"test iframe">Safe iframe</iframe>
+  <img src=\"data:image/svg+xml,<svg onload=alert('XSS')\" alt=\"escaped\"></svg>\">
+  <img src=\"data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoJ1hTUycpPjwvc3ZnPg==\" alt=\"potential dangerous b64\">
+  <a href=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\">Potential dangerous b64</a>
+  <img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=\" alt=\"potential dangerous b64\">
+  <a href=\"file:///etc/passwd\">Dangerous Local file access</a>
+  <img src=\"file:///etc/passwd\" alt=\"dangerous local file access\">
+  <p>Hello<i>there</i>, all<strong>good?</strong></p>
+  <p>Visit this link: <a href=\"https://example.com\">example.com</a></p>
+  <svg viewBox=\"0 0 100 100\" onclick=\"alert('svg-xss')\">
+    <circle cx=\"50\" cy=\"50\" r=\"40\" fill=\"blue\"/>
+    <script>alert('svg-script')</script>
+    <foreignObject width=\"100\" height=\"100\">
+      <div xmlns=\"http://www.w3.org/1999/xhtml\">Evil content</div>
+    </foreignObject>
+    <animate attributeName=\"opacity\" values=\"0;1\" dur=\"2s\" onbegin=\"alert('animate')\"/>
+    <path d=\"M10 10 L90 90\" stroke=\"red\"/>
+    <text x=\"50\" y=\"50\" href=\"javascript:alert('text')\">SVG Text</text>
+  </svg>
+  <phoenix-component phx-click=\"increment\" :if=\"show_component\" onclick=\"alert('custom')\">Phoenix LiveView Component</phoenix-component>
+  <my-button @click=\"handleClick\" :disabled=\"isDisabled\" class=\"btn\">Custom Button</my-button>
+  <vue-component v-if=\"showProfile\" data-user-id=\"123\">Vue Component</vue-component>
+  <p> The <code>push()</code> method adds one or more elements to the end of an array<p/>
+</div>
+<link href=\"/shared-assets/misc/link-element-example.css\" rel=\"stylesheet\">
+<script>console.log(\"hi\");</script>
+<template><li id=\"{}\">Item-"\{}\"</li></li></template>
+```
+
+When you use `setInnerSafeHTML`, you remove the main source of XSS injection, like comments, `on`-listeners, unknown 
+
+```html
+<img alt="escaped">
+<p id="1" phx-click="increment">Click me</p>
+<a href="http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;">URL Escaped</a>
+```
+
+
+
 
 ### Serialize
 
@@ -249,7 +323,7 @@ test "insertAdjacentHTML and serialize" {
   try z.insertAdjacentHTML(
         allocator,
         target,
-        "afterend",
+        .afterend,
         "<span class=\"after end\">After End</span>",
         false,
   );
@@ -257,7 +331,7 @@ test "insertAdjacentHTML and serialize" {
   try z.insertAdjacentHTML(
         allocator,
         target,
-        "afterbegin",
+        .afterbegin,
         "<span class=\"after begin\"></span>",
         false,
   );
@@ -265,7 +339,7 @@ test "insertAdjacentHTML and serialize" {
   try z.insertAdjacentHTML(
         allocator,
         target,
-        "beforebegin",
+        .beforebegin,
         "<span class=\"before begin\"></span>",
         false,
   );
@@ -283,12 +357,12 @@ test "insertAdjacentHTML and serialize" {
 
   std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
 
-  try z.prettyPrint()
+  try z.prettyPrint(z.elementToNode(body));
   print("{s}\n", .{clean_html});
 }
 ```
 
-<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" with="300"></p>
+<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" width="300"></p>
 
 ```txt
 <body>
@@ -349,106 +423,68 @@ We introduced a sanitization tool
 
 ## Search examples
 
-We have three type of search:
+We have three types of search available, each with different behaviors and use cases:
 
-- by attribute
-- by CSS selector
-- using collections
+### 1. Collection-based Search (Modern API)
 
-The search by attribute functions are DOM traverse based functions: `getElementById`, `getElementsById`, `getElementByTag`, `getElementByAttribute`, `getElementByAttrPair`, `getElementByDataAttribute`, `getElementByClass`.
-
-The search by CSS selectors uses the "CSS engine", based search, token based search, full text search on the following HTML:
-
-```cpp
-const html =
-        \\<div class="container main">Container element</div>
-        \\<p class="text bold">Bold paragraph</p>
-        \\<p class="text"><span class="text bold">Nested bold span</span></p>
-        \\<span class="bold text-xs">Span with multiple classes</span>
-        \\<div class="text-xs bold">Reversed class order</div>
-        \\<section class="main">Another main section</section>
-        \\<article class="container">Just container class</article>
-        \\<p class="text">Simple text class</p>
-        \\<div class="BOLD">Uppercase BOLD</div>
-        \\<span class="text-bold">Hyphenated similar class</span>
-        \\<div class="text bold extra">Three classes</div>
-        \\<div class="BOLD text">Mix the classes BOLD</div>
-        \\  <div class="bold text-xl">Bold and text-xl</div>
-        \\  <div class="bold">bold alone</div>
-        \\  <div class="text-xs">text-xs alone</div>
-        \\  <div class="bold text">reversed
-    ;
+```zig
+// Search-on-demand collections (browser-like behavior)
+var collection = try z.createCollectionByClassName(doc, "bold");
+defer collection.deinit();
+print("Found {} elements\n", .{collection.length()});
 ```
 
-== Testing class: 'bold' ===
-CSS Selector (.bold):     10 elements
-Walker-based search:     8 elements
-Collection-based:        1 elements
-Manual hasClass walk:    7 elements
-Note: Collection may differ for 'bold' due to exact string matching
-Note: CSS selectors are case-insensitive, so 'BOLD' matches '.bold'
+### 2. CSS Selector Search
 
-=== Testing class: 'text-xs' ===
-CSS Selector (.text-xs):     3 elements
-Walker-based search:     3 elements
-Collection-based:        1 elements
-Manual hasClass walk:    3 elements
-Note: Collection won't find 'text-xs' in multi-class attributes due to exact matching
+```zig  
+// Token-based, case-insensitive, most flexible
+const css_results = try z.querySelectorAll(allocator, doc, ".bold");
+defer allocator.free(css_results);
+print("Found {} elements\n", .{css_results.len});
+```
 
-=== Testing class: 'main' ===
-CSS Selector (.main):     2 elements
-Walker-based search:     2 elements
-Collection-based:        1 elements
-Manual hasClass walk:    2 elements
+### 3. Attribute-based Search
 
-=== Testing class: 'container' ===
-CSS Selector (.container):     2 elements
-Walker-based search:     2 elements
-Collection-based:        1 elements
-Manual hasClass walk:    2 elements
+```zig
+// Manual traversal with hasClass checking  
+var current_element = z.firstElementChild(body);
+while (current_element) |element| {
+    if (z.hasClass(element, "bold")) {
+        // Found matching element
+    }
+    current_element = z.nextElementSibling(element);
+}
+```
 
-=== Testing class: 'text bold' ===
-CSS Selector (.text bold):     0 elements
-Walker-based search:     0 elements
-Collection-based:        2 elements
-Manual hasClass walk:    0 elements
-Note: CSS found 0 - space in selector may not work as descendant selector here
-Note: Collection found 2 - exact string matching finds class='text bold' attributes
-Note: Walker/hasClass found 0 - they look for 'text bold' as a single class token
+### Live Comparison Test
 
-=== Testing class: 'nonexistent' ===
-CSS Selector (.nonexistent):     0 elements
-Walker-based search:     0 elements
-Collection-based:        0 elements
-Manual hasClass walk:    0 elements
+We provide a comprehensive test that demonstrates all three search approaches:
 
-=== CSS Selector Syntax Exploration ===
-'.text .bold': 1 elements
-'.text > .bold': 1 elements
-'.text.bold': 5 elements
-'p .bold': 1 elements
-'p > .bold': 1 elements
+**Test**: `"Comprehensive search comparison: Collection vs CSS vs Attributes"` in `src/modules/collection.zig`
 
-=== Class Search Behavior Summary ===
-• CSS Selectors: Token-based, order-independent, case-insensitive, handles multi-class correctly
-• Walker Search: Token-based, order-independent, case-sensitive, handles multi-class correctly
-• Collection Search: Exact string matching, order-dependent, case-sensitive, limited multi-class support
-• hasClass Method: Token-based, order-independent, case-sensitive, handles multi-class correctly
+When you run `zig build test`, you'll see output like:
 
-For class='bold text-xs' vs class='text-xs bold':
-• CSS/Walker/hasClass: Will find BOTH variations (order-independent)
-• Collection: Will only find exact string matches
+```txt
+=== Comprehensive Search Comparison ===
+Testing search for class 'bold' using 3 different approaches:
 
-For class='BOLD' vs '.bold' CSS selector:
-• CSS: Will match (case-insensitive)
-• Walker/hasClass/Collection: Won't match (case-sensitive)
+1. Collection-based search (exact string matching):
+   Found 1 elements with exact class='bold'
 
-For 'text bold' search:
-• CSS: Returns 0 - space in selector may be interpreted differently than expected
-• Walker/hasClass: Find 0 - look for 'text bold' as single class token
-• Collection: Finds elements with exact class='text bold' attribute value
-• This demonstrates different handling of spaces: CSS selectors vs class tokens vs string matching
+2. CSS Selector search (token-based, case-insensitive):  
+   Found 10 elements matching CSS selector '.bold'
 
+3. Attribute-based search (manual traversal with hasClass):
+   Found 8 elements using hasClass('bold')
+```
+
+**Key Differences:**
+
+- **Collection Search**: Exact string matching, finds only `class="bold"` exactly
+- **CSS Selector**: Token-based, case-insensitive, finds `bold`, `BOLD`, `text bold`, etc.  
+- **Attribute Search**: Token-based, case-sensitive, finds `bold` as class token in any position
+
+This demonstrates why different search methods return different results for the same query.
 
 ## Chunk Parsing vs Fragment Parsing
 
@@ -489,7 +525,6 @@ try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .bo
 
 - Cross-document node cloning to insert parsed fragments into target documents
 - results handling `getElements()` and `serialize()`
-
 
 ## Project details
 
@@ -545,7 +580,9 @@ zig build test --summary all
 ## Build
 
 ```sh
-zig build run -Doptimize=ReleaseFast # or Debug
+zig build run -Doptimize=Debug
+#
+zig build run -Doptimize=ReleaseFast
 ```
 
 ### Source: `lexbor` examples

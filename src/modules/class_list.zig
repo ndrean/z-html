@@ -37,24 +37,23 @@ test "classList_zc" {
 
 /// [classList] Check if element has specific class without creating the classList
 pub fn hasClass(element: *z.HTMLElement, class_name: []const u8) bool {
-    // if (!z.hasAttribute(element, "class")) return false;
+    // Get class string directly from lexbor (zero-copy)
+    const class_attr = z.getAttribute_zc(element, "class") orelse return false;
 
-    const class_list = classList_zc(element); //orelse return false;
-    return z.stringContains(class_list, class_name);
+    // Search for the class name in the class list (space-separated)
+    var iterator = std.mem.splitScalar(u8, class_attr, ' ');
+    while (iterator.next()) |class| {
+        // Trim whitespace and compare
+        const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
+        if (std.mem.eql(u8, trimmed_class, class_name)) {
+            return true;
+        }
+    }
+    return false;
 
-    // // Get class string directly from lexbor (zero-copy)
-    // const class_attr = z.getAttribute_zc(element, "class") orelse return false;
-
-    // // Search for the class name in the class list (space-separated)
-    // var iterator = std.mem.splitScalar(u8, class_attr, ' ');
-    // while (iterator.next()) |class| {
-    //     // Trim whitespace and compare
-    //     const trimmed_class = std.mem.trim(u8, class, " \t\n\r");
-    //     if (std.mem.eql(u8, trimmed_class, class_name)) {
-    //         return true;
-    //     }
-    // }
-    // return false;
+    // Old implementation using substring matching (incorrect for browser compliance)
+    // const class_list = classList_zc(element);
+    // return z.stringContains(class_list, class_name);
 }
 
 test "hasClass" {
