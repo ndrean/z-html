@@ -255,7 +255,7 @@ test "insertAdjacentHTML and serialize" {
 }
 ```
 
-<p align="center" src="https://github.com/ndrean/z-html/blob/main/src/images/inseradjacenthtml-all-positions.png" with="300"></p>
+<p align="center" src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" with="300"></p>
 
 ```txt
 <body><div id="container"><span class="before begin"></span><p id="target"><span class="after begin"></span>Target<span class="before end"></span></p><span class="after end">After End</span></div></body>
