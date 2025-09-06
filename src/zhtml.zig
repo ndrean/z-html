@@ -6,7 +6,7 @@ const chunks = @import("modules/chunks.zig");
 const tag = @import("modules/html_tags.zig");
 const Type = @import("modules/node_types.zig");
 const tree = @import("modules/dom_tree.zig");
-// const collection = @import("modules/collection.zig");
+const collection = @import("modules/collection.zig");
 const serialize = @import("modules/serializer.zig");
 const cleaner = @import("modules/cleaner.zig");
 const attrs = @import("modules/attributes.zig");
@@ -85,6 +85,7 @@ pub const Comment: type = opaque {};
 pub const DocumentFragment = opaque {};
 pub const HTMLTemplateElement = opaque {};
 pub const DomAttr = opaque {};
+pub const DomCollection = opaque {};
 
 pub const HtmlParser = opaque {};
 

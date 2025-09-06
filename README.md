@@ -7,7 +7,7 @@
 
 This is useful for web scapping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
 
-This binding stays as close as possible to `JavaScript` semantics.
+The primitives exposed here stay as close as possible to `JavaScript` semantics.
 
 **Features:**
 
@@ -27,16 +27,25 @@ This project exposes a significant / essential subset of all available `lexbor` 
 - DOM normalization with options (remove comments, whitespace, empty nodes)
 - Pretty printing
 
-> [!NOTE]
-> Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
-> We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version. For example, `textContent_zc`, `qualifiedName_zc` or `nodeName_zc` or `tagName_zc`.
-> With allocated versions, the data can outlive the current function.
+## `lexbor` DOM memory management: Document Ownership and zero-copy functions
+
+In `lexbor`, nodes belong to documents, and the document acts as the memory manager.
+
+When a node is attached to a document (either directly or through a fragment that gets appended), the document owns it.
+
+Every time you create a document, you need to call `destroyDocument()`: it automatically destroys ALL nodes that belong to it.
+
+When a node is NOT attached to any document, you must manually destroy it.
+
+Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
+
+We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with `qualifiedName(allocator, node)` or ``qualifiedName_zc(node)`. The non-allocated point to `lexbor` memory and must be consummed immediately whilst the allocated result can outlive the calling function.
 
 ## Examples
 
 ### Building a document & Parsing
 
-You have several methods avialable:
+You have several methods available:
 
 ```c
 const z = @import("zhtml");
@@ -258,7 +267,14 @@ test "insertAdjacentHTML and serialize" {
 <p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" with="300"></p>
 
 ```txt
-<body><div id="container"><span class="before begin"></span><p id="target"><span class="after begin"></span>Target<span class="before end"></span></p><span class="after end">After End</span></div></body>
+<body>
+  <div id="container">
+    <span class="before begin"></span>
+    <p id="target">
+      <span class="after begin"></span>Target<span class="before end"></span></p>
+    <span class="after end">After End</span>
+  </div>
+</body>
 ```
 
 ### Pretty print & DOM structure utilities
@@ -266,7 +282,13 @@ test "insertAdjacentHTML and serialize" {
 From the HTML string:
 
 ```html
-<body><div><button phx-click="increment">Click me</button> <p>Hello<i>there</i>, all<strong>good?</strong></p><p>Visit this link: <a href="https://example.com">example.com</a></p></div></body>
+<body>
+  <div>
+    <button phx-click="increment">Click me</button>
+    <p>Hello<i>there</i>, all <strong>good?</strong></p>
+    <p>Visit this link: <a href="https://example.com">example.com</a></p> 
+  </div>
+</body>
 ```
 
 You can output a nice colourful log with `prettyPrint`.
@@ -301,59 +323,17 @@ We introduced a sanitization tool
 }
 ```
 
-## `lexbor` DOM memory management: Document Ownership vs Manual Cleanup
-
-In `lexbor`, nodes belong to documents, and the document acts as the memory manager.
-
-When a node is attached to a document (either directly or through a fragment that gets appended), the document owns it.
-
-When `destroyDocument()` is called, it automatically destroys ALL nodes that belong to it.
-
-When a node is NOT attached to any document, you must manually destroy it.
-
-## Chunk Parsing vs Fragment Parsing
-
-HTML chunks are parsed as they stream into a full HTML document.
-
-Fragment parsing handles templates and components (for template engines, component frameworks, server-side rendering).
-
-| Feature | Fragment Parsing | Chunk Parsing |
-|--|--|--|
-| Purpose | Parse incomplete HTML snippets | Parse streaming into complete HTML |
-| Input | Template fragments, components | Network streams, large files chunks |
-| Context | Respects HTML parsing rules by context | Sequential document building |
-| Output | Parsed fragment nodes | Complete document |
-| Use Cases | Templates e.g. email, web components, component-based frameworks... | HTTP responses, file processing |
-
-## Parsing string methods available
-
-| Method | Context Awareness | Cross-Document | Memory Management | Use Case |
-|--|--|--|--|---|
-| `printDocStruct` | Full document | Single doc | Document owns all | Complete pages |
-| `setInnerHTML` | Parent element context | Same document | Element cleanup | Content replacement |
-| `parseFragment` | Explicit context | Cross-document via `parseFragmentInto` | Fragment result owns | Templates/components |
-
-The _fragment parsing_ gives you _context-aware parsing_ - meaning `<tr>` elements are parsed differently when you specify a `.table` context vs. `.body` context.
-
-- parse with context awareness:
-  
-```cpp
-const result = try z.parseFragment(allocator, "<tr><td>Data</td></tr>", .table);
-defer result.deinit();
-```
-
-- into an existing document:
-
-```cpp
-try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .body);
-```
-
-- Cross-document node cloning to insert parsed fragments into target documents
-- results handling `getElements()` and `serialize()`
-
 ## Search examples
 
-We apply CSS selectors based search, token based search, full text search on the following HTML:
+We have three type of search:
+
+- by attribute
+- by CSS selector
+- using collections
+
+The search by attribute functions are DOM traverse based functions: `getElementById`, `getElementsById`, `getElementByTag`, `getElementByAttribute`, `getElementByAttrPair`, `getElementByDataAttribute`, `getElementByClass`.
+
+The search by CSS selectors uses the "CSS engine", based search, token based search, full text search on the following HTML:
 
 ```cpp
 const html =
@@ -444,6 +424,48 @@ For 'text bold' search:
 • Walker/hasClass: Find 0 - look for 'text bold' as single class token
 • Collection: Finds elements with exact class='text bold' attribute value
 • This demonstrates different handling of spaces: CSS selectors vs class tokens vs string matching
+
+
+## Chunk Parsing vs Fragment Parsing
+
+HTML chunks are parsed as they stream into a full HTML document.
+
+Fragment parsing handles templates and components (for template engines, component frameworks, server-side rendering).
+
+| Feature | Fragment Parsing | Chunk Parsing |
+|--|--|--|
+| Purpose | Parse incomplete HTML snippets | Parse streaming into complete HTML |
+| Input | Template fragments, components | Network streams, large files chunks |
+| Context | Respects HTML parsing rules by context | Sequential document building |
+| Output | Parsed fragment nodes | Complete document |
+| Use Cases | Templates e.g. email, web components, component-based frameworks... | HTTP responses, file processing |
+
+## Parsing string methods available
+
+| Method | Context Awareness | Cross-Document | Memory Management | Use Case |
+|--|--|--|--|---|
+| `printDocStruct` | Full document | Single doc | Document owns all | Complete pages |
+| `setInnerHTML` | Parent element context | Same document | Element cleanup | Content replacement |
+| `parseFragment` | Explicit context | Cross-document via `parseFragmentInto` | Fragment result owns | Templates/components |
+
+The _fragment parsing_ gives you _context-aware parsing_ - meaning `<tr>` elements are parsed differently when you specify a `.table` context vs. `.body` context.
+
+- parse with context awareness:
+  
+```cpp
+const result = try z.parseFragment(allocator, "<tr><td>Data</td></tr>", .table);
+defer result.deinit();
+```
+
+- into an existing document:
+
+```cpp
+try z.parseFragmentInto(allocator, target_doc, container, "<p>Fragment</p>", .body);
+```
+
+- Cross-document node cloning to insert parsed fragments into target documents
+- results handling `getElements()` and `serialize()`
+
 
 ## Project details
 
