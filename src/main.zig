@@ -20,6 +20,7 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
+    try demoTemplate(gpa);
     try demoParser(gpa);
     try demoStreamParser(gpa);
     try demoInsertAdjacentElement(gpa);
@@ -27,10 +28,95 @@ pub fn main() !void {
     try demoSetInnerHTML(gpa);
     try demoSearchComparison(gpa);
     try demoSuspiciousAttributes(gpa);
+    try demoFetchContent(gpa);
     // std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
     // try runNormalizeBenchmark(allocator);
     // try newNormalizeBencharmark(allocator);
     // try runPerformanceBenchmark(allocator);
+}
+
+fn demoTemplate(allocator: std.mem.Allocator) !void {
+    const html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+        \\
+        \\<template id="productrow">
+        \\  <tr>
+        \\    <td class="record">Code: 1</td>
+        \\    <td>Name: 1</td>
+        \\  </tr>
+        \\</template>
+    ;
+
+    // eliminate all the whitespace between tags
+    const normed_html = try z.normalizeText(allocator, html);
+    defer allocator.free(normed_html);
+
+    const doc = try z.createDocFromString(normed_html);
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    const template_elt = z.getElementById(
+        body,
+        "productrow",
+    ).?;
+
+    const tbody_elt = z.getElementByTag(body, .tbody);
+    const tbody_node = z.elementToNode(tbody_elt.?);
+
+    // add twice the template
+    try z.useTemplateElement(template_elt, tbody_node);
+    try z.useTemplateElement(template_elt, tbody_node);
+
+    const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(resulting_html);
+
+    const expected_pretty_html =
+        \\<body>
+        \\  <table id="producttable">
+        \\    <thead>
+        \\      <tr>
+        \\        <td>UPC_Code</td>
+        \\        <td>Product_Name</td>
+        \\      </tr>
+        \\    </thead>
+        \\    <tbody>
+        \\      <!-- existing data could optionally be included here -->
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\      <tr>
+        \\        <td class="record">Code: 1</td>
+        \\        <td>Name: 1</td>
+        \\      </tr>
+        \\    </tbody>
+        \\  </table>
+        \\  <template id="productrow">
+        \\    <tr>
+        \\      <td class="record">Code: 1</td>
+        \\      <td>Name: 1</td>
+        \\    </tr>
+        \\  </template>
+        \\</body>
+    ;
+
+    const expected_serialized_html = try z.normalizeText(allocator, expected_pretty_html);
+    defer allocator.free(expected_serialized_html);
+
+    // check resulting HTML
+    try std.testing.expectEqualStrings(expected_serialized_html, resulting_html);
+
+    // try z.printDocumentStructure(doc);
 }
 
 fn demoParser(allocator: std.mem.Allocator) !void {
@@ -52,7 +138,7 @@ fn demoParser(allocator: std.mem.Allocator) !void {
         );
         defer allocator.free(li);
 
-        try parser.insertFragment(ul, li, .ul, false);
+        try parser.insertFragment(ul, li, .ul, .none);
     }
     print("\n === Demonstrate parser engine reuse ===\n\n", .{});
     print("\n Insert interpolated <li id=\"item-X\"> Item X</li>\n\n", .{});
@@ -174,7 +260,7 @@ fn demoInsertAdjacentElement(allocator: std.mem.Allocator) !void {
     try z.prettyPrint(body);
 
     // Normalize whitespace for clean comparison
-    const clean_html = try z.normalizeText(allocator, html, .{});
+    const clean_html = try z.normalizeText(allocator, html);
     defer allocator.free(clean_html);
 
     const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\">After End</span></div></body>";
@@ -203,7 +289,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         target,
         .beforeend,
         "<span class=\"before end\"></span>",
-        false,
+        .none,
     );
 
     try z.insertAdjacentHTML(
@@ -211,7 +297,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         target,
         "afterend",
         "<span class=\"after end\">After End</span>",
-        false,
+        .none,
     );
 
     try z.insertAdjacentHTML(
@@ -219,7 +305,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         target,
         "afterbegin",
         "<span class=\"after begin\"></span>",
-        false,
+        .none,
     );
 
     try z.insertAdjacentHTML(
@@ -227,7 +313,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
         target,
         "beforebegin",
         "<span class=\"before begin\"></span>",
-        false,
+        .none,
     );
 
     // Show result after insertAdjacentElement
@@ -237,7 +323,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
     try z.prettyPrint(body);
 
     // Normalize whitespace for clean comparison
-    const clean_html = try z.normalizeText(allocator, html, .{});
+    const clean_html = try z.normalizeText(allocator, html);
     defer allocator.free(clean_html);
 
     const expected = "<body><div id=\"container\"><span class=\"before begin\"></span><p id=\"target\"><span class=\"after begin\"></span>Target<span class=\"before end\"></span></p><span class=\"after end\">After End</span></div></body>";
@@ -269,7 +355,7 @@ fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
     defer allocator.free(html_new_div);
 
     // Normalize whitespace for clean comparison
-    const clean_html = try z.normalizeText(allocator, html_new_div, .{});
+    const clean_html = try z.normalizeText(allocator, html_new_div);
     defer allocator.free(clean_html);
 
     const expected = "<p class=\"new-content\">New Content</p>";
@@ -315,7 +401,7 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     defer allocator.free(walker_results);
     const walker_count = walker_results.len;
     print("1. Walker-based attribute search: Found {} elements (token-based matching)\n", .{walker_count});
-    
+
     // Debug: Show what's actually in walker results
     print("   Walker results contents:\n", .{});
     for (walker_results, 0..) |element, i| {
@@ -332,7 +418,7 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     defer allocator.free(css_results);
     const css_count = css_results.len;
     print("2. CSS Selector search: Found {} elements (case-insensitive, token-based)\n", .{css_count});
-    
+
     // Debug: Show what's in CSS results
     print("   CSS results contents:\n", .{});
     for (css_results, 0..) |element, i| {
@@ -390,14 +476,40 @@ fn demoSuspiciousAttributes(allocator: std.mem.Allocator) !void {
     print("\n\n", .{});
 }
 
+fn demoFetchContent(allocator: std.mem.Allocator) !void {
+    const url = "https://example.com";
+    var client: std.http.Client = .{
+        .allocator = allocator,
+    };
+    defer client.deinit();
+
+    const stdout_writer_buf: []u8 = try allocator.alloc(u8, 4096);
+    defer allocator.free(stdout_writer_buf);
+    var file_writer: std.fs.File.Writer = std.fs.File.stdout().writer(stdout_writer_buf);
+    const writer_interface: *std.Io.Writer = &file_writer.interface;
+    _ = writer_interface;
+
+    const resp = try client.fetch(.{
+        .location = .{
+            .url = url,
+        },
+        .method = .GET,
+    });
+
+    std.debug.assert(resp.status == .ok);
+    try file_writer.interface.flush();
+}
+
 fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
-    var html_builder: std.ArrayList(u8) = .empty;
-    defer html_builder.deinit(allocator);
+    // var html_builder: std.ArrayList(u8) = .empty;
+    const initBuffer = try allocator.alloc(u8, 25_000);
+    var html_builder: std.mem.Allocating = .initOwnedSlice(allocator, initBuffer);
+    defer html_builder.deinit();
 
     // Pre-allocate capacity for the HTML builder (estimate ~25KB for this test)
-    try html_builder.ensureTotalCapacity(allocator, 25_000);
+    // try html_builder.ensureTotalCapacity(allocator, 25_000);
 
-    try html_builder.appendSlice(allocator,
+    try html_builder.writer.writeAll(
         \\<html>
         \\<body>
         \\  <div class="container">

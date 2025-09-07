@@ -180,7 +180,10 @@ pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
 }
 
 /// [template] Clone the content of a template element into a target node
-pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
+// pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
+pub fn useTemplateElement(template_elt: *z.HTMLElement, target: *z.DomNode) !void {
+    if (!z.isTemplate(z.elementToNode(template_elt))) return Err.NotATemplateElement;
+    const template = z.elementToTemplate(template_elt).?;
     const template_content = templateContent(template);
     const content_node = z.fragmentToNode(template_content);
 
@@ -220,8 +223,8 @@ test "create template programmatically" {
     try testing.expect(z.isNodeEmpty(body));
 
     // clone twice the template content into the DOM
-    try useTemplateElement(template, body);
-    try useTemplateElement(template, body);
+    try useTemplateElement(template_elt, body);
+    try useTemplateElement(template_elt, body);
 
     const child_nodes = try z.childNodes(
         testing.allocator,
@@ -234,7 +237,7 @@ test "create template programmatically" {
     z.destroyTemplate(template);
 }
 
-test "use template string" {
+test "use template element" {
     const allocator = testing.allocator;
 
     const pretty_html =
@@ -268,7 +271,7 @@ test "use template string" {
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
 
-    const txt = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    const txt = try z.outerNodeHTML(allocator, body);
     defer allocator.free(txt);
 
     // check body serialization (remove whitespaces and empty text nodes)
@@ -277,12 +280,12 @@ test "use template string" {
         txt,
     );
 
-    const template_elt = z.getElementById(body, "productrow");
-    defer z.destroyNode(z.elementToNode(template_elt.?));
-    try testing.expect(isTemplate(z.elementToNode(template_elt.?)));
-    try testing.expect(z.isNodeEmpty(z.elementToNode(template_elt.?)));
+    const template_elt = z.getElementById(body, "productrow").?;
+    defer z.destroyNode(z.elementToNode(template_elt));
+    try testing.expect(isTemplate(z.elementToNode(template_elt)));
+    try testing.expect(z.isNodeEmpty(z.elementToNode(template_elt)));
 
-    const temp_html = try z.outerHTML(allocator, template_elt.?);
+    const temp_html = try z.outerHTML(allocator, template_elt);
     defer allocator.free(temp_html);
 
     // check template serialization
@@ -291,13 +294,16 @@ test "use template string" {
         temp_html,
     );
 
-    const template = z.elementToTemplate(template_elt.?).?;
+    // const template = z.elementToTemplate(template_elt.?).?;
     const tbody = z.getElementByTag(body, .tbody);
     const tbody_node = z.elementToNode(tbody.?);
 
+    const failure = useTemplateElement(tbody.?, tbody_node);
+    try testing.expectError(Err.NotATemplateElement, failure);
+
     // add twice the template
-    try useTemplateElement(template, tbody_node);
-    try useTemplateElement(template, tbody_node);
+    try useTemplateElement(template_elt, tbody_node);
+    try useTemplateElement(template_elt, tbody_node);
 
     const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);

@@ -343,7 +343,6 @@ test "get & set NodeTextContent and escape option" {
 
     try testing.expectEqualStrings("Hello, world!", text_content);
 
-    // const options = z.TextOptions{ .escape = true };
     const inner_text = z.firstChild(z.elementToNode(element));
     try replaceText(inner_text.?, "<script>alert('xss')</script> & \"quotes\"");
 

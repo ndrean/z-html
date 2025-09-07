@@ -85,6 +85,10 @@ pub fn build(b: *std.Build) void {
         // with kcov
         unit_tests.setExecCmd(&[_]?[]const u8{
             "kcov",
+            "--clean",
+            "--include-path=src/modules/",
+            "--exclude-path=lexbor_src_2.5.0/, src/misc-files",
+
             //"--path-strip-level=3", // any kcov flags can be specified here
             "kcov-output", // output dir for kcov
             null, // to get zig to use the --test-cmd-bin flag
