@@ -159,12 +159,12 @@ pub fn createElementWithAttrs(
     if (attrs.len == 0) return element;
 
     for (attrs) |attr| {
-        _ = z.setAttributes(
+        z.setAttributes(
             element,
             &.{
                 z.AttributePair{ .name = attr.name, .value = attr.value },
             },
-        );
+        ) orelse return Err.SetAttributeFailed;
     }
     return element;
 }
@@ -1361,7 +1361,7 @@ test "insertAdjacentElement - all positions & invalid" {
         \\</body>
     ;
 
-    const expected = try z.normalizeText(allocator, pretty_expected, .{});
+    const expected = try z.normalizeText(allocator, pretty_expected);
     defer allocator.free(expected);
     try testing.expectEqualStrings(expected, html);
 }
@@ -1415,11 +1415,7 @@ test "insertAdjacentElement - cloning into an empty target" {
         \\</body>
     ;
 
-    const expectation = try z.normalizeText(
-        allocator,
-        pretty_expectation,
-        .{},
-    );
+    const expectation = try z.normalizeText(allocator, pretty_expectation);
     defer allocator.free(expectation);
 
     try testing.expectEqualStrings(
@@ -1457,8 +1453,8 @@ fn insertChildNodesAfter(reference_node: *z.DomNode, parent_node: *z.DomNode) vo
 /// ## Example
 /// ```zig
 /// const target = try z.getElementById(doc, "my-element");
-/// try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>New <em>content</em></p>", false);
-/// try insertAdjacentHTML(allocator, target.?, "beforeend", "<p>New content</p>", false);
+/// try insertAdjacentHTML(allocator, target.?, .beforeend, "<p>New <em>content</em></p>", .strict);
+/// try insertAdjacentHTML(allocator, target.?, "beforeend", "<p>New content</p>", .permissive);
 /// ---
 /// ```
 pub fn insertAdjacentHTML(
@@ -1466,7 +1462,7 @@ pub fn insertAdjacentHTML(
     target: *z.HTMLElement,
     position: anytype,
     html: []const u8,
-    sanitizer_enabled: bool,
+    sanitizer: z.SanitizeOptions,
 ) !void {
     const T = @TypeOf(position);
     const pos_enum: InsertPosition = switch (@typeInfo(T)) {
@@ -1496,7 +1492,7 @@ pub fn insertAdjacentHTML(
     const fragment_root = try parser.parseStringContext(
         html,
         .body,
-        sanitizer_enabled,
+        sanitizer,
     );
     defer z.destroyNode(fragment_root);
 
@@ -1530,7 +1526,7 @@ test "enum / string insertAdjacentHTML" {
         \\  <div id="target">Original</div>
         \\</body>
     ;
-    const init_html = try z.normalizeText(allocator, pretty_html, .{});
+    const init_html = try z.normalizeText(allocator, pretty_html);
     defer allocator.free(init_html);
     const doc = try z.createDocFromString(init_html);
     defer destroyDocument(doc);
@@ -1539,13 +1535,13 @@ test "enum / string insertAdjacentHTML" {
 
     const target = z.getElementById(body, "target");
 
-    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>Before Begin</p>", false);
+    try insertAdjacentHTML(allocator, target.?, .beforebegin, "<p>Before Begin</p>", .strict);
 
-    try insertAdjacentHTML(allocator, target.?, "afterbegin", "<span>After Begin</span>", false);
+    try insertAdjacentHTML(allocator, target.?, "afterbegin", "<span>After Begin</span>", .strict);
 
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span>Before End</span>", false);
+    try insertAdjacentHTML(allocator, target.?, .beforeend, "<span>Before End</span>", .strict);
 
-    try insertAdjacentHTML(allocator, target.?, .afterend, "<p>After End</p>", false);
+    try insertAdjacentHTML(allocator, target.?, .afterend, "<p>After End</p>", .strict);
 
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
@@ -1565,18 +1561,18 @@ test "enum / string insertAdjacentHTML" {
         \\</body>
     ;
 
-    const expected_html = try z.normalizeText(allocator, expected_pretty_html, .{});
+    const expected_html = try z.normalizeText(allocator, expected_pretty_html);
     defer allocator.free(expected_html);
     // const expected = "<body><p>Before Begin</p><div id=\"target\"><span>After Begin</span>Original<span>Before End</span></div><p>After End</p></body>";
     // try testing.expectEqualStrings(expected_html, html);
 
     // Test 5: Error handling for invalid position string
-    const invalid_result = insertAdjacentHTML(allocator, target.?, "invalid", "<p>Test</p>", false);
+    const invalid_result = insertAdjacentHTML(allocator, target.?, "invalid", "<p>Test</p>", .strict);
     try testing.expectError(Err.InvalidPosition, invalid_result);
 
     // Test 6: More natural usage examples
-    try insertAdjacentHTML(allocator, target.?, .beforeend, "<em>Direct enum</em>", false);
-    try insertAdjacentHTML(allocator, target.?, "beforeend", "<strong>Direct string</strong>", false);
+    try insertAdjacentHTML(allocator, target.?, .beforeend, "<em>Direct enum</em>", .strict);
+    try insertAdjacentHTML(allocator, target.?, "beforeend", "<strong>Direct string</strong>", .strict);
 }
 
 test "insertAdjacentHTML - all positions" {
@@ -1593,7 +1589,7 @@ test "insertAdjacentHTML - all positions" {
         target.?,
         .beforebegin,
         "<p> before-begin </p>",
-        false,
+        .permissive,
     );
 
     try insertAdjacentHTML(
@@ -1601,7 +1597,7 @@ test "insertAdjacentHTML - all positions" {
         target.?,
         .afterbegin,
         "<span> after-begin </span>",
-        false,
+        .permissive,
     );
 
     try insertAdjacentHTML(
@@ -1609,7 +1605,7 @@ test "insertAdjacentHTML - all positions" {
         target.?,
         .beforeend,
         "<span> before-end </span>",
-        false,
+        .permissive,
     );
 
     try insertAdjacentHTML(
@@ -1617,7 +1613,7 @@ test "insertAdjacentHTML - all positions" {
         target.?,
         .afterend,
         "<p> after-end </p>",
-        false,
+        .permissive,
     );
 
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
@@ -1633,7 +1629,7 @@ test "insertAdjacentHTML - all positions" {
         \\</body>
     ;
 
-    const expected = try z.normalizeText(allocator, pretty_expected, .{});
+    const expected = try z.normalizeText(allocator, pretty_expected);
     defer allocator.free(expected);
     try testing.expectEqualStrings(expected, html);
 }
@@ -1653,7 +1649,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             target.?,
             .afterend,
             "<p> after-end: 1 </p><p> after-end: 2 </p><span> after-end: 3 </span>",
-            false,
+            .permissive,
         );
 
         try insertAdjacentHTML(
@@ -1661,7 +1657,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             target.?,
             .beforeend,
             "<p> before-end: 1 </p><p> before-end: 2 </p><span> before-end: 3 </span>",
-            false,
+            .permissive,
         );
 
         try insertAdjacentHTML(
@@ -1669,7 +1665,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             target.?,
             .afterbegin,
             "<p> after-begin: 1 </p><p> after-begin: 2 </p><span> after-begin: 3 </span>",
-            false,
+            .permissive,
         );
 
         try insertAdjacentHTML(
@@ -1677,7 +1673,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             target.?,
             .beforebegin,
             "<p> before-begin: 1 </p><p> before-begin: 2 </p><span> before-begin: 3 </span>",
-            false,
+            .permissive,
         );
 
         try insertAdjacentHTML(
@@ -1685,7 +1681,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             target.?,
             .beforebegin,
             "<p> before-begin: 12 </p><p> before-begin: 22 </p><span> before-begin: 32 </span>",
-            false,
+            .permissive,
         );
 
         const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
@@ -1703,7 +1699,7 @@ test "insertAdjacentHTML - preserve order with multiple elements" {
             \\
         ;
 
-        const expected = try z.normalizeText(allocator, pretty_html, .{});
+        const expected = try z.normalizeText(allocator, pretty_html);
         defer allocator.free(expected);
 
         try testing.expectEqualStrings(expected, html);
@@ -2327,7 +2323,6 @@ test "bigger test with string-to-DOM scenarios" {
         const normalized_html = try z.normalizeText(
             allocator,
             serialized_html,
-            .{},
         );
         defer allocator.free(normalized_html);
 
@@ -2343,7 +2338,6 @@ test "bigger test with string-to-DOM scenarios" {
         const normalized_expected = try z.normalizeText(
             allocator,
             expected_html,
-            .{},
         );
         defer allocator.free(normalized_expected);
 
@@ -2392,7 +2386,7 @@ test "bigger test with string-to-DOM scenarios" {
             \\  </ul>
             \\</div>
         ;
-        const expected_result = try z.normalizeText(allocator, expected_pretty_result, .{});
+        const expected_result = try z.normalizeText(allocator, expected_pretty_result);
         defer allocator.free(expected_result);
 
         try testing.expectEqualStrings(expected_result, result);
@@ -2427,7 +2421,7 @@ test "bigger test with string-to-DOM scenarios" {
                 app_div.?,
                 .beforeend,
                 updated_content,
-                false,
+                .permissive,
             );
             // _ = try z.setInnerHTML(
             //     allocator,
@@ -2453,7 +2447,7 @@ test "bigger test with string-to-DOM scenarios" {
             \\    </div>
             \\  </div>
         ;
-        const expected_result = try z.normalizeText(allocator, expected_pretty_result, .{});
+        const expected_result = try z.normalizeText(allocator, expected_pretty_result);
         defer allocator.free(expected_result);
 
         try testing.expectEqualStrings(expected_result, result);

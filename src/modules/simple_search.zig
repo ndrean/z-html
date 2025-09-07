@@ -2,6 +2,51 @@
 //!
 //! This module provides getElementsByX functions that return []const *z.HTMLElement
 //! using the fast walker traversal system instead of heavy C collection wrappers.
+//!
+//! /// GENERIC DOM SEARCH PATTERN
+//!
+//! GENERIC DOM SEARCH PATTERN
+//!
+//! The search functions below use a generic pattern from walker.zig that allows
+//! efficient DOM traversal with custom matching logic. Here's how it works:
+//!
+//! **Pattern Structure:**
+//! 1. Define a Context struct with mandatory fields:
+//!    - `found_element: ?*z.HTMLElement` (for single element search)
+//!    - `matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int` (callback)
+//!    - Custom fields for search criteria (target_id, target_class, etc.)
+//!
+//! 2. Implement the matcher function that:
+//!    - Returns `z._CONTINUE` to keep searching
+//!    - Returns `z._STOP` when match found (sets `found_element`)
+//!
+//! 3. Call `z.genSearchElement(ContextType, root_node, &context_instance)`
+//!
+//! **Example Pattern:**
+//! ```zig
+//! const MyContext = struct {
+//!     target: []const u8,
+//!     found_element: ?*z.HTMLElement = null,
+//!     matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int,
+//!
+//!     fn implement(node: *z.DomNode, ctx: *@This()) callconv(.c) c_int {
+//!         // Your matching logic here
+//!         if (matches_criteria(node, ctx.target)) {
+//!             ctx.found_element = z.nodeToElement(node);
+//!             return z._STOP;
+//!         }
+//!         return z._CONTINUE;
+//!     }
+//! };
+//! ```
+//!
+//! This pattern provides:
+//! - Type-safe context passing
+//! - Efficient single-pass DOM traversal
+//! - Early termination on first match
+//! - Zero heap allocation for search logic
+//!
+//! See walker.zig for genSearchElements() (multiple results) and genProcessAll() (side effects)
 
 const std = @import("std");
 const z = @import("../zhtml.zig");
@@ -183,166 +228,9 @@ pub fn getElementsByAttributeName(allocator: std.mem.Allocator, doc: *z.HTMLDocu
 }
 
 //=============================================================================
-// TESTS
-//=============================================================================
-
-test "getElementsByClassName with token-based matching" {
-    const allocator = testing.allocator;
-    const html = "<div><h1 class='title main'>Main Title</h1><p class='text main-text'>Paragraph</p><footer class='footer main-footer'>Footer</footer></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-
-    // Should find only the h1 with "main" as a token
-    const results = try getElementsByClassName(allocator, doc, "main");
-    defer allocator.free(results);
-
-    try testing.expect(results.len == 1);
-    const tag = z.tagName_zc(results[0]);
-    const class_attr = z.getAttribute_zc(results[0], "class").?;
-    try testing.expectEqualStrings("H1", tag);
-    try testing.expectEqualStrings("title main", class_attr);
-}
-
-test "getElementsByTagName case sensitivity" {
-    const allocator = testing.allocator;
-    const html = "<div><p>Para 1</p><P>Para 2</P><span>Span</span></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-
-    // Lexbor normalizes to uppercase
-    const results = try getElementsByTagName(allocator, doc, "P");
-    defer allocator.free(results);
-
-    try testing.expect(results.len == 2);
-}
-
-test "getElementsById exact matching" {
-    const allocator = testing.allocator;
-    const html = "<div><p id='test'>Found</p><p id='test-suffix'>Not found</p></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-
-    const results = try getElementsById(allocator, doc, "test");
-    defer allocator.free(results);
-
-    try testing.expect(results.len == 1);
-    const id_attr = z.getAttribute_zc(results[0], "id").?;
-    try testing.expectEqualStrings("test", id_attr);
-}
-
-test "getElementsByAttributeName finds any element with attribute" {
-    const allocator = testing.allocator;
-    const html = "<div><p id='foo'>Has ID</p><span data-value='bar'>Has data</span><div>No attributes</div></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-
-    const id_results = try getElementsByAttributeName(allocator, doc, "id");
-    defer allocator.free(id_results);
-    try testing.expect(id_results.len == 1);
-
-    const data_results = try getElementsByAttributeName(allocator, doc, "data-value");
-    defer allocator.free(data_results);
-    try testing.expect(data_results.len == 1);
-
-    const nonexistent_results = try getElementsByAttributeName(allocator, doc, "nonexistent");
-    defer allocator.free(nonexistent_results);
-    try testing.expect(nonexistent_results.len == 0);
-}
-
-test "comparison with CSS selectors" {
-    const allocator = testing.allocator;
-    const html = "<div><h1 class='title main'>Title</h1><p class='text main-text'>Para</p></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-
-    // Walker-based search (token matching)
-    const walker_results = try getElementsByClassName(allocator, doc, "main");
-    defer allocator.free(walker_results);
-
-    // CSS selector search (token matching, case insensitive)
-    const css_results = try z.querySelectorAll(allocator, doc, ".main");
-    defer allocator.free(css_results);
-
-    // Both should find the same element(s) - the h1 with "main" token
-    try testing.expect(walker_results.len == css_results.len);
-    try testing.expect(walker_results.len == 1);
-
-    const walker_class = z.getAttribute_zc(walker_results[0], "class").?;
-    const css_class = z.getAttribute_zc(css_results[0], "class").?;
-    try testing.expectEqualStrings(walker_class, css_class);
-    try testing.expectEqualStrings("title main", walker_class);
-}
-
-test "single element functions return first match" {
-    const html = "<div><h1 class='main'>First</h1><h2 class='main'>Second</h2></div>";
-
-    const doc = try z.createDocFromString(html);
-    defer z.destroyDocument(doc);
-    const body = z.bodyNode(doc).?;
-
-    // Should return first matching element
-    const element = getElementByClass(body, "main");
-    try testing.expect(element != null);
-
-    const tag = z.tagName_zc(element.?);
-    try testing.expectEqualStrings("H1", tag);
-
-    // Non-existent should return null
-    const missing = getElementByClass(body, "nonexistent");
-    try testing.expect(missing == null);
-}
-
-//=============================================================================
 // Single element search functions
 //=============================================================================
 
-/// GENERIC DOM SEARCH PATTERN
-///
-/// The search functions below use a generic pattern from walker.zig that allows
-/// efficient DOM traversal with custom matching logic. Here's how it works:
-///
-/// **Pattern Structure:**
-/// 1. Define a Context struct with mandatory fields:
-///    - `found_element: ?*z.HTMLElement` (for single element search)
-///    - `matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int` (callback)
-///    - Custom fields for search criteria (target_id, target_class, etc.)
-///
-/// 2. Implement the matcher function that:
-///    - Returns `z._CONTINUE` to keep searching
-///    - Returns `z._STOP` when match found (sets `found_element`)
-///
-/// 3. Call `z.genSearchElement(ContextType, root_node, &context_instance)`
-///
-/// **Example Pattern:**
-/// ```zig
-/// const MyContext = struct {
-///     target: []const u8,
-///     found_element: ?*z.HTMLElement = null,
-///     matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int,
-///
-///     fn implement(node: *z.DomNode, ctx: *@This()) callconv(.c) c_int {
-///         // Your matching logic here
-///         if (matches_criteria(node, ctx.target)) {
-///             ctx.found_element = z.nodeToElement(node);
-///             return z._STOP;
-///         }
-///         return z._CONTINUE;
-///     }
-/// };
-/// ```
-///
-/// This pattern provides:
-/// - Type-safe context passing
-/// - Efficient single-pass DOM traversal
-/// - Early termination on first match
-/// - Zero heap allocation for search logic
-///
-/// See walker.zig for genSearchElements() (multiple results) and genProcessAll() (side effects)
 /// String utility functions
 pub fn stringEquals(first: []const u8, second: []const u8) bool {
     return std.mem.eql(u8, first, second);
@@ -476,10 +364,121 @@ pub fn getElementByTag(root_node: *z.DomNode, tag: z.HtmlTag) ?*z.HTMLElement {
 }
 
 //=============================================================================
-// TESTS FOR LEGACY FUNCTIONS
+// TESTS
 //=============================================================================
 
-test "getElementById legacy" {
+test "getElementsByClassName with token-based matching" {
+    const allocator = testing.allocator;
+    const html = "<div><h1 class='title main'>Main Title</h1><p class='text main-text'>Paragraph</p><footer class='footer main-footer'>Footer</footer></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Should find only the h1 with "main" as a token
+    const results = try getElementsByClassName(allocator, doc, "main");
+    defer allocator.free(results);
+
+    try testing.expect(results.len == 1);
+    const tag = z.tagName_zc(results[0]);
+    const class_attr = z.getAttribute_zc(results[0], "class").?;
+    try testing.expectEqualStrings("H1", tag);
+    try testing.expectEqualStrings("title main", class_attr);
+}
+
+test "getElementsByTagName case sensitivity" {
+    const allocator = testing.allocator;
+    const html = "<div><p>Para 1</p><P>Para 2</P><span>Span</span></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Lexbor normalizes to uppercase
+    const results = try getElementsByTagName(allocator, doc, "P");
+    defer allocator.free(results);
+
+    try testing.expect(results.len == 2);
+}
+
+test "getElementsById exact matching" {
+    const allocator = testing.allocator;
+    const html = "<div><p id='test'>Found</p><p id='test-suffix'>Not found</p></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    const results = try getElementsById(allocator, doc, "test");
+    defer allocator.free(results);
+
+    try testing.expect(results.len == 1);
+    const id_attr = z.getAttribute_zc(results[0], "id").?;
+    try testing.expectEqualStrings("test", id_attr);
+}
+
+test "getElementsByAttributeName finds any element with attribute" {
+    const allocator = testing.allocator;
+    const html = "<div><p id='foo'>Has ID</p><span data-value='bar'>Has data</span><div>No attributes</div></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    const id_results = try getElementsByAttributeName(allocator, doc, "id");
+    defer allocator.free(id_results);
+    try testing.expect(id_results.len == 1);
+
+    const data_results = try getElementsByAttributeName(allocator, doc, "data-value");
+    defer allocator.free(data_results);
+    try testing.expect(data_results.len == 1);
+
+    const nonexistent_results = try getElementsByAttributeName(allocator, doc, "nonexistent");
+    defer allocator.free(nonexistent_results);
+    try testing.expect(nonexistent_results.len == 0);
+}
+
+test "comparison with CSS selectors" {
+    const allocator = testing.allocator;
+    const html = "<div><h1 class='title main'>Title</h1><p class='text main-text'>Para</p></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+
+    // Walker-based search (token matching)
+    const walker_results = try getElementsByClassName(allocator, doc, "main");
+    defer allocator.free(walker_results);
+
+    // CSS selector search (token matching, case insensitive)
+    const css_results = try z.querySelectorAll(allocator, doc, ".main");
+    defer allocator.free(css_results);
+
+    // Both should find the same element(s) - the h1 with "main" token
+    try testing.expect(walker_results.len == css_results.len);
+    try testing.expect(walker_results.len == 1);
+
+    const walker_class = z.getAttribute_zc(walker_results[0], "class").?;
+    const css_class = z.getAttribute_zc(css_results[0], "class").?;
+    try testing.expectEqualStrings(walker_class, css_class);
+    try testing.expectEqualStrings("title main", walker_class);
+}
+
+test "single element functions return first match" {
+    const html = "<div><h1 class='main'>First</h1><h2 class='main'>Second</h2></div>";
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+    const body = z.bodyNode(doc).?;
+
+    // Should return first matching element
+    const element = getElementByClass(body, "main");
+    try testing.expect(element != null);
+
+    const tag = z.tagName_zc(element.?);
+    try testing.expectEqualStrings("H1", tag);
+
+    // Non-existent should return null
+    const missing = getElementByClass(body, "nonexistent");
+    try testing.expect(missing == null);
+}
+
+test "getElementById" {
     const doc = try z.createDocFromString("<div id=\"1\"><p ></p><span id=\"2\"></span></div>");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
@@ -487,7 +486,7 @@ test "getElementById legacy" {
     try testing.expect(z.tagFromElement(element.?) == .span);
 }
 
-test "getElementByClass legacy" {
+test "getElementByClass" {
     const doc = try z.createDocFromString("<div id=\"1\"><p class=\"test\"></p><span class=\"test\"></span></div>");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
@@ -495,7 +494,7 @@ test "getElementByClass legacy" {
     try testing.expect(z.tagFromElement(element.?) == .p);
 }
 
-test "getElementByAttribute legacy" {
+test "getElementByAttribute" {
     const doc = try z.createDocFromString("<div id=\"1\" data-test=\"value1\"><p ></p><span data-test=\"value2\"></span></div>");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
@@ -505,7 +504,7 @@ test "getElementByAttribute legacy" {
     try testing.expect(z.tagFromElement(element_1.?) == .div);
 }
 
-test "getElementByDataAttribute legacy" {
+test "getElementByDataAttribute" {
     const html =
         \\<div id="user" data-id="1234567890" data-user="carinaanand" data-date-of-birth>
         \\Carina Anand
@@ -537,7 +536,7 @@ test "getElementByDataAttribute legacy" {
     try testing.expect(z.hasAttribute(user.?, "data-id"));
 }
 
-test "getElementByTag legacy" {
+test "getElementByTag" {
     const doc = try z.createDocFromString("<div id=\"1\"><p class=\"test\"></p><span id=\"2\"></span></div>");
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;

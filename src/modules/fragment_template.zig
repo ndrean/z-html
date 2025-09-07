@@ -261,7 +261,6 @@ test "use template string" {
     const initial_html = try z.normalizeText(
         allocator,
         pretty_html,
-        .{},
     );
     defer allocator.free(initial_html);
 
@@ -333,11 +332,7 @@ test "use template string" {
         \\</body>
     ;
 
-    const expected_serialized_html = try z.normalizeText(
-        allocator,
-        expected_pretty_html,
-        .{},
-    );
+    const expected_serialized_html = try z.normalizeText(allocator, expected_pretty_html);
     defer allocator.free(expected_serialized_html);
 
     // check resulting HTML

@@ -1,6 +1,6 @@
 //! This module provides functions to manipulate and retrieve _attributes_ from HTML elements.
 //!
-//! It contains  `getAttributes`, `setAttribute(s)`, `removeAttribute`, `hasAttribute(s)`, and element ID helper functions. 
+//! It contains  `getAttributes`, `setAttribute(s)`, `removeAttribute`, `hasAttribute(s)`, and element ID helper functions.
 //! For DOM search functions like `getElementById`, `getElementByAttribute`, see simple_search.zig.
 
 const std = @import("std");
@@ -27,7 +27,7 @@ extern "c" fn lxb_dom_element_next_attribute_noi(attr: *DomAttr) ?*DomAttr;
 extern "c" fn lxb_dom_element_id_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
 extern "c" fn lxb_dom_element_class_noi(element: *z.HTMLElement, len: *usize) [*]const u8;
 extern "c" fn lxb_dom_element_has_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize) bool;
-extern "c" fn lxb_dom_element_set_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) *DomAttr;
+extern "c" fn lxb_dom_element_set_attribute(element: *z.HTMLElement, name: [*]const u8, name_len: usize, value: [*]const u8, value_len: usize) ?*DomAttr;
 extern "c" fn lxb_dom_attr_qualified_name(attr: *DomAttr, length: *usize) [*]const u8;
 extern "c" fn lxb_dom_attr_value_noi(attr: *DomAttr, length: *usize) [*]const u8;
 
@@ -137,8 +137,10 @@ pub fn hasAttributes(element: *z.HTMLElement) bool {
 }
 
 /// [attributes] Set the attribute name/value as strings
-pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8) void {
-    _ = lxb_dom_element_set_attribute(
+///
+/// Returns the created DomAttr or null if the attribute could not be set (e.g., memory allocation failure)
+pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8) ?*DomAttr {
+    return lxb_dom_element_set_attribute(
         element,
         name.ptr,
         name.len,
@@ -149,28 +151,30 @@ pub fn setAttribute(element: *z.HTMLElement, name: []const u8, value: []const u8
 
 /// [attributes] Set many attributes name/value pairs on element
 ///
+/// Returns null if any attribute could not be set
+///
 /// ## Example
 /// ```
 /// const element = try z.createElementWithAttrs(doc, "div", &.{});
-/// try z.setAttributes(element, &.{
+/// z.setAttributes(element, &.{
 ///     .{.name = "id", .value = "main"},
-///     ?{.name = "id", .value = "main"}
-/// });
+///     .{.name = "class", .value = "test"}
+/// }) orelse return error.AttributeSetFailed;
 /// try testing.expect(z.hasAttribute(element, "id"));
 /// try testing.expectEqualStrings("main", z.getAttribute(element, "id"));
 /// ---
 /// ```
-pub fn setAttributes(element: *z.HTMLElement, attrs: []const AttributePair) void {
+pub fn setAttributes(element: *z.HTMLElement, attrs: []const AttributePair) ?void {
     for (attrs) |attr| {
-        const result = lxb_dom_element_set_attribute(
+        _ = lxb_dom_element_set_attribute(
             element,
             attr.name.ptr,
             attr.name.len,
             attr.value.ptr,
             attr.value.len,
-        );
-        _ = result;
+        ) orelse return null;
     }
+    return {};
 }
 
 // ----------------------------------------------------------
@@ -240,7 +244,7 @@ fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 }
 
 // ----------------------------------------------------------
-/// [attributes] _deprecate_ Collect all attributes from an element.
+/// [attributes] _deprecated_ Collect all attributes from an element.
 ///
 /// First version.
 ///
@@ -306,7 +310,18 @@ fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]Attri
 /// Uses zero-copy lexbor strings + stack buffer for small attribute sets.
 /// Hard limit of 16 attributes.
 ///
-/// Same memory management as getAttributes - caller must free names/values/slice
+/// Caller must free names/values/slice
+/// ## Example
+/// ```
+/// const attrs = try getAttributes_bf(allocator, element);
+/// defer {
+///    for (attrs) |attr| {
+///        allocator.free(attr.name);
+///        allocator.free(attr.value);
+///    }
+///    allocator.free(attrs);
+/// };
+///```
 pub fn getAttributes_bf(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
     var attribute = getFirstAttribute(element);
     if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
@@ -402,18 +417,18 @@ test "getAttribute and getAttribute_zc" {
     const doc = try z.createDocFromString("<div id=\"test\" class=\"main\">Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.getElementById(z.bodyNode(doc).?, "test").?;
-    
+
     // Test getAttribute (allocated)
     const id_alloc = try getAttribute(allocator, element, "id");
     defer if (id_alloc) |id| allocator.free(id);
     try testing.expect(id_alloc != null);
     try testing.expectEqualStrings("test", id_alloc.?);
-    
+
     // Test getAttribute_zc (zero-copy)
     const id_zc = getAttribute_zc(element, "id");
     try testing.expect(id_zc != null);
     try testing.expectEqualStrings("test", id_zc.?);
-    
+
     // Test non-existent attribute
     const missing = getAttribute_zc(element, "nonexistent");
     try testing.expect(missing == null);
@@ -423,7 +438,7 @@ test "hasAttribute and hasAttributes" {
     const doc = try z.createDocFromString("<div id=\"test\" class=\"main\">Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.getElementById(z.bodyNode(doc).?, "test").?;
-    
+
     try testing.expect(hasAttribute(element, "id"));
     try testing.expect(hasAttribute(element, "class"));
     try testing.expect(!hasAttribute(element, "nonexistent"));
@@ -434,19 +449,21 @@ test "setAttribute and setAttributes" {
     const doc = try z.createDocFromString("<div>Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.firstElementChild(z.bodyElement(doc).?).?;
-    
+
     // Test setAttribute
-    setAttribute(element, "id", "newid");
+    const attr_result = setAttribute(element, "id", "newid");
+    try testing.expect(attr_result != null); // Should succeed
     const id = getAttribute_zc(element, "id");
     try testing.expectEqualStrings("newid", id.?);
-    
+
     // Test setAttributes
     const attrs = [_]AttributePair{
         .{ .name = "class", .value = "test-class" },
         .{ .name = "data-test", .value = "value" },
     };
-    setAttributes(element, &attrs);
-    
+    const attrs_result = setAttributes(element, &attrs);
+    try testing.expect(attrs_result != null); // Should succeed
+
     const class_val = getAttribute_zc(element, "class");
     const data_val = getAttribute_zc(element, "data-test");
     try testing.expectEqualStrings("test-class", class_val.?);
@@ -457,7 +474,7 @@ test "removeAttribute" {
     const doc = try z.createDocFromString("<div id=\"test\" class=\"main\">Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.getElementById(z.bodyNode(doc).?, "test").?;
-    
+
     try testing.expect(hasAttribute(element, "class"));
     try removeAttribute(element, "class");
     try testing.expect(!hasAttribute(element, "class"));
@@ -469,16 +486,16 @@ test "getElementId functions" {
     const doc = try z.createDocFromString("<div id=\"test123\">Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.firstElementChild(z.bodyElement(doc).?).?;
-    
+
     // Test getElementId (allocated)
     const id_alloc = try getElementId(allocator, element);
     defer allocator.free(id_alloc);
     try testing.expectEqualStrings("test123", id_alloc);
-    
+
     // Test getElementId_zc (zero-copy)
     const id_zc = getElementId_zc(element);
     try testing.expectEqualStrings("test123", id_zc);
-    
+
     // Test hasElementId
     try testing.expect(hasElementId(element, "test123"));
     try testing.expect(!hasElementId(element, "wrong"));
@@ -489,7 +506,7 @@ test "getAttributes_bf" {
     const doc = try z.createDocFromString("<div id=\"test\" class=\"main\" data-value=\"123\">Hello</div>");
     defer z.destroyDocument(doc);
     const element = z.getElementById(z.bodyNode(doc).?, "test").?;
-    
+
     const attrs = try getAttributes_bf(allocator, element);
     defer {
         // Free individual attribute strings first
@@ -499,14 +516,14 @@ test "getAttributes_bf" {
         }
         allocator.free(attrs);
     }
-    
+
     try testing.expect(attrs.len >= 3); // Should have at least id, class, data-value
-    
+
     // Check that we got our expected attributes
     var found_id = false;
     var found_class = false;
     var found_data = false;
-    
+
     for (attrs) |attr| {
         if (std.mem.eql(u8, attr.name, "id")) {
             found_id = true;
@@ -519,9 +536,8 @@ test "getAttributes_bf" {
             try testing.expectEqualStrings("123", attr.value);
         }
     }
-    
+
     try testing.expect(found_id);
     try testing.expect(found_class);
     try testing.expect(found_data);
 }
-

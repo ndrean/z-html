@@ -1,4 +1,46 @@
 //! Fast DOM traverse utilities using `simple_Walk`  with Callbacks
+//! GENERIC DOM SEARCH PATTERN
+//!
+//! The search functions below use a generic pattern from walker.zig that allows
+//! efficient DOM traversal with custom matching logic. Here's how it works:
+//!
+//! **Pattern Structure:**
+//! 1. Define a Context struct with mandatory fields:
+//!    - `found_element: ?*z.HTMLElement` (for single element search)
+//!    - `matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int` (callback)
+//!    - Custom fields for search criteria (target_id, target_class, etc.)
+//!
+//! 2. Implement the matcher function that:
+//!    - Returns `z._CONTINUE` to keep searching
+//!    - Returns `z._STOP` when match found (sets `found_element`)
+//!
+//! 3. Call `z.genSearchElement(ContextType, root_node, &context_instance)`
+//!
+//! **Example Pattern:**
+//! ```zig
+//! const MyContext = struct {
+//!     target: []const u8,
+//!     found_element: ?*z.HTMLElement = null,
+//!     matcher: *const fn (*z.DomNode, *@This()) callconv(.c) c_int,
+//!
+//!     fn implement(node: *z.DomNode, ctx: *@This()) callconv(.c) c_int {
+//!         // Your matching logic here
+//!         if (matches_criteria(node, ctx.target)) {
+//!             ctx.found_element = z.nodeToElement(node);
+//!             return z._STOP;
+//!         }
+//!         return z._CONTINUE;
+//!     }
+//! };
+//! ```
+//!
+//! This pattern provides:
+//! - Type-safe context passing
+//! - Efficient single-pass DOM traversal
+//! - Early termination on first match
+//! - Zero heap allocation for search logic
+//!
+//! See walker.zig for genSearchElements() (multiple results) and genProcessAll() (side effects)
 
 //======================================================================
 // DOM SEARCH USING WALKER CALLBACKS
@@ -39,15 +81,18 @@ pub fn toAnyOpaque(comptime T: type, ptr: *T) ?*anyopaque {
     return @as(?*anyopaque, @ptrCast(ptr));
 }
 
-/// [walker] Generic walker for _single matching element_ (stops at first match)
+/// [walker] Generic walker for _single matching element_ (**stops on first match**)
 ///
 ///
 /// The `matcher` signature is `fn (*z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int`.
 ///
 /// It returns `z._CONTINUE = 0` to keep walking, or `z._STOP = 1` to stop.
 ///
-/// 1. Define a context struct with at these two mandatory field names: `matcher` with the signature above, and `found_element: z.HTMLElement`.
-/// Add an implementation and a target field (id, class, aria, data-attribute...)
+/// 1. Define a context struct with at least these two mandatory field names:
+/// - `matcher` with the signature above,
+/// - `found_element: z.HTMLElement`.
+/// -  you can add other fields such as `target_id`, `target_class`, etc.
+///
 /// 2. Instantiate a mutable instance of that struct and pass its address to `genSearchElement`.
 /// ### Example:
 /// ````
@@ -64,7 +109,7 @@ pub fn toAnyOpaque(comptime T: type, ptr: *T) ?*anyopaque {
 /// genSearchElement(IdContext, root_node, &id_context_instance);
 /// ```
 pub fn genSearchElement(comptime ContextType: type, root_node: *z.DomNode, context: *ContextType) ?*z.HTMLElement {
-    const finder = struct {
+    const matcher = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             if (!z.isTypeElement(node)) return z._CONTINUE;
             const typed_ctx: *ContextType = @ptrCast(@alignCast(ctx.?));
@@ -75,13 +120,13 @@ pub fn genSearchElement(comptime ContextType: type, root_node: *z.DomNode, conte
 
     simpleWalk(
         root_node,
-        finder,
+        matcher,
         @as(?*anyopaque, @ptrCast(context)),
     );
     return context.found_element;
 }
 
-/// [walker] Generic walker to find _multiple matching elements_ (continues until end)
+/// [walker] Generic walker to find _multiple matching elements_ (**continues until end**)
 ///
 /// The context holds the allocator and an ArrayList to collect results.
 ///
@@ -93,7 +138,7 @@ pub fn genSearchElement(comptime ContextType: type, root_node: *z.DomNode, conte
 ///
 /// Notice that any DOM modification should be done in a post-processing step.
 pub fn genSearchElements(comptime ContextType: type, root_node: *z.DomNode, context: *ContextType) ![]const *z.HTMLElement {
-    const finder = struct {
+    const matcher = struct {
         fn cb(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
             if (!z.isTypeElement(node)) return z._CONTINUE;
 
@@ -104,7 +149,7 @@ pub fn genSearchElements(comptime ContextType: type, root_node: *z.DomNode, cont
     //
     simpleWalk(
         root_node,
-        finder,
+        matcher,
         toAnyOpaque(ContextType, context),
     );
     return context.results.toOwnedSlice(context.allocator);
@@ -152,64 +197,3 @@ pub fn genProcessAll(comptime ContextType: type, root_node: *z.DomNode, context:
         toAnyOpaque(ContextType, context),
     );
 }
-
-// test "ancestor walk" {
-//     const allocator = testing.allocator;
-
-//     const doc = try z.createDocFromString("<div><!--comment--><ul><li></li></ul><svg><circle cx='50'/><rect x=\"2\"/></svg><code> a <script>alert(1)</script></code> some text <p></p><pre> do not change</pre><template><p>nothing</p></template><x-widget></x-widget></div>");
-
-//     defer z.destroyDocument(doc);
-
-//     const body = z.bodyNode(doc).?;
-
-//     const TestContext = struct {
-//         allocator: std.mem.Allocator,
-//         parent: z.HtmlTag,
-//         result: std.ArrayList(z.HtmlTag) = .empty,
-//     };
-//     var test_ctx = TestContext{ .allocator = allocator, .parent = .body };
-
-//     const cb = struct {
-//         fn run(node: *z.DomNode, ctx: ?*anyopaque) callconv(.c) c_int {
-//             const context: *TestContext = @ptrCast(@alignCast(ctx));
-//             const node_name = z.nodeName_zc(node);
-//             const q_name = if (z.isTypeElement(node)) z.qualifiedName_zc(z.nodeToElement(node).?) else "";
-//             // const tag_name: ?z.HtmlTag = if (z.isTypeElement(node)) z.tagFromElement(z.nodeToElement(node).?) else .html;
-
-//             const parent: z.HtmlTag = if (!z.isTypeElement(node)) context.parent else blk: {
-//                 const elt = z.nodeToElement(node).?;
-//                 const elt_tag = z.tagFromAnyElement(elt);
-//                 const is_remarkable_parent = context.parent == .svg or context.parent == .pre or context.parent == .template or context.parent == .code;
-
-//                 if (elt_tag == .svg)
-//                     break :blk .svg
-//                 else if (elt_tag == .code)
-//                     break :blk .code
-//                 else if (elt_tag == .pre)
-//                     break :blk .pre
-//                 else if (elt_tag == .template)
-//                     break :blk .template
-//                 else
-//                     break :blk if (is_remarkable_parent) context.parent else z.tagFromAnyElement(elt);
-//             };
-//             context.parent = parent;
-//             // _ = node_name;
-//             // _ = q_name;
-
-//             context.result.append(context.allocator, parent) catch return z._STOP;
-
-//             print("{}, {s}, {s}\n", .{ context.parent, node_name, q_name });
-//             return z._CONTINUE;
-//         }
-//     }.run;
-
-//     z.simpleWalk(body, cb, &test_ctx);
-//     const expected = &[_]z.HtmlTag{ .div, .div, .ul, .li, .svg, .circle, .rect, .code, .code, .script, .script, .script, .p, .pre, .pre, .template, .custom };
-
-//     for (test_ctx.result.items, 0..) |item, i| {
-//         _ = expected[i];
-//         print("Result: {}, {any}\n", .{ i, item });
-//         // std.debug.assert(expected[i] == item);
-//     }
-//     test_ctx.result.deinit(allocator);
-// }

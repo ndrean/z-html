@@ -22,7 +22,6 @@ const html_spec = @import("modules/html_spec.zig");
 
 // Re-export commonly used types
 pub const Err = @import("errors.zig").LexborError;
-// pub const Writer = log.GlobalWriter;
 
 // =========================================================
 // General Status codes & constants & definitions
@@ -44,14 +43,6 @@ pub const LXB_DOM_NODE_TYPE_COMMENT: u32 = 8;
 pub const LXB_DOM_NODE_TYPE_DOCUMENT = 9;
 pub const LXB_DOM_NODE_TYPE_FRAGMENT = 11;
 pub const LXB_DOM_NODE_TYPE_UNKNOWN = 0;
-
-pub const TextOptions = struct {
-    escape: bool = false,
-    remove_comments: bool = false,
-    remove_empty_elements: bool = false,
-    keep_new_lines: bool = false,
-    allow_html: bool = true, // Security: explicitly allow HTML parsing
-};
 
 // =====================================
 // Colouring and syntax highlighting
@@ -188,6 +179,8 @@ pub const createComment = lxb.createComment;
 //=====================================
 // Text  / comment content
 //=====================================
+// pub const TextOptions = text.TextOptions;
+
 pub const commentContent = text.commentContent;
 pub const commentContent_zc = text.commentContent_zc;
 
@@ -203,7 +196,7 @@ pub const escapeHtml = text.escapeHtml;
 pub const normalize = norm.normalize;
 pub const normalizeWithOptions = norm.normalizeWithOptions;
 pub const normalizeForDisplay = norm.normalizeForDisplay;
-pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
+// pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
 pub const normalizeText = cleaner.normalizeText;
 
 //=====================================
@@ -323,6 +316,7 @@ pub const innerHTML = serialize.innerHTML;
 pub const outerHTML = serialize.outerHTML;
 pub const outerNodeHTML = serialize.outerNodeHTML;
 
+pub const SanitizeOptions = sanitize.SanitizeOptions;
 pub const SanitizerOptions = sanitize.SanitizerOptions;
 pub const sanitizeNode = sanitize.sanitizeNode;
 pub const sanitizeWithOptions = sanitize.sanitizeWithOptions;

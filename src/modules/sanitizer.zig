@@ -13,25 +13,119 @@ const print = std.debug.print;
 
 const testing = std.testing;
 
-// Whitelist definitions
+// === Whitelist definitions ===
 pub const AttrSet = std.StaticStringMap(void);
-const special_common = AttrSet.initComptime(.{ .{"phx-"}, .{":if"}, .{":for"}, .{":let"}, .{"data-"} });
+const special_common = AttrSet.initComptime(.{
+    .{"phx-"},
+    .{":if"},
+    .{":for"},
+    .{":let"},
+    .{"data-"},
+});
 
-pub const allowed_a = AttrSet.initComptime(.{ .{"href"}, .{"title"}, .{"target"}, .{"id"}, .{"aria"}, .{"role"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
+pub const allowed_a = AttrSet.initComptime(.{
+    .{"href"},
+    .{"title"},
+    .{"target"},
+    .{"id"},
+    .{"aria"},
+    .{"role"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_img = AttrSet.initComptime(.{
+    .{"src"},
+    .{"alt"},
+    .{"title"},
+    .{"sizes"},
+    .{"height"},
+    .{"width"},
+    .{"lazy"},
+    .{"loading"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_common = AttrSet.initComptime(.{
+    .{"aria"},
+    .{"hidden"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_meta = AttrSet.initComptime(.{
+    .{"charset"},
+    .{"name"},
+    .{"content"},
+});
+pub const allowed_link = AttrSet.initComptime(.{
+    .{"rel"},
+    .{"href"},
+    .{"type"},
+    .{"sizes"},
+    .{"media"},
+    .{"as"},
+    .{"crossorigin"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_input = AttrSet.initComptime(.{
+    .{"type"},
+    .{"name"},
+    .{"value"},
+    .{"placeholder"},
+    .{"required"},
+    .{"minlength"},
+    .{"maxlength"},
+    .{"form"},
+    .{"autocomplete"},
+    .{"list"},
+    .{"max"},
+    .{"min"},
+    .{"readonly"},
+    .{"step"},
+    .{"accept"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_label = AttrSet.initComptime(.{
+    .{"for"},
+});
+pub const allowed_form = AttrSet.initComptime(.{
+    .{"action"},
+    .{"method"},
+    .{"enctype"},
+    .{"target"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_button = AttrSet.initComptime(.{
+    .{"type"},
+    .{"name"},
+    .{"value"},
+    .{"disabled"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_table = AttrSet.initComptime(.{
+    .{"scope"},
+    .{"id"},
+    .{"class"},
+});
 
-pub const allowed_img = AttrSet.initComptime(.{ .{"src"}, .{"alt"}, .{"title"}, .{"sizes"}, .{"height"}, .{"width"}, .{"lazy"}, .{"loading"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-
-pub const allowed_common = AttrSet.initComptime(.{ .{"aria"}, .{"hidden"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-
-pub const allowed_meta = AttrSet.initComptime(.{ .{"charset"}, .{"name"}, .{"content"} });
-pub const allowed_link = AttrSet.initComptime(.{ .{"rel"}, .{"href"}, .{"type"}, .{"sizes"}, .{"media"}, .{"as"}, .{"crossorigin"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-pub const allowed_input = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"placeholder"}, .{"required"}, .{"minlength"}, .{"maxlength"}, .{"form"}, .{"autocomplete"}, .{"list"}, .{"max"}, .{"min"}, .{"readonly"}, .{"step"}, .{"accept"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-pub const allowed_label = AttrSet.initComptime(.{.{"for"}});
-pub const allowed_form = AttrSet.initComptime(.{ .{"action"}, .{"method"}, .{"enctype"}, .{"target"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-pub const allowed_button = AttrSet.initComptime(.{ .{"type"}, .{"name"}, .{"value"}, .{"disabled"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-pub const allowed_table = AttrSet.initComptime(.{ .{"scope"}, .{"id"}, .{"class"} });
-
-// SVG attribute whitelists
+// === SVG attribute whitelists
 pub const allowed_svg_common = AttrSet.initComptime(.{
     // Core attributes
     .{"id"},          .{"class"},        .{"style"},             .{"title"},
@@ -48,19 +142,261 @@ pub const allowed_svg_common = AttrSet.initComptime(.{
     // Transform (generally safe)
     .{"transform"},   .{"viewBox"},      .{"xmlns"},
 });
+pub const allowed_svg_path = AttrSet.initComptime(.{
+    .{"d"},
+    .{"pathLength"},
+});
+pub const allowed_svg_text = AttrSet.initComptime(.{
+    .{"x"},
+    .{"y"},
+    .{"dx"},
+    .{"dy"},
+    .{"rotate"},
+    .{"textLength"},
+});
+pub const allowed_svg_circle = AttrSet.initComptime(.{
+    .{"cx"},
+    .{"cy"},
+    .{"r"},
+});
+pub const allowed_svg_rect = AttrSet.initComptime(.{
+    .{"x"},
+    .{"y"},
+    .{"width"},
+    .{"height"},
+    .{"rx"},
+    .{"ry"},
+});
 
-pub const allowed_svg_path = AttrSet.initComptime(.{ .{"d"}, .{"pathLength"} });
-pub const allowed_svg_text = AttrSet.initComptime(.{ .{"x"}, .{"y"}, .{"dx"}, .{"dy"}, .{"rotate"}, .{"textLength"} });
-pub const allowed_svg_circle = AttrSet.initComptime(.{ .{"cx"}, .{"cy"}, .{"r"} });
-pub const allowed_svg_rect = AttrSet.initComptime(.{ .{"x"}, .{"y"}, .{"width"}, .{"height"}, .{"rx"}, .{"ry"} });
-pub const allowed_svg_line = AttrSet.initComptime(.{ .{"x1"}, .{"y1"}, .{"x2"}, .{"y2"} });
-pub const allowed_svg_animate = AttrSet.initComptime(.{ .{"attributeName"}, .{"values"}, .{"dur"}, .{"repeatCount"} });
+// Form element attribute sets
+pub const allowed_select = AttrSet.initComptime(.{
+    .{"name"},
+    .{"multiple"},
+    .{"size"},
+    .{"required"},
+    .{"disabled"},
+    .{"form"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
 
+pub const allowed_option = AttrSet.initComptime(.{
+    .{"value"},
+    .{"selected"},
+    .{"disabled"},
+    .{"label"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_optgroup = AttrSet.initComptime(.{
+    .{"label"},
+    .{"disabled"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_textarea = AttrSet.initComptime(.{
+    .{"name"},
+    .{"rows"},
+    .{"cols"},
+    .{"placeholder"},
+    .{"required"},
+    .{"disabled"},
+    .{"readonly"},
+    .{"maxlength"},
+    .{"minlength"},
+    .{"wrap"},
+    .{"form"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_fieldset = AttrSet.initComptime(.{
+    .{"disabled"},
+    .{"form"},
+    .{"name"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_legend = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+// Media element attribute sets
+pub const allowed_video = AttrSet.initComptime(.{
+    .{"src"},
+    .{"controls"},
+    .{"autoplay"},
+    .{"loop"},
+    .{"muted"},
+    .{"poster"},
+    .{"preload"},
+    .{"width"},
+    .{"height"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_audio = AttrSet.initComptime(.{
+    .{"src"},
+    .{"controls"},
+    .{"autoplay"},
+    .{"loop"},
+    .{"muted"},
+    .{"preload"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_source = AttrSet.initComptime(.{
+    .{"src"},
+    .{"type"},
+    .{"media"},
+    .{"sizes"},
+    .{"srcset"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_track = AttrSet.initComptime(.{
+    .{"src"},
+    .{"kind"},
+    .{"srclang"},
+    .{"label"},
+    .{"default"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+// Semantic element attribute sets
+pub const allowed_details = AttrSet.initComptime(.{
+    .{"open"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_summary = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_figure = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_figcaption = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_picture = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_map = AttrSet.initComptime(.{
+    .{"name"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_area = AttrSet.initComptime(.{
+    .{"alt"},
+    .{"coords"},
+    .{"shape"},
+    .{"href"},
+    .{"target"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_dl = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_dt = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+
+pub const allowed_dd = AttrSet.initComptime(.{
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+pub const allowed_svg_line = AttrSet.initComptime(.{
+    .{"x1"},
+    .{"y1"},
+    .{"x2"},
+    .{"y2"},
+});
+pub const allowed_svg_animate = AttrSet.initComptime(.{
+    .{"attributeName"},
+    .{"values"},
+    .{"dur"},
+    .{"repeatCount"},
+});
+
+// === iframe attributes with sandbox focus
+pub const allowed_iframe = AttrSet.initComptime(.{
+    .{"src"},
+    .{"sandbox"},
+    .{"srcdoc"},
+    .{"name"},
+    .{"loading"},
+    .{"width"},
+    .{"height"},
+    .{"class"},
+    .{"id"},
+    .{"aria"},
+    .{"hidden"},
+});
+// === HTMLTags
 pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
-
-// iframe attributes with sandbox focus
-pub const allowed_iframe = AttrSet.initComptime(.{ .{"src"}, .{"sandbox"}, .{"srcdoc"}, .{"name"}, .{"loading"}, .{"width"}, .{"height"}, .{"class"}, .{"id"}, .{"aria"}, .{"hidden"} });
-
 pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "a", &allowed_a },
     .{ "img", &allowed_img },
@@ -91,6 +427,35 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "td", &allowed_table },
     .{ "caption", &allowed_table },
     .{ "tfoot", &allowed_table },
+
+    // Form elements
+    .{ "form", &allowed_form },
+    .{ "input", &allowed_input },
+    .{ "textarea", &allowed_textarea },
+    .{ "select", &allowed_select },
+    .{ "option", &allowed_option },
+    .{ "optgroup", &allowed_optgroup },
+    .{ "label", &allowed_label },
+    .{ "fieldset", &allowed_fieldset },
+    .{ "legend", &allowed_legend },
+
+    // Media elements
+    .{ "audio", &allowed_audio },
+    .{ "video", &allowed_video },
+    .{ "source", &allowed_source },
+    .{ "track", &allowed_track },
+
+    // Semantic elements
+    .{ "details", &allowed_details },
+    .{ "summary", &allowed_summary },
+    .{ "figure", &allowed_figure },
+    .{ "figcaption", &allowed_figcaption },
+    .{ "picture", &allowed_picture },
+    .{ "map", &allowed_map },
+    .{ "area", &allowed_area },
+    .{ "dl", &allowed_dl },
+    .{ "dt", &allowed_dt },
+    .{ "dd", &allowed_dd },
 
     // SVG elements (safe ones) - defined in centralized HtmlTag enum
     .{ "svg", &allowed_svg_common },
@@ -139,27 +504,55 @@ fn isIframeSafe(element: *z.HTMLElement) bool {
     return true; // Has sandbox and safe src
 }
 
-fn shouldRemoveSvgDescendant(tag_name: []const u8) bool {
-    return std.mem.eql(u8, tag_name, "script") or
-        std.mem.eql(u8, tag_name, "foreignObject") or
-        std.mem.eql(u8, tag_name, "animate") or // Can have onbegin, onend events
-        std.mem.eql(u8, tag_name, "animateTransform") or
-        std.mem.eql(u8, tag_name, "set");
-}
-
-/// [sanitize] Check if an attribute is allowed by the whitelist (legacy)
-fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
-    return attr_set.has(attr_name) or special_common.has(attr_name);
-}
+// /// [sanitize] Check if an attribute is allowed by the whitelist
+// fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
+//     return attr_set.has(attr_name) or special_common.has(attr_name);
+// }
 
 /// [sanitize] Check if an element and attribute combination is allowed using unified specification
 pub fn isElementAttributeAllowed(element_tag: []const u8, attr_name: []const u8) bool {
     return html_spec.isAttributeAllowed(element_tag, attr_name);
 }
 
+/// [sanitize] Check if attribute is a framework directive or custom attribute
+pub fn isFrameworkAttribute(attr_name: []const u8) bool {
+    return std.mem.startsWith(u8, attr_name, "phx-") or // Phoenix LiveView events/bindings
+        std.mem.startsWith(u8, attr_name, ":") or // Phoenix LiveView directives (:if, :for, :let) + Vue.js/Alpine
+        std.mem.startsWith(u8, attr_name, "data-") or // Data attributes
+        std.mem.startsWith(u8, attr_name, "v-") or // Vue.js directives
+        std.mem.startsWith(u8, attr_name, "@") or // Vue.js events, Alpine events
+        std.mem.startsWith(u8, attr_name, "x-") or // Alpine.js directives
+        std.mem.startsWith(u8, attr_name, "*ng") or // Angular structural directives
+        std.mem.startsWith(u8, attr_name, "[") or // Angular property binding
+        std.mem.startsWith(u8, attr_name, "(") or // Angular event binding
+        std.mem.startsWith(u8, attr_name, "bind:") or // Svelte binding
+        std.mem.startsWith(u8, attr_name, "on:") or // Svelte events
+        std.mem.startsWith(u8, attr_name, "use:") or // Svelte actions
+        std.mem.startsWith(u8, attr_name, ".") or // Lit property binding
+        std.mem.startsWith(u8, attr_name, "?") or // Lit boolean attributes
+        std.mem.startsWith(u8, attr_name, "aria-") or // Accessibility
+        std.mem.startsWith(u8, attr_name, "slot") or // Web Components slots
+        // Phoenix LiveView specific attributes that might not have prefixes
+        std.mem.eql(u8, attr_name, "for") or // Phoenix :for loops (might appear as 'for')
+        std.mem.eql(u8, attr_name, "if") or // Phoenix :if conditions (might appear as 'if')
+        std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')
+}
+
 /// [sanitize] Check if an attribute value is valid using unified specification
 pub fn isElementAttributeValueValid(element_tag: []const u8, attr_name: []const u8, attr_value: []const u8) bool {
     return html_spec.isAttributeValueValid(element_tag, attr_name, attr_value);
+}
+
+fn isDescendantOfSvg(tag: z.HtmlTag, parent: z.HtmlTag) bool {
+    return (tag == .svg or parent == .svg) or return false;
+}
+
+fn isDangerousSvgDescendant(tag_name: []const u8) bool {
+    return std.mem.eql(u8, tag_name, "script") or
+        std.mem.eql(u8, tag_name, "foreignObject") or
+        std.mem.eql(u8, tag_name, "animate") or // Can have onbegin, onend events
+        std.mem.eql(u8, tag_name, "animateTransform") or
+        std.mem.eql(u8, tag_name, "set");
 }
 
 /// [sanitize] Validate an element using unified specification
@@ -204,10 +597,6 @@ fn setAncestor(tag: z.HtmlTag, parent: z.HtmlTag) z.HtmlTag {
     };
 }
 
-fn isDescendantOfSvg(tag: z.HtmlTag, parent: z.HtmlTag) bool {
-    return (tag == .svg or parent == .svg) or return false;
-}
-
 /// [sanitize] Collect dangerous SVG attributes (simplified version without iteration)
 fn collectSvgDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_str: []const u8) !void {
     // For now, we'll use a simplified approach and check common dangerous attributes
@@ -232,29 +621,39 @@ fn collectSvgDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElem
     _ = tag_str; // Will use this later for more specific attribute checking
 }
 
-/// [sanitize] Check if attribute is a framework directive or custom attribute
-pub fn isFrameworkAttribute(attr_name: []const u8) bool {
-    return std.mem.startsWith(u8, attr_name, "phx-") or // Phoenix LiveView events/bindings
-        std.mem.startsWith(u8, attr_name, ":") or // Phoenix LiveView directives (:if, :for, :let) + Vue.js/Alpine
-        std.mem.startsWith(u8, attr_name, "data-") or // Data attributes
-        std.mem.startsWith(u8, attr_name, "v-") or // Vue.js directives
-        std.mem.startsWith(u8, attr_name, "@") or // Vue.js events, Alpine events
-        std.mem.startsWith(u8, attr_name, "x-") or // Alpine.js directives
-        std.mem.startsWith(u8, attr_name, "*ng") or // Angular structural directives
-        std.mem.startsWith(u8, attr_name, "[") or // Angular property binding
-        std.mem.startsWith(u8, attr_name, "(") or // Angular event binding
-        std.mem.startsWith(u8, attr_name, "bind:") or // Svelte binding
-        std.mem.startsWith(u8, attr_name, "on:") or // Svelte events
-        std.mem.startsWith(u8, attr_name, "use:") or // Svelte actions
-        std.mem.startsWith(u8, attr_name, ".") or // Lit property binding
-        std.mem.startsWith(u8, attr_name, "?") or // Lit boolean attributes
-        std.mem.startsWith(u8, attr_name, "aria-") or // Accessibility
-        std.mem.startsWith(u8, attr_name, "slot") or // Web Components slots
-        // Phoenix LiveView specific attributes that might not have prefixes
-        std.mem.eql(u8, attr_name, "for") or // Phoenix :for loops (might appear as 'for')
-        std.mem.eql(u8, attr_name, "if") or // Phoenix :if conditions (might appear as 'if')
-        std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')
-}
+pub const SanitizeOptions = union(enum) {
+    none: void,
+    strict: void,
+    permissive: void,
+    custom: SanitizerOptions,
+
+    pub inline fn toSanitizerOptions(self: @This()) SanitizerOptions {
+        return switch (self) {
+            .none => SanitizerOptions{
+                .skip_comments = false,
+                .remove_scripts = false,
+                .remove_styles = false,
+                .strict_uri_validation = false,
+                .allow_custom_elements = true,
+            },
+            .strict => SanitizerOptions{
+                .skip_comments = true,
+                .remove_scripts = true,
+                .remove_styles = true,
+                .strict_uri_validation = true,
+                .allow_custom_elements = false,
+            },
+            .permissive => SanitizerOptions{
+                .skip_comments = true,
+                .remove_scripts = true,
+                .remove_styles = true,
+                .strict_uri_validation = true,
+                .allow_custom_elements = true,
+            },
+            .custom => |opts| opts,
+        };
+    }
+};
 
 /// [sanitize] Settings of the sanitizer
 pub const SanitizerOptions = struct {
@@ -262,7 +661,7 @@ pub const SanitizerOptions = struct {
     remove_scripts: bool = true,
     remove_styles: bool = true,
     strict_uri_validation: bool = true,
-    allow_custom_elements: bool = false, // Enable permissive custom element handling
+    allow_custom_elements: bool = false,
 };
 
 const AttributeAction = struct {
@@ -364,7 +763,7 @@ inline fn removeAndContinue(context_ptr: *SanitizeContext, node: *z.DomNode) c_i
 // Handle SVG elements (both known and unknown)
 fn handleSvgElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z.HTMLElement, tag_name: []const u8) c_int {
     // Check if it's a dangerous SVG element
-    if (shouldRemoveSvgDescendant(tag_name)) {
+    if (isDangerousSvgDescendant(tag_name)) {
         return removeAndContinue(context_ptr, node);
     }
 
@@ -645,8 +1044,13 @@ fn sanitizeTemplateContent(allocator: std.mem.Allocator, template_node: *z.DomNo
     try sanitizePostWalkOperations(allocator, &template_context, options);
 }
 
-pub fn sanitizeWithOptions(allocator: std.mem.Allocator, root_node: *z.DomNode, options: SanitizerOptions) (std.mem.Allocator.Error || z.Err)!void {
-    var context = SanitizeContext.init(allocator, options);
+pub fn sanitizeWithOptions(
+    allocator: std.mem.Allocator,
+    root_node: *z.DomNode,
+    options: SanitizeOptions,
+) (std.mem.Allocator.Error || z.Err)!void {
+    const sanitizer_options = options.toSanitizerOptions();
+    var context = SanitizeContext.init(allocator, sanitizer_options);
     defer context.deinit();
 
     z.simpleWalk(
@@ -658,33 +1062,21 @@ pub fn sanitizeWithOptions(allocator: std.mem.Allocator, root_node: *z.DomNode, 
     try sanitizePostWalkOperations(
         allocator,
         &context,
-        options,
+        sanitizer_options,
     );
 }
 
-pub fn sanitizeNode(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
-    return sanitizeWithOptions(allocator, root_node, .{});
+pub fn sanitizeNode(allocator: std.mem.Allocator, root_node: *z.DomNode, options: SanitizeOptions) (std.mem.Allocator.Error || z.Err)!void {
+    return sanitizeWithOptions(allocator, root_node, options);
 }
 
 // Convenience functions for common sanitization scenarios
 pub fn sanitizeStrict(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
-    return sanitizeWithOptions(allocator, root_node, .{
-        .skip_comments = true,
-        .remove_scripts = true,
-        .remove_styles = true,
-        .strict_uri_validation = true,
-        .allow_custom_elements = false,
-    });
+    return sanitizeWithOptions(allocator, root_node, .strict);
 }
 
 pub fn sanitizePermissive(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
-    return sanitizeWithOptions(allocator, root_node, .{
-        .skip_comments = true,
-        .remove_scripts = true,
-        .remove_styles = false,
-        .strict_uri_validation = true,
-        .allow_custom_elements = true,
-    });
+    return sanitizeWithOptions(allocator, root_node, .permissive);
 }
 
 test "iframe sandbox validation" {
@@ -704,16 +1096,20 @@ test "iframe sandbox validation" {
     try sanitizeStrict(allocator, body);
     const result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(result);
+    const norm_result = try z.normalizeText(allocator, result);
+    defer allocator.free(norm_result);
 
-    print("=== iframe test result ===\n{s}\n", .{result});
+    print("=== iframe test result ===\n{s}\n", .{norm_result});
+    const expected = "<body><iframe sandbox src=\"https://example.com\">Safe iframe</iframe><iframe sandbox>Safe - empty sandbox, no src</iframe></body>";
+    try testing.expectEqualStrings(expected, norm_result);
 
-    // Should keep safe sandboxed iframes
-    try testing.expect(std.mem.indexOf(u8, result, "Safe iframe") != null);
-    try testing.expect(std.mem.indexOf(u8, result, "Safe - empty sandbox") != null);
+    // // Should keep safe sandboxed iframes
+    // try testing.expect(std.mem.indexOf(u8, result, "Safe iframe") != null);
+    // try testing.expect(std.mem.indexOf(u8, result, "Safe - empty sandbox") != null);
 
-    // Should remove unsafe iframes
-    try testing.expect(std.mem.indexOf(u8, result, "Unsafe - no sandbox") == null);
-    try testing.expect(std.mem.indexOf(u8, result, "Unsafe - dangerous src") == null);
+    // // Should remove unsafe iframes
+    // try testing.expect(std.mem.indexOf(u8, result, "Unsafe - no sandbox") == null);
+    // try testing.expect(std.mem.indexOf(u8, result, "Unsafe - dangerous src") == null);
 }
 
 test "big" {
@@ -772,13 +1168,13 @@ test "big" {
     try sanitizeWithOptions(
         allocator,
         body,
-        .{
+        .{ .custom = SanitizerOptions{
             .skip_comments = true,
             .remove_scripts = false,
             .remove_styles = true,
             .strict_uri_validation = true,
             .allow_custom_elements = true,
-        },
+        } },
     );
     try z.prettyPrint(body);
 }
@@ -823,25 +1219,19 @@ test "comprehensive HTML and SVG sanitization" {
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
     print("\n=== initial\n", .{});
-    // try z.prettyPrint(body);
+    try z.prettyPrint(body);
 
     // Test 1: Strict sanitization (no custom elements)
-    try sanitizeWithOptions(allocator, body, .{
-        .skip_comments = true,
-        .remove_scripts = true,
-        .remove_styles = true,
-        .strict_uri_validation = true,
-        .allow_custom_elements = false,
-    });
+    try sanitizeWithOptions(allocator, body, .strict);
     print("\n=== After strict sanitization super strict ===\n", .{});
-    // try z.prettyPrint(body);
+    try z.prettyPrint(body);
 
     // Normalize to clean up empty text nodes left by element removal
     const body_element = z.nodeToElement(body) orelse return;
     try z.normalize(allocator, body_element); // Standard browser-like normalization
 
-    // print("\n=== After normalization ===\n", .{});
-    // try z.prettyPrint(body);
+    print("\n=== After normalization ===\n", .{});
+    try z.prettyPrint(body);
 
     const strict_result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(strict_result);
@@ -880,16 +1270,10 @@ test "comprehensive HTML and SVG sanitization" {
     defer z.destroyDocument(doc2);
     const body2 = z.bodyNode(doc2).?;
 
-    try sanitizeWithOptions(allocator, body2, .{
-        .skip_comments = true,
-        .remove_scripts = true,
-        .remove_styles = false, // Allow inline styles for custom elements
-        .strict_uri_validation = true,
-        .allow_custom_elements = true,
-    });
+    try sanitizeWithOptions(allocator, body2, .permissive);
 
     print("\n=== Permissive Sanitization (custom elements enabled) ===\n", .{});
-    // try z.prettyPrint(body2);
+    try z.prettyPrint(body2);
 
     const permissive_result = try z.outerNodeHTML(allocator, body2);
     defer allocator.free(permissive_result);
@@ -913,29 +1297,3 @@ test "comprehensive HTML and SVG sanitization" {
     // Traditional onclick removed even from custom elements
     try testing.expect(std.mem.indexOf(u8, permissive_result, "onclick") == null);
 }
-
-// test "get and print your thread" {
-//     var client: std.http.Client = .{
-//         .allocator = std.testing.allocator,
-//     };
-//     defer client.deinit();
-
-//     const stdout_writer_buf: []u8 = try std.testing.allocator.alloc(u8, 4096);
-//     defer std.testing.allocator.free(stdout_writer_buf);
-
-//     var file_writer: std.fs.File.Writer = std.fs.File.stdout().writer(stdout_writer_buf);
-
-//     const writer_ptr = &file_writer.interface;
-
-//     const fetch: std.http.Client.FetchResult = try client.fetch(.{
-//         // Print to stdout
-//         .method = .GET,
-//         .response_writer = writer_ptr,
-//         .location = .{
-//             .url = "https://example.com",
-//         },
-//     });
-//     try std.testing.expect(fetch.status == .ok);
-
-//     try file_writer.interface.flush();
-// }

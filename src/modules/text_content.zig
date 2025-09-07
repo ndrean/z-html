@@ -14,6 +14,26 @@ extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const 
 extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
 extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
 
+// === comment ===
+
+/// [core] Get comment text content
+///
+/// Caller owns the slice
+pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
+    const inner_text = try textContent(
+        allocator,
+        z.commentToNode(comment),
+    );
+    return inner_text;
+}
+
+/// [core] Get comment text content as _zero-copy slice_ (UNSAFE)
+pub fn commentContent_zc(comment: *z.Comment) []const u8 {
+    return textContent_zc(z.commentToNode(comment));
+}
+
+// === text ===
+
 /// [core] Get the concatenated text content with empty string fallback of a node
 ///
 /// Returns the text content or an empty string if none exists.
@@ -64,6 +84,13 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
 
     return text_ptr[0..len];
 }
+
+// pub const TextOptions = struct {
+//     escape: bool = false,
+//     remove_comments: bool = false,
+//     remove_empty_elements: bool = false,
+//     keep_new_lines: bool = false,
+// };
 
 /// [core] Sets any inner content of a node with new content as text.
 ///
@@ -140,26 +167,25 @@ test "setContentAsText" {
 /// try testing.expectEqualStrings("<p>Hi <strong>world</strong></p>", html);
 /// ---
 /// ```
-pub fn replaceText(allocator: std.mem.Allocator, node: ?*z.DomNode, text: []const u8, options: z.TextOptions) !void {
-    // std.debug.assert(z.nodeType(node) == .text); // Only text nodes
+pub fn replaceText(node: ?*z.DomNode, text: []const u8) !void {
+    // const n = node orelse return Err.NoNode;
 
-    const n = node orelse return Err.NoNode;
+    if (node == null) return Err.NoNode;
+    if (z.nodeType(node.?) != .text) return Err.NotTextNode;
 
-    if (z.nodeType(n) != .text) return Err.NotTextNode;
+    // const final_text = if (options.escape)
+    //     try z.escapeHtml(allocator, text)
+    // else
+    //     text;
 
-    const final_text = if (options.escape)
-        try z.escapeHtml(allocator, text)
-    else
-        text;
+    // defer if (options.escape) allocator.free(final_text);
 
-    defer if (options.escape) allocator.free(final_text);
-
-    const current_len = z.textContent_zc(n).len;
+    const current_len = z.textContent_zc(node.?).len;
 
     if (lxb_dom_character_data_replace(
-        n,
-        final_text.ptr,
-        final_text.len,
+        node.?,
+        text.ptr,
+        text.len,
         0, // Start position
         current_len, // Replace entire content
     ) != z._OK) return Err.SetTextContentFailed;
@@ -175,7 +201,7 @@ test "replaceTextContent" {
     try testing.expectEqualStrings(z.textContent_zc(inner_text.?), "Hello ");
     try testing.expectEqualStrings(z.textContent_zc(p.?), "Hello world");
 
-    try replaceText(allocator, inner_text.?, "New text", .{});
+    try replaceText(inner_text.?, "New text");
 
     const p_text = z.textContent_zc(p.?);
     try testing.expectEqualStrings("New textworld", p_text);
@@ -185,7 +211,7 @@ test "replaceTextContent" {
     try testing.expectEqualStrings("<p>New text<strong>world</strong></p>", txt);
 }
 test "set and replace text content" {
-    const allocator = testing.allocator;
+    // const allocator = testing.allocator;
 
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
@@ -198,14 +224,14 @@ test "set and replace text content" {
 
     try testing.expectError(
         Err.NoNode,
-        replaceText(allocator, inner_text, "text", .{}),
+        replaceText(inner_text, "text"),
     );
 
     const text_node = try z.createTextNode(doc, "");
     z.appendChild(node, text_node);
     inner_text = z.firstChild(node);
 
-    try replaceText(allocator, inner_text, "Initial text", .{});
+    try replaceText(inner_text.?, "Initial text");
     try testing.expectEqualStrings("Initial text", z.textContent_zc(inner_text.?));
 }
 
@@ -317,16 +343,16 @@ test "get & set NodeTextContent and escape option" {
 
     try testing.expectEqualStrings("Hello, world!", text_content);
 
-    const options = z.TextOptions{ .escape = true };
+    // const options = z.TextOptions{ .escape = true };
     const inner_text = z.firstChild(z.elementToNode(element));
-    try replaceText(allocator, inner_text.?, "<script>alert('xss')</script> & \"quotes\"", options);
+    try replaceText(inner_text.?, "<script>alert('xss')</script> & \"quotes\"");
 
     const new_escaped_text = try textContent(
         allocator,
         node,
     );
     defer allocator.free(new_escaped_text);
-    try testing.expectEqualStrings("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;", new_escaped_text);
+    try testing.expectEqualStrings("<script>alert('xss')</script> & \"quotes\"", new_escaped_text);
 }
 
 test "HTML escaping" {
@@ -338,22 +364,6 @@ test "HTML escaping" {
 
     const expected = "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; &amp; &quot;quotes&quot;";
     try testing.expectEqualStrings(expected, escaped);
-}
-
-/// [core] Get comment text content
-///
-/// Caller owns the slice
-pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
-    const inner_text = try textContent(
-        allocator,
-        z.commentToNode(comment),
-    );
-    return inner_text;
-}
-
-/// [core] Get comment text content as _zero-copy slice_ (UNSAFE)
-pub fn commentContent_zc(comment: *z.Comment) []const u8 {
-    return textContent_zc(z.commentToNode(comment));
 }
 
 test "first text content & comment" {
