@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
     const zhtml_module = b.addModule(
         "zhtml",
         .{
-            .root_source_file = b.path("src/zhtml.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
         },
@@ -65,7 +65,7 @@ pub fn build(b: *std.Build) void {
     var unit_tests = b.addTest(.{
         // .name = "unit_tests",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/zhtml.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
         }),

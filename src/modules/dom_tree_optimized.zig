@@ -1,7 +1,7 @@
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 
-/// Optimized DOM to tuple serialization using Writer interface 
+/// Optimized DOM to tuple serialization using Writer interface
 fn serializeNodeToWriter(w: anytype, node: *z.DomNode) !void {
     const node_type = z.nodeType(node);
 
@@ -17,7 +17,7 @@ fn serializeNodeToWriter(w: anytype, node: *z.DomNode) !void {
             var gpa = std.heap.GeneralPurposeAllocator(.{}){};
             defer _ = gpa.deinit();
             const temp_allocator = gpa.allocator();
-            
+
             const attrs = z.getAttributes_bf(temp_allocator, element) catch &[_]z.Attribute{};
             defer {
                 for (attrs) |attr| {
@@ -96,12 +96,12 @@ pub fn domToTupleStringOptimized(allocator: std.mem.Allocator, doc: *z.HTMLDocum
     // Single buffer approach like C++ std::string
     var result = std.ArrayList(u8).init(allocator);
     defer result.deinit();
-    
+
     // Pre-allocate reasonable capacity to avoid early reallocations
     try result.ensureTotalCapacity(8192);
-    
+
     const writer = result.writer();
-    
+
     try writer.writeByte('[');
     const root = z.documentRoot(doc).?;
     var first = true;
@@ -113,6 +113,6 @@ pub fn domToTupleStringOptimized(allocator: std.mem.Allocator, doc: *z.HTMLDocum
         child = z.nextSibling(child.?);
     }
     try writer.writeByte(']');
-    
+
     return result.toOwnedSlice();
 }

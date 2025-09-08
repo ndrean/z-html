@@ -1,5 +1,5 @@
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 
 const testing = std.testing;
 const print = std.debug.print;

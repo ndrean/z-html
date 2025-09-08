@@ -9,14 +9,14 @@
 //! You can create templates programmatically, and append children to their content. You grab the content via the template's document fragment.
 //!
 //! Templates content can be populated from a parsed string.
-//! This option is available in the FragmentParser engine. This content is cloned into the given document.
+//! This option is available in the Parser engine. This content is cloned into the given document.
 //!
 //! Templates are most probably already present in the DOM.
 //!
 //! You can retrieve their content and clone it to the document with `useTemplateElement` (via an instance of a parser engine or directly).
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const Err = z.Err;
 
 const testing = std.testing;

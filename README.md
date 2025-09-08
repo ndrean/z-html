@@ -171,7 +171,7 @@ fn demoParser(allocator: std.mem.Allocator) !void {
     const ul_elt = z.getElementByTag(body, .ul).?;
     const ul = z.elementToNode(ul_elt);
 
-    var parser = try z.FragmentParser.init(allocator);
+    var parser = try z.Parser.init(allocator);
     defer parser.deinit();
 
     for (0..3) |i| {
@@ -541,7 +541,7 @@ TODO
 - Makefile.lexbor   (`lexbor` build automation)
 - lexbor_src        (local `lexbor` source code & built static file)
 - src /
-  - zhtml.zig
+  - root.zig
   - minimal.c
   - errors.zig
   - modules
@@ -573,7 +573,7 @@ make -f Makefile.lexbor
 
 ### Run tests
 
-The _build.zig_ file runs all the tests from _zhtml.zig_.
+The _build.zig_ file runs all the tests from _root.zig_.
 It imports all the submodules and runs the tests.
 
 ```sh

@@ -1,6 +1,6 @@
 //! Core functions: Doc creation, parsing, and DOM manipulation
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const Err = z.Err;
 
 const testing = std.testing;
@@ -1485,7 +1485,7 @@ pub fn insertAdjacentHTML(
 
     const target_node = elementToNode(target);
 
-    var parser = try z.FragmentParser.init(allocator);
+    var parser = try z.Parser.init(allocator);
     defer parser.deinit();
 
     // Parse the HTML fragment once

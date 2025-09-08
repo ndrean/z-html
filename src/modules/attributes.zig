@@ -4,7 +4,7 @@
 //! For DOM search functions like `getElementById`, `getElementByAttribute`, see simple_search.zig.
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const Err = z.Err;
 
 const testing = std.testing;

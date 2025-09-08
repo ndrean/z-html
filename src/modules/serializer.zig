@@ -5,7 +5,7 @@
 // =============================================================================
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const html_spec = @import("html_spec.zig");
 const Err = z.Err;
 

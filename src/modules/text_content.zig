@@ -3,7 +3,7 @@
 //! It provides direct functions (terminated by `_zc`) to get zero-copy slices directly into lexbor's internal memory, and allocated versions.
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const print = std.debug.print;
 const Err = z.Err;
 
@@ -30,6 +30,49 @@ pub fn commentContent(allocator: std.mem.Allocator, comment: *z.Comment) ![]u8 {
 /// [core] Get comment text content as _zero-copy slice_ (UNSAFE)
 pub fn commentContent_zc(comment: *z.Comment) []const u8 {
     return textContent_zc(z.commentToNode(comment));
+}
+
+test "comments" {
+    const allocator = testing.allocator;
+
+    const html_with_comments =
+        \\<div>
+        \\    <!-- regular comment -->
+        \\    <!--   whitespace comment   -->
+        \\    <!---->
+        \\    <!--
+        \\    multiline
+        \\    comment
+        \\    -->
+        \\    <p>Text</p>
+        \\</div>
+    ;
+
+    const doc = try z.createDocFromString(html_with_comments);
+    defer z.destroyDocument(doc);
+    const body_node = z.bodyNode(doc).?;
+    const div_node = z.firstChild(body_node).?;
+
+    var comment_count: usize = 0;
+    var child = z.firstChild(div_node);
+
+    while (child != null) {
+        const node_type = z.nodeType(child.?);
+        if (node_type == .comment) {
+            comment_count += 1;
+
+            const child_as_comment = z.nodeToComment(child.?).?;
+            const comment_text = z.commentContent_zc(child_as_comment);
+
+            const alloc_comment_text = try z.commentContent(allocator, child_as_comment);
+            defer allocator.free(alloc_comment_text);
+
+            try testing.expectEqualStrings(alloc_comment_text, comment_text);
+        }
+        child = z.nextSibling(child.?);
+    }
+
+    try testing.expect(comment_count == 4);
 }
 
 // === text ===

@@ -400,9 +400,6 @@ pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
     .{ "h5", &allowed_common },
     .{ "h6", &allowed_common },
     .{ "blockquote", &allowed_common },
-    .{ "pre", &allowed_common },
-    .{ "code", &allowed_common },
-    .{ "template", &allowed_common },
     .{ "button", &allowed_button },
     .{ "i", &allowed_common },
     .{ "table", &allowed_table },
@@ -1139,18 +1136,12 @@ test "comprehensive sanitization modes" {
         \\  <a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=">Potential dangerous b64</a>
         \\  <a href="file:///etc/passwd">Dangerous Local file access</a>
         \\  <p> The <code>push()</code> method adds one or more elements to the end of an array</p>
-        \\  <pre> <code>Node.clone();</code>
-        \\ method creates a copy of an element</pre>
-        \\  <pre>function dangerous() {
-        \\    <script>alert('pre-script')</script>
-        \\    return "formatted code";
-        \\  }</pre>
         \\</div>
         \\<link href="/shared-assets/misc/link-element-example.css" rel="stylesheet">
         \\<template><script>alert('XSS');</script><li id="{}">Item-"{}"</li></template>
     ;
 
-    // print("\n=== Comprehensive Sanitization Test ===\n", .{});
+    print("\n=== Comprehensive Sanitization Test ===\n", .{});
 
     // Test 1: .none mode (no sanitization)
     {
@@ -1159,26 +1150,19 @@ test "comprehensive sanitization modes" {
         const body = z.bodyNode(doc).?;
 
         try sanitizeWithOptions(allocator, body, .none);
-
+        
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
-
-        // print("\n=== .none mode (no sanitization) ===\n", .{});
-
-        // Should preserve most content including scripts and custom elements
+        
+        print("\n=== .none mode (no sanitization) ===\n", .{});
+        
+        // Should preserve everything including dangerous content
         try testing.expect(std.mem.indexOf(u8, result, "script") != null);
+        try testing.expect(std.mem.indexOf(u8, result, "onclick") != null);
+        try testing.expect(std.mem.indexOf(u8, result, "javascript:") != null);
         try testing.expect(std.mem.indexOf(u8, result, "malicious comment") != null);
         try testing.expect(std.mem.indexOf(u8, result, "phoenix-component") != null);
         try testing.expect(std.mem.indexOf(u8, result, "my-button") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "vue-component") != null);
-
-        // Should preserve pre/code elements and their text content
-        try testing.expect(std.mem.indexOf(u8, result, "<pre") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "<code") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "Node.clone()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "push()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "function dangerous()") != null);
-        // Note: onclick and javascript: URIs might still be filtered at parser level
     }
 
     // Test 2: .strict mode (no custom elements, remove all dangerous content)
@@ -1188,16 +1172,16 @@ test "comprehensive sanitization modes" {
         const body = z.bodyNode(doc).?;
 
         try sanitizeWithOptions(allocator, body, .strict);
-
+        
         // Normalize to clean up empty text nodes
         const body_element = z.nodeToElement(body) orelse return;
         try z.normalize(allocator, body_element);
-
+        
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
-
-        // print("\n=== .strict mode (secure, no custom elements) ===\n", .{});
-
+        
+        print("\n=== .strict mode (secure, no custom elements) ===\n", .{});
+        
         // Should remove dangerous content
         try testing.expect(std.mem.indexOf(u8, result, "script") == null);
         try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
@@ -1205,12 +1189,12 @@ test "comprehensive sanitization modes" {
         try testing.expect(std.mem.indexOf(u8, result, "malicious comment") == null);
         try testing.expect(std.mem.indexOf(u8, result, "foreignObject") == null);
         try testing.expect(std.mem.indexOf(u8, result, "animate") == null);
-
+        
         // Should remove custom elements in strict mode
         try testing.expect(std.mem.indexOf(u8, result, "phoenix-component") == null);
         try testing.expect(std.mem.indexOf(u8, result, "my-button") == null);
         try testing.expect(std.mem.indexOf(u8, result, "vue-component") == null);
-
+        
         // Should preserve safe content
         try testing.expect(std.mem.indexOf(u8, result, "Safe text") != null);
         try testing.expect(std.mem.indexOf(u8, result, "Good link") != null);
@@ -1219,15 +1203,6 @@ test "comprehensive sanitization modes" {
         try testing.expect(std.mem.indexOf(u8, result, "<svg") != null);
         try testing.expect(std.mem.indexOf(u8, result, "<circle") != null);
         try testing.expect(std.mem.indexOf(u8, result, "SVG Text") != null);
-
-        // Should preserve pre/code elements and text content but remove dangerous scripts inside them
-        try testing.expect(std.mem.indexOf(u8, result, "<pre") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "<code") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "Node.clone()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "push()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "function dangerous()") != null);
-        // But script tags inside pre should be removed
-        try testing.expect(std.mem.indexOf(u8, result, "pre-script") == null);
     }
 
     // Test 3: .permissive mode (allow custom elements, still secure)
@@ -1237,18 +1212,18 @@ test "comprehensive sanitization modes" {
         const body = z.bodyNode(doc).?;
 
         try sanitizeWithOptions(allocator, body, .permissive);
-
+        
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
-
-        // print("\n=== .permissive mode (custom elements enabled) ===\n", .{});
-
+        
+        print("\n=== .permissive mode (custom elements enabled) ===\n", .{});
+        
         // Should still remove dangerous content
         try testing.expect(std.mem.indexOf(u8, result, "script") == null);
         try testing.expect(std.mem.indexOf(u8, result, "foreignObject") == null);
         try testing.expect(std.mem.indexOf(u8, result, "animate") == null);
         try testing.expect(std.mem.indexOf(u8, result, "javascript:") == null);
-
+        
         // Should preserve custom elements and framework attributes
         try testing.expect(std.mem.indexOf(u8, result, "phoenix-component") != null);
         try testing.expect(std.mem.indexOf(u8, result, "my-button") != null);
@@ -1258,17 +1233,9 @@ test "comprehensive sanitization modes" {
         try testing.expect(std.mem.indexOf(u8, result, "@click") != null);
         try testing.expect(std.mem.indexOf(u8, result, "v-if") != null);
         try testing.expect(std.mem.indexOf(u8, result, "data-user-id") != null);
-
+        
         // Traditional onclick should still be removed even from custom elements
         try testing.expect(std.mem.indexOf(u8, result, "onclick") == null);
-
-        // Should preserve pre/code elements and text content
-        try testing.expect(std.mem.indexOf(u8, result, "<pre") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "<code") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "Node.clone()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "function dangerous()") != null);
-        // But script tags inside pre should still be removed
-        try testing.expect(std.mem.indexOf(u8, result, "pre-script") == null);
     }
 
     // Test 4: .custom mode (preserve comments, allow scripts, allow custom elements)
@@ -1277,40 +1244,147 @@ test "comprehensive sanitization modes" {
         defer z.destroyDocument(doc);
         const body = z.bodyNode(doc).?;
 
-        try sanitizeWithOptions(allocator, body, .{
-            .custom = SanitizerOptions{
-                .skip_comments = false, // Preserve comments
-                .remove_scripts = false, // Allow scripts
-                .remove_styles = true, // Remove styles
-                .strict_uri_validation = false, // Allow more URIs
-                .allow_custom_elements = true, // Allow custom elements
-            },
-        });
-
+        try sanitizeWithOptions(allocator, body, .{ .custom = SanitizerOptions{
+            .skip_comments = false,  // Preserve comments
+            .remove_scripts = false, // Allow scripts
+            .remove_styles = true,   // Remove styles
+            .strict_uri_validation = false, // Allow more URIs
+            .allow_custom_elements = true,  // Allow custom elements
+        }});
+        
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
-
-        // print("\n=== .custom mode (comments preserved, scripts allowed) ===\n", .{});
-
+        
+        print("\n=== .custom mode (comments preserved, scripts allowed) ===\n", .{});
+        
         // Should preserve comments and scripts
         try testing.expect(std.mem.indexOf(u8, result, "malicious comment") != null);
         try testing.expect(std.mem.indexOf(u8, result, "script") != null);
-
+        
         // Should preserve custom elements
         try testing.expect(std.mem.indexOf(u8, result, "phoenix-component") != null);
         try testing.expect(std.mem.indexOf(u8, result, "my-button") != null);
         try testing.expect(std.mem.indexOf(u8, result, "vue-component") != null);
-
+        
         // Should still remove styles (as configured)
         try testing.expect(std.mem.indexOf(u8, result, "<style") == null);
+    }
+}
 
-        // Should preserve pre/code elements and all text content (including scripts if configured)
-        try testing.expect(std.mem.indexOf(u8, result, "<pre") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "<code") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "Node.clone()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "push()") != null);
-        try testing.expect(std.mem.indexOf(u8, result, "function dangerous()") != null);
-        // In custom mode with scripts allowed, might preserve script content
-        // (but the script tags themselves might still be parsed/handled)
+test "sanitizations flavours with SVG and custom element sanitization" {
+    const allocator = testing.allocator;
+
+    const malicious_input =
+        \\<div onclick="alert('xss')" style="background: url(javascript:alert('css'))">
+        \\  <script>alert('xss')</script>
+        \\  <p onmouseover="steal_data()" class="safe-class">Safe text</p>
+        \\  <a href="javascript:alert('href')" title="Bad link">Bad link</a>
+        \\  <a href="https://example.com" class="link">Good link</a>
+        \\  <!-- potential malicious comment -->
+        \\  <img src="https://example.com/image.jpg" alt="Safe image" onerror="alert('img')">
+        \\  <iframe src="evil.html"></iframe>
+        \\  
+        \\  <svg viewBox="0 0 100 100" onclick="alert('svg-xss')">
+        \\    <circle cx="50" cy="50" r="40" fill="blue"/>
+        \\    <script>alert('svg-script')</script>
+        \\    <foreignObject width="100" height="100">
+        \\      <div xmlns="http://www.w3.org/1999/xhtml">Evil content</div>
+        \\    </foreignObject>
+        \\    <animate attributeName="opacity" values="0;1" dur="2s" onbegin="alert('animate')"/>
+        \\    <path d="M10 10 L90 90" stroke="red"/>
+        \\    <text x="50" y="50" href="javascript:alert('text')">SVG Text</text>
+        \\  </svg>
+        \\  
+        \\  <phoenix-component phx-click="increment" :if="show_component" onclick="alert('custom')">
+        \\    Phoenix LiveView Component
+        \\  </phoenix-component>
+        \\  <my-button @click="handleClick" :disabled="isDisabled" class="btn">
+        \\    Custom Button
+        \\  </my-button>
+        \\  <vue-component v-if="showProfile" data-user-id="123">Vue Component</vue-component>
+        \\  <p> The <code>push()</code> method adds one or more elements to the end of an array</p>
+        \\</div>
+    ;
+
+    // Test 1: Strict sanitization (no custom elements)
+    {
+        const doc = try z.createDocFromString(malicious_input);
+        defer z.destroyDocument(doc);
+        const body = z.bodyNode(doc).?;
+        print("\n=== Test: comprehensive HTML and SVG sanitization\n", .{});
+        try sanitizeWithOptions(allocator, body, .strict);
+        print("\nstrict:\n", .{});
+
+        // Normalize to clean up empty text nodes left by element removal
+        const body_element = z.nodeToElement(body) orelse return;
+        try z.normalize(allocator, body_element); // Standard browser-like normalization
+
+        try z.prettyPrint(body);
+
+        const strict_result = try z.outerNodeHTML(allocator, body);
+        defer allocator.free(strict_result);
+
+        // Verify dangerous elements/attributes removed
+        try testing.expect(std.mem.indexOf(u8, strict_result, "script") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "malicious comment") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "iframe") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "foreignObject") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "animate") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "onclick") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "onmouseover") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "onbegin") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "onerror") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "javascript:") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "style=") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "comment") == null);
+
+        // Verify safe content preserved
+        try testing.expect(std.mem.indexOf(u8, strict_result, "Safe text") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "Good link") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "safe-class") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "https://example.com") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "<svg") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "<circle") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "<path") != null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "SVG Text") != null);
+
+        // Verify custom elements removed when not allowed
+        try testing.expect(std.mem.indexOf(u8, strict_result, "phoenix-component") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "my-button") == null);
+        try testing.expect(std.mem.indexOf(u8, strict_result, "vue-component") == null);
+    }
+
+    // Test 2: Permissive sanitization (with custom elements) - use fresh DOM
+    {
+        const fresh_doc = try z.createDocFromString(malicious_input);
+        defer z.destroyDocument(fresh_doc);
+        const fresh_body = z.bodyNode(fresh_doc).?;
+
+        try sanitizeNode(allocator, fresh_body, .permissive);
+
+        print("\n=== Permissive Sanitization (custom elements enabled) ===\n", .{});
+        try z.prettyPrint(fresh_body);
+
+        const permissive_result = try z.outerNodeHTML(allocator, fresh_body);
+        defer allocator.free(permissive_result);
+
+        // Still removes dangerous stuff
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "script") == null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "foreignObject") == null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "animate") == null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "javascript:") == null);
+
+        // But preserves custom elements and framework attributes
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "phoenix-component") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "my-button") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "vue-component") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "phx-click") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, ":if") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "@click") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "v-if") != null);
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "data-user-id") != null);
+
+        // Traditional onclick removed even from custom elements
+        try testing.expect(std.mem.indexOf(u8, permissive_result, "onclick") == null);
     }
 }

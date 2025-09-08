@@ -5,7 +5,7 @@
 //! - apply normalization to the collected elements
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const Err = z.Err;
 
 const testing = std.testing;
@@ -16,22 +16,22 @@ extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size:
 
 /// Enhanced whitespace detection for different normalization strategies
 /// Returns true if text contains ONLY unwanted whitespace characters
-/// Strategy 1: Only \r (minimal/surgical)  
+/// Strategy 1: Only \r (minimal/surgical)
 /// Strategy 2: \r, \n, \t (browser-like - these collapse to single space anyway)
 fn isUndesirableWhitespace(text: []const u8) bool {
     if (text.len == 0) return true;
-    
+
     // Check if text contains ONLY problematic whitespace (\r, \n, \t)
     // These are whitespace characters that browsers collapse anyway
     for (text) |char| {
         if (char != '\r' and char != '\n' and char != '\t') {
-            return false;  // Contains non-collapsible content
+            return false; // Contains non-collapsible content
         }
     }
     return true; // All characters are collapsible whitespace
 }
 
-/// Fast whitespace-only detection using lexbor's optimized memory access  
+/// Fast whitespace-only detection using lexbor's optimized memory access
 /// Returns true if text contains ONLY whitespace characters (\n\t\r )
 fn isWhitespaceOnly(text: []const u8) bool {
     if (text.len == 0) return true;
@@ -233,7 +233,7 @@ pub fn normalizeForDisplay(allocator: std.mem.Allocator, root_elt: *z.HTMLElemen
 }
 
 pub const NormalizeOptions = struct {
-    skip_comments: bool = false,  // Only option: whether to remove comments or not
+    skip_comments: bool = false, // Only option: whether to remove comments or not
     // Note: Special elements (<pre>, <code>, <script>, <style>, <textarea>) are always preserved
     // Note: Collapsible whitespace (\r, \n, \t) is always removed (browser-like behavior)
 };
@@ -478,6 +478,32 @@ fn normalizeTemplateContent(
         &template_context,
         options,
     );
+}
+
+test "normalize bahaviour" {
+    const allocator = testing.allocator;
+    const html =
+        \\<div> \n
+        \\  <p>
+        \\      Some \t
+        \\    <i>  text  \n\n  </i>
+        \\  </p> \t
+        \\</div>
+    ;
+
+    const doc = try z.createDocFromString(html);
+    defer z.destroyDocument(doc);
+    const body = z.bodyElement(doc).?;
+
+    try z.normalize(allocator, body);
+    const normalized = try z.innerHTML(allocator, body);
+    defer allocator.free(normalized);
+    print("normalized: {s}\n", .{normalized});
+
+    // const expected = "<div><p> Some \t <i>  text  \n\n. </i></p></div>";
+
+    // try testing.expectEqualStrings(expected, normalized);
+
 }
 
 test "normalizeOptions: preserve script and remove whitespace text nodes" {
@@ -850,9 +876,9 @@ test "string-based HTML normalization" {
 test "browser-like normalization" {
     const allocator = testing.allocator;
 
-    // Create HTML with various whitespace types 
+    // Create HTML with various whitespace types
     const html = "<div>\r<p>Text</p>\r\n<span> Regular space </span>\n\t<em>Tab and newline</em>\r</div>";
-    
+
     const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
@@ -871,19 +897,19 @@ test "browser-like normalization" {
 
 test "collapsible whitespace detection accuracy" {
     // Test the isUndesirableWhitespace function for browser-like behavior
-    
+
     // Should detect collapsible whitespace patterns (\r, \n, \t)
     try testing.expect(isUndesirableWhitespace("\r"));
-    try testing.expect(isUndesirableWhitespace("\n"));  
+    try testing.expect(isUndesirableWhitespace("\n"));
     try testing.expect(isUndesirableWhitespace("\t"));
     try testing.expect(isUndesirableWhitespace("\r\n"));
     try testing.expect(isUndesirableWhitespace("\n\t"));
     try testing.expect(isUndesirableWhitespace("\t\r\n"));
-    try testing.expect(isUndesirableWhitespace(""));  // empty strings
-    
+    try testing.expect(isUndesirableWhitespace("")); // empty strings
+
     // Should NOT detect spaces (preserve meaningful spacing)
     try testing.expect(!isUndesirableWhitespace(" "));
-    try testing.expect(!isUndesirableWhitespace(" \n"));  // space with newline
+    try testing.expect(!isUndesirableWhitespace(" \n")); // space with newline
     try testing.expect(!isUndesirableWhitespace("text"));
     try testing.expect(!isUndesirableWhitespace(" text "));
     try testing.expect(!isUndesirableWhitespace("a"));
@@ -894,7 +920,7 @@ test "aggressive normalization for display" {
 
     // Create HTML with comments and various whitespace
     const html = "<div><!-- comment -->\n<p>Text</p> \n<span> Keep spaces </span>\t</div>";
-    
+
     const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 

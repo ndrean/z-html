@@ -165,8 +165,8 @@ pub const tagFromAnyElement = tag.tagFromAnyElement;
 pub const matchesTagName = tag.matchesTagName;
 pub const isVoidName = tag.isVoidName;
 pub const isVoidElement = tag.isVoidElement; // Change name
-pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
-pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
+// pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
+// pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
 
 // ===================================
 // Comment
@@ -239,7 +239,7 @@ pub const setInnerSafeHTMLStrict = parse.setInnerSafeHTMLStrict;
 pub const setInnerSafeHTMLPermissive = parse.setInnerSafeHTMLPermissive;
 
 // Parser engine for fragment processing
-pub const FragmentParser = parse.FragmentParser;
+pub const Parser = parse.Parser;
 
 //=====================================
 // Stream parser for chunk processing

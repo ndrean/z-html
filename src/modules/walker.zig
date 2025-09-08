@@ -47,7 +47,7 @@
 //=======================================================================
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const Err = z.Err;
 const print = std.debug.print;
 

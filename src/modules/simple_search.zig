@@ -49,7 +49,7 @@
 //! See walker.zig for genSearchElements() (multiple results) and genProcessAll() (side effects)
 
 const std = @import("std");
-const z = @import("../zhtml.zig");
+const z = @import("../root.zig");
 const walker = @import("walker.zig");
 const Err = z.Err;
 
