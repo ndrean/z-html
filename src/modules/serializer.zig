@@ -7,6 +7,8 @@
 const std = @import("std");
 const z = @import("../root.zig");
 const html_spec = @import("html_spec.zig");
+const html_tags = @import("html_tags.zig");
+const HtmlTag = html_tags.HtmlTag;
 const Err = z.Err;
 
 pub const print = std.debug.print;
@@ -249,12 +251,17 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
 
     // Handle element names (only immediately after < or </)
     if (ctx_ptr.expect_element_next) {
-        const maybeTagStyle = z.getStyleForElement(text);
-        if (maybeTagStyle != null) {
-            ctx_ptr.expect_element_next = false;
-            ctx_ptr.current_element_tag = text; // Track current element for attribute validation
-            applyStyle(maybeTagStyle.?, text);
-            return z._CONTINUE;
+        // Convert string to enum once for better performance
+        const tag_enum = z.stringToEnum(z.HtmlTag, text);
+        if (tag_enum) |tag| {
+            // Use direct enum-based style lookup - O(1) performance
+            const tag_style = z.getStyleForElementEnum(tag);
+            if (tag_style) |style| {
+                ctx_ptr.expect_element_next = false;
+                ctx_ptr.current_element_tag = text; // Track current element for attribute validation
+                applyStyle(style, text);
+                return z._CONTINUE;
+            }
         }
     }
 

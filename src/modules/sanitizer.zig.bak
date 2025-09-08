@@ -1079,7 +1079,7 @@ test "iframe sandbox validation" {
 
     // Normalize to clean up whitespace left by element removal
     const body_element = z.nodeToElement(body) orelse return;
-    try z.normalize(allocator, body_element);
+    try z.normalizeDOM(allocator, body_element);
 
     const result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(result);
@@ -1175,7 +1175,7 @@ test "comprehensive sanitization modes" {
         
         // Normalize to clean up empty text nodes
         const body_element = z.nodeToElement(body) orelse return;
-        try z.normalize(allocator, body_element);
+        try z.normalizeDOM(allocator, body_element);
         
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
@@ -1317,7 +1317,7 @@ test "sanitizations flavours with SVG and custom element sanitization" {
 
         // Normalize to clean up empty text nodes left by element removal
         const body_element = z.nodeToElement(body) orelse return;
-        try z.normalize(allocator, body_element); // Standard browser-like normalization
+        try z.normalizeDOM(allocator, body_element); // Standard browser-like normalization
 
         try z.prettyPrint(body);
 

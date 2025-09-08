@@ -1,6 +1,8 @@
 const std = @import("std");
 const z = @import("../root.zig");
 const html_spec = @import("html_spec.zig");
+const html_tags = @import("html_tags.zig");
+const HtmlTag = html_tags.HtmlTag;
 const Err = z.Err;
 // const print = z.Writer.print;
 const print = std.debug.print;
@@ -192,6 +194,83 @@ pub const ElementStyles = struct {
     pub const svg = Style.PURPLE;
 };
 
+/// Enum-based style lookup map for O(1) performance
+const StyleMap = std.EnumMap(HtmlTag, []const u8);
+const element_style_map = blk: {
+    var map = StyleMap{};
+
+    // Document structure
+    map.put(.html, ElementStyles.html);
+    map.put(.head, ElementStyles.head);
+    map.put(.body, ElementStyles.body);
+    map.put(.title, ElementStyles.title);
+    map.put(.meta, ElementStyles.meta);
+    map.put(.link, ElementStyles.link);
+    map.put(.script, ElementStyles.script);
+    map.put(.style, ElementStyles.style);
+
+    // Headings
+    map.put(.h1, ElementStyles.h1);
+    map.put(.h2, ElementStyles.h2);
+    map.put(.h3, ElementStyles.h3);
+    map.put(.h4, ElementStyles.h4);
+    map.put(.h5, ElementStyles.h5);
+    map.put(.h6, ElementStyles.h6);
+
+    // Text content
+    map.put(.p, ElementStyles.p);
+    map.put(.div, ElementStyles.div);
+    map.put(.span, ElementStyles.span);
+    map.put(.strong, ElementStyles.strong);
+    map.put(.em, ElementStyles.em);
+    map.put(.i, ElementStyles.i);
+    map.put(.code, ElementStyles.code);
+    map.put(.pre, ElementStyles.pre);
+    map.put(.br, ElementStyles.br);
+    map.put(.hr, ElementStyles.hr);
+
+    // Links and navigation
+    map.put(.a, ElementStyles.a);
+    map.put(.nav, ElementStyles.nav);
+
+    // Lists
+    map.put(.ul, ElementStyles.ul);
+    map.put(.ol, ElementStyles.ol);
+    map.put(.li, ElementStyles.li);
+
+    // Tables
+    map.put(.table, ElementStyles.table);
+    map.put(.tr, ElementStyles.tr);
+    map.put(.td, ElementStyles.td);
+    map.put(.th, ElementStyles.th);
+
+    // Forms
+    map.put(.form, ElementStyles.form);
+    map.put(.input, ElementStyles.input);
+    map.put(.textarea, ElementStyles.textarea);
+    map.put(.button, ElementStyles.button);
+    map.put(.select, ElementStyles.select);
+    map.put(.option, ElementStyles.option);
+    map.put(.label, ElementStyles.label);
+
+    // Semantic elements
+    map.put(.header, ElementStyles.header);
+    map.put(.footer, ElementStyles.footer);
+    map.put(.main, ElementStyles.main);
+    map.put(.section, ElementStyles.section);
+    map.put(.article, ElementStyles.article);
+    map.put(.aside, ElementStyles.aside);
+
+    // Media
+    map.put(.img, ElementStyles.img);
+    map.put(.video, ElementStyles.video);
+    map.put(.audio, ElementStyles.audio);
+    map.put(.canvas, ElementStyles.canvas);
+    map.put(.svg, ElementStyles.svg);
+
+    break :blk map;
+};
+
 /// Default syntax & attributes `Style`
 pub const SyntaxStyle = struct {
     pub const brackets = Style.DIM_WHITE;
@@ -266,107 +345,23 @@ pub fn isStandardHtmlAttribute(attr: []const u8) bool {
     return false;
 }
 
-pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
-    // First check if element exists in HTML specification
-    if (html_spec.getElementSpec(element_name) == null) {
-        // Element not recognized in HTML spec, no styling
-        return null;
-    }
-
-    // Apply specific styling for elements (all elements from HTML spec get some styling)
-    if (std.mem.eql(u8, element_name, "html")) return ElementStyles.html;
-    if (std.mem.eql(u8, element_name, "head")) return ElementStyles.head;
-    if (std.mem.eql(u8, element_name, "body")) return ElementStyles.body;
-    if (std.mem.eql(u8, element_name, "title")) return ElementStyles.title;
-    if (std.mem.eql(u8, element_name, "meta")) return ElementStyles.meta;
-    if (std.mem.eql(u8, element_name, "link")) return ElementStyles.link;
-    if (std.mem.eql(u8, element_name, "script")) return ElementStyles.script;
-    if (std.mem.eql(u8, element_name, "style")) return ElementStyles.style;
-    if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
-    if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;
-    if (std.mem.eql(u8, element_name, "h6")) return ElementStyles.h6;
-    if (std.mem.eql(u8, element_name, "p")) return ElementStyles.p;
-    if (std.mem.eql(u8, element_name, "div")) return ElementStyles.div;
-    if (std.mem.eql(u8, element_name, "span")) return ElementStyles.span;
-    if (std.mem.eql(u8, element_name, "img")) return ElementStyles.img;
-    if (std.mem.eql(u8, element_name, "br")) return ElementStyles.br;
-    if (std.mem.eql(u8, element_name, "hr")) return ElementStyles.hr;
-    if (std.mem.eql(u8, element_name, "form")) return ElementStyles.form;
-    if (std.mem.eql(u8, element_name, "input")) return ElementStyles.input;
-    if (std.mem.eql(u8, element_name, "textarea")) return ElementStyles.textarea;
-    if (std.mem.eql(u8, element_name, "button")) return ElementStyles.button;
-    if (std.mem.eql(u8, element_name, "select")) return ElementStyles.select;
-    if (std.mem.eql(u8, element_name, "option")) return ElementStyles.option;
-    if (std.mem.eql(u8, element_name, "label")) return ElementStyles.label;
-    if (std.mem.eql(u8, element_name, "nav")) return ElementStyles.nav;
-    if (std.mem.eql(u8, element_name, "header")) return ElementStyles.header;
-    if (std.mem.eql(u8, element_name, "footer")) return ElementStyles.footer;
-    if (std.mem.eql(u8, element_name, "main")) return ElementStyles.main;
-    if (std.mem.eql(u8, element_name, "section")) return ElementStyles.section;
-    if (std.mem.eql(u8, element_name, "article")) return ElementStyles.article;
-    if (std.mem.eql(u8, element_name, "h3")) return ElementStyles.h3;
-    if (std.mem.eql(u8, element_name, "h4")) return ElementStyles.h4;
-    if (std.mem.eql(u8, element_name, "h5")) return ElementStyles.h5;
-    if (std.mem.eql(u8, element_name, "h6")) return ElementStyles.h6;
-
-    if (std.mem.eql(u8, element_name, "a")) return ElementStyles.a;
-    if (std.mem.eql(u8, element_name, "link")) return ElementStyles.link;
-
-    if (std.mem.eql(u8, element_name, "strong")) return ElementStyles.strong;
-    if (std.mem.eql(u8, element_name, "em")) return ElementStyles.em;
-    if (std.mem.eql(u8, element_name, "code")) return ElementStyles.code;
-    if (std.mem.eql(u8, element_name, "pre")) return ElementStyles.pre;
-    if (std.mem.eql(u8, element_name, "ul")) return ElementStyles.ul;
-    if (std.mem.eql(u8, element_name, "ol")) return ElementStyles.ol;
-    if (std.mem.eql(u8, element_name, "li")) return ElementStyles.li;
-    if (std.mem.eql(u8, element_name, "table")) return ElementStyles.table;
-    if (std.mem.eql(u8, element_name, "tr")) return ElementStyles.tr;
-    if (std.mem.eql(u8, element_name, "td")) return ElementStyles.td;
-    if (std.mem.eql(u8, element_name, "th")) return ElementStyles.th;
-    if (std.mem.eql(u8, element_name, "i")) return ElementStyles.i;
-
-    if (std.mem.eql(u8, element_name, "html")) return Style.BOLD_CYAN;
-    if (std.mem.eql(u8, element_name, "head")) return Style.CYAN;
-    if (std.mem.eql(u8, element_name, "title")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "meta")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "link")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "script")) return Style.BLACK_YELLOW;
-    if (std.mem.eql(u8, element_name, "style")) return Style.YELLOW_BLACK;
-    if (std.mem.eql(u8, element_name, "h4")) return Style.MAGENTA;
-    if (std.mem.eql(u8, element_name, "h5")) return Style.MAGENTA;
-    if (std.mem.eql(u8, element_name, "h6")) return Style.MAGENTA;
-    if (std.mem.eql(u8, element_name, "span")) return Style.WHITE;
-    if (std.mem.eql(u8, element_name, "img")) return Style.CYAN;
-    if (std.mem.eql(u8, element_name, "br")) return Style.WHITE;
-    if (std.mem.eql(u8, element_name, "hr")) return Style.WHITE;
-    if (std.mem.eql(u8, element_name, "form")) return Style.GREEN;
-    if (std.mem.eql(u8, element_name, "input")) return Style.GREEN;
-    if (std.mem.eql(u8, element_name, "textarea")) return Style.GREEN;
-    if (std.mem.eql(u8, element_name, "button")) return Style.BOLD_GREEN;
-    if (std.mem.eql(u8, element_name, "select")) return Style.GREEN;
-    if (std.mem.eql(u8, element_name, "option")) return Style.WHITE;
-    if (std.mem.eql(u8, element_name, "label")) return Style.GREEN;
-    if (std.mem.eql(u8, element_name, "nav")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "header")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "footer")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "main")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "section")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "article")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "aside")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "details")) return Style.BLUE;
-    if (std.mem.eql(u8, element_name, "summary")) return Style.BOLD_BLUE;
-    if (std.mem.eql(u8, element_name, "video")) return Style.PURPLE;
-    if (std.mem.eql(u8, element_name, "audio")) return Style.PURPLE;
-    if (std.mem.eql(u8, element_name, "canvas")) return Style.PURPLE;
-    if (std.mem.eql(u8, element_name, "svg")) return Style.PURPLE;
-
-    // Add missing anchor element
-    if (std.mem.eql(u8, element_name, "a")) return Style.UNDERLINE_BLUE;
-
-    // Default styling for any element that's in HTML spec but not explicitly styled above
-    // This ensures all valid HTML elements get context tracking for attribute validation
-    return Style.WHITE;
+/// Enum-based style lookup - O(1) performance
+pub fn getStyleForElementEnum(tag: HtmlTag) ?[]const u8 {
+    return element_style_map.get(tag) orelse Style.WHITE; // Default style for valid elements
 }
+
+// /// String-based style lookup (legacy - converts to enum internally)
+// pub fn getStyleForElement(element_name: []const u8) ?[]const u8 {
+//     // First check if element exists in HTML specification
+//     if (html_spec.getElementSpec(element_name) == null) {
+//         // Element not recognized in HTML spec, no styling
+//         return null;
+//     }
+
+//     // Convert string to enum and use fast lookup
+//     const tag = html_tags.stringToEnum(HtmlTag, element_name) orelse return Style.WHITE;
+//     return getStyleForElementEnum(tag);
+// }
 
 pub fn isDangerousAttributeValue(value: []const u8) bool {
     // clean quotes if any

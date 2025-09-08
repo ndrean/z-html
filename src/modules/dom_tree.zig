@@ -19,7 +19,9 @@ fn walkTree(node: *z.DomNode, depth: u8) void {
     while (child != null) {
         const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
 
-        const ansi_colour = z.getStyleForElement(name) orelse z.Style.DIM_WHITE;
+        // Convert string to enum and use fast lookup
+        const tag_enum = z.stringToEnum(z.HtmlTag, name);
+        const ansi_colour = if (tag_enum) |tag| z.getStyleForElementEnum(tag) orelse z.Style.DIM_WHITE else z.Style.DIM_WHITE;
         const ansi_reset = z.Style.RESET;
         const indent = switch (@min(depth, 10)) {
             0 => "",

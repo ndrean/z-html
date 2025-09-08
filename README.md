@@ -154,8 +154,8 @@ chunk:  </tbody></table></body></html>;
 ```
 
 <p align="center">
-  <img src="https://github.com/ndrean/z-html/blob/main/src/images/html-table.png" width="300"/>
-  <img src="https://github.com/ndrean/z-html/blob/main/src/images/tree-table.png" width="300"/>
+  <img src="https://github.com/ndrean/z-html/blob/main/src/images/html-table.png" width="300" alt="image"/>
+  <img src="https://github.com/ndrean/z-html/blob/main/src/images/tree-table.png" width="300" alt="image"/>
 </p>
 
 #### Building fragments
@@ -189,7 +189,7 @@ fn demoParser(allocator: std.mem.Allocator) !void {
 }
 ```
 
-<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/parse-engine.png" width="300">
+<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/parse-engine.png" width="300" alt="image">
 </p>
 
 You can use `setInnerHTML`:
@@ -209,7 +209,7 @@ test "setInnerHTML" {
 ```
 
 <p align="center" width="300">
-  <img src="https://github.com/ndrean/z-html/blob/main/src/images/setinnerhtml.png">
+  <img src="https://github.com/ndrean/z-html/blob/main/src/images/setinnerhtml.png" alt="image">
 </p>
 
 ### Security and parsing
@@ -285,16 +285,13 @@ Let's take a bigger HTML with `<svg>`, custom-elements with XSS injections comin
 <template><li id=\"{}\">Item-"\{}\"</li></li></template>
 ```
 
-When you use `setInnerSafeHTML`, you remove the main source of XSS injection, like comments, `on`-listeners, unknown 
+When you use `setInnerSafeHTML`, you remove the main source of XSS injection, like comments, `on`-listeners, or unknown attributes.
 
 ```html
 <img alt="escaped">
 <p id="1" phx-click="increment">Click me</p>
 <a href="http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;">URL Escaped</a>
 ```
-
-
-
 
 ### Serialize
 
@@ -365,7 +362,7 @@ test "insertAdjacentHTML and serialize" {
 }
 ```
 
-<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" width="300"></p>
+<p align="center"><img src="https://github.com/ndrean/z-html/blob/main/src/images/insertadjacenthtml-all-positions.png" width="300" alt="image"></p>
 
 ```txt
 <body>

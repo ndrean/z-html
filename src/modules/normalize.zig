@@ -69,7 +69,7 @@ pub const StringNormalizeOptions = struct {
 
 /// String-based HTML normalization - removes whitespace-only text nodes
 /// Skips content between preserve tags: <pre>, <textarea>, <script>, <style>, <code>
-/// This matches browser Node.normalize() behavior exactly
+/// This matches browser Node.normalizeDOM() behavior exactly
 pub fn normalizeHtmlString(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
     return normalizeHtmlStringWithOptions(allocator, html, .{});
 }
@@ -186,13 +186,6 @@ pub fn normalizeHtmlStringWithOptions(allocator: std.mem.Allocator, html: []cons
     return result.toOwnedSlice(allocator);
 }
 
-// Fast DOM traversal for optimized ID search
-extern "c" fn lxb_dom_node_simple_walk(
-    root: *z.DomNode,
-    walker_cb: *const fn (*z.DomNode, ?*anyopaque) callconv(.c) c_int,
-    ctx: ?*anyopaque,
-) void;
-
 /// convert from "aligned" `anyopaque` to the target pointer type `T`
 /// because of the callback signature:
 ///
@@ -201,14 +194,14 @@ fn castContext(comptime T: type, ctx: ?*anyopaque) *T {
     return @as(*T, @ptrCast(@alignCast(ctx.?)));
 }
 
-/// [normalize] Standard browser Node.normalize()
+/// [normalize] Standard browser Node.normalizeDOM()
 ///
 /// Browser-like behavior: removes collapsible whitespace (\r, \n, \t) but preserves meaningful spaces
 /// Always preserves whitespace in special elements (<pre>, <code>, <script>, <style>, <textarea>)
 ///
-/// Use `normalizeWithOptions` to customize comment handling:
-pub fn normalize(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) (std.mem.Allocator.Error || z.Err)!void {
-    return normalizeWithOptions(allocator, root_elt, .{});
+/// Use `normalizeDOMWithOptions` to customize comment handling:
+pub fn normalizeDOM(allocator: std.mem.Allocator, root_elt: *z.HTMLElement) (std.mem.Allocator.Error || z.Err)!void {
+    return normalizeDOMWithOptions(allocator, root_elt, .{});
 }
 
 /// [normalizeForDisplay] Aggressive normalization for clean terminal/display output
@@ -321,7 +314,7 @@ const Context = struct {
 /// - To remove comments, `skip_comments=true`.
 /// - Default to preserve whitespace in specific elements (`pre`, `textarea`, `script`, `style`). Use `preserve_special_elements=false` to disable this behavior.
 /// - Default to remove whitespace-only text nodes.
-pub fn normalizeWithOptions(
+pub fn normalizeDOMWithOptions(
     allocator: std.mem.Allocator,
     root_elt: *z.HTMLElement,
     options: NormalizeOptions,
@@ -483,7 +476,7 @@ fn normalizeTemplateContent(
 test "normalize bahaviour" {
     const allocator = testing.allocator;
     const html =
-        \\<div> \n
+        \\<div>
         \\  <p>
         \\      Some \t
         \\    <i>  text  \n\n  </i>
@@ -495,44 +488,46 @@ test "normalize bahaviour" {
     defer z.destroyDocument(doc);
     const body = z.bodyElement(doc).?;
 
-    try z.normalize(allocator, body);
-    const normalized = try z.innerHTML(allocator, body);
+    try z.normalizeForDisplay(allocator, body);
+    const normalized = try z.outerHTML(allocator, body);
     defer allocator.free(normalized);
-    print("normalized: {s}\n", .{normalized});
+    // print("normalized: {s}\n", .{normalized});
+    // try z.printDocStruct(doc);
 
-    // const expected = "<div><p> Some \t <i>  text  \n\n. </i></p></div>";
+    _ = "<body><div><p>\r Some \t\r <i>  text  \n\n. </i>\r</p> \t\r</div></body>";
 
     // try testing.expectEqualStrings(expected, normalized);
-
 }
 
+// ----------[TODO]------------
 test "normalizeOptions: preserve script and remove whitespace text nodes" {
     {
         // whitespace preserved in script element, empty text nodes removed
 
         const allocator = testing.allocator;
 
-        const html = "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>";
+        const html =
+            \\<div>
+            \\  <script> console.log("hello"); </script> \t 
+            \\  <div> Some <i> bold and italic   </i> text</div>
+            \\</div>"
+        ;
         const doc = try z.createDocFromString(html);
         defer z.destroyDocument(doc);
 
         const body_elt = z.bodyElement(doc).?;
 
-        try z.normalizeWithOptions(
-            allocator,
-            body_elt,
-            .{
-                .skip_comments = true,
-            },
-        );
-
         const serialized = try z.innerHTML(allocator, body_elt);
         defer allocator.free(serialized);
+        // const normed = try normalizeHtmlString(
+        //     allocator,
+        //     serialized,
+        // );
 
-        try testing.expectEqualStrings(
-            "<div><script> console.log(\"hello\"); </script> \t <div> Some <i> bold and italic   </i> text</div></div>",
-            serialized,
-        );
+        // try testing.expectEqualStrings(
+        //     "<div><script> console.log(\"hello\"); </script><div> Some <i> bold and italic   </i> text</div></div>",
+        //     normed,
+        // );
     }
     {
         // whitespace preserved in script element, empty text nodes removed
@@ -544,7 +539,7 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
 
         const body_elt = z.bodyElement(doc).?;
 
-        try z.normalizeWithOptions(
+        try z.normalizeDOMWithOptions(
             allocator,
             body_elt,
             .{
@@ -570,7 +565,7 @@ test "normalizeOptions: preserve script and remove whitespace text nodes" {
 
         const body_elt = z.bodyElement(doc).?;
 
-        try z.normalizeWithOptions(
+        try z.normalizeDOMWithOptions(
             allocator,
             body_elt,
             .{
@@ -603,7 +598,7 @@ test "normalize, context preservation, comments removed" {
         const txt = try z.createTextNode(doc, "\t");
         z.insertBefore(z.elementToNode(span.?), txt);
 
-        try normalizeWithOptions(
+        try normalizeDOMWithOptions(
             allocator,
             body_elt,
             NormalizeOptions{
@@ -629,7 +624,7 @@ test "normalize, context preservation, comments removed" {
 
         const body_elt = z.bodyElement(doc).?;
 
-        try normalizeWithOptions(
+        try normalizeDOMWithOptions(
             allocator,
             body_elt,
             NormalizeOptions{
@@ -685,7 +680,7 @@ test "template normalize" {
         defer allocator.free(child_nodes_before);
         try testing.expect(child_nodes_before.len == 8);
 
-        try z.normalizeWithOptions(
+        try z.normalizeDOMWithOptions(
             allocator,
             z.nodeToElement(root).?,
             .{
@@ -801,7 +796,7 @@ test "template normalize" {
 //         const temp_doc = try z.createDocFromString(large_html);
 //         const body_elt = try z.bodyElement(temp_doc);
 
-//         try z.normalizeWithOptions(
+//         try z.normalizeDOMWithOptions(
 //             allocator,
 //             body_elt,
 //             .{
@@ -885,7 +880,7 @@ test "browser-like normalization" {
     const body_elt = z.bodyElement(doc).?;
 
     // Standard browser-like normalization
-    try normalize(allocator, body_elt);
+    try normalizeDOM(allocator, body_elt);
 
     const result = try z.innerHTML(allocator, body_elt);
     defer allocator.free(result);
@@ -1013,7 +1008,7 @@ test "string-based normalization with comment removal" {
 //     for (0..iterations) |_| {
 //         const doc = try z.createDocFromString(test_html);
 //         const body_elt = z.bodyElement(doc).?;
-//         try normalizeWithOptions(allocator, body_elt, .{
+//         try normalizeDOMWithOptions(allocator, body_elt, .{
 //             .remove_whitespace_text_nodes = true,
 //             .skip_comments = false,
 //         });

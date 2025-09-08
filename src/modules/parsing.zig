@@ -9,6 +9,27 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
+test "lexbor escaping behavior" {
+    const test_html = "<div>Raw < and > characters</div><script>if (x < 5) alert('test');</script>";
+
+    const doc = try z.createDocFromString(test_html);
+    defer z.destroyDocument(doc);
+
+    const body = z.bodyElement(doc).?;
+    _ = z.setInnerHTML(body, test_html) catch return error.ParseFailed;
+
+    const result = try z.innerHTML(testing.allocator, body);
+    defer testing.allocator.free(result);
+    try testing.expectEqualStrings("<div>Raw &lt; and &gt; characters</div><script>if (x < 5) alert('test');</script>", result);
+
+    // std.debug.print("\n=== LEXBOR ESCAPING TEST ===\n", .{});
+    // std.debug.print("Input:  {s}\n", .{test_html});
+    // std.debug.print("Output: {s}\n\n", .{result});
+
+    // Basic assertion - just ensure we got some output
+    // try testing.expect(result.len > 0);
+}
+
 const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
 
 // =================================================================
@@ -170,7 +191,6 @@ pub fn setInnerSafeHTMLStrict(allocator: std.mem.Allocator, element: *z.HTMLElem
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    parser.setSanitizerStrict();
 
     const fragment_root = try parser.parseFragmentDoc(
         target_doc,
@@ -190,7 +210,6 @@ pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTML
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    parser.setSanitizerPermissive();
 
     const fragment_root = try parser.parseFragmentDoc(
         target_doc,
@@ -201,7 +220,6 @@ pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTML
     parser.appendFragment(node, fragment_root);
 }
 
-// ----[ERROR]-----
 test "setInnerHTML flavours" {
     const allocator = testing.allocator;
 
@@ -227,9 +245,10 @@ test "setInnerHTML flavours" {
         try z.setInnerSafeHTML(allocator, div, malicious_content, exp.mode);
         const inner = try z.innerHTML(allocator, div);
         defer allocator.free(inner);
-        print("\n{s}: \n{s}\n", .{ exp.name, inner });
+        // print("\n{s}: \n{s}\n", .{ exp.name, inner });
 
         try testing.expectEqualStrings(exp.result, inner);
+        _ = try setInnerHTML(div, "");
     }
 }
 
@@ -256,7 +275,6 @@ test "setInnerHTML flavours" {
 ///
 /// ## Key Methods:
 /// **Setup:** `init()`, `deinit()`
-/// **Sanitizer Config:** `setSanitizerOptions()`, `setSanitizerStrict()`, `setSanitizerPermissive()`
 /// **Fragment Parsing:** `parseFragmentDoc()`, `parseStringContext()`, `insertFragment()`
 /// **Template Handling:** `parseTemplateString()`, `useTemplateElement()`
 /// **Chunk Processing:** `parseChunkBegin()`, `parseChunkProcess()`, `parseChunkEnd()`
@@ -266,7 +284,7 @@ pub const Parser = struct {
     html_parser: *z.HtmlParser,
     temp_doc: ?*z.HTMLDocument,
     initialized: bool,
-    sanitizer_options: z.SanitizerOptions,
+    // sanitizer_options: z.SanitizerOptions,
 
     /// Create a new parser instance.
     pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -283,7 +301,7 @@ pub const Parser = struct {
             .html_parser = parser,
             .temp_doc = null,
             .initialized = true,
-            .sanitizer_options = .{}, // Default sanitizer options
+            // .sanitizer_options = .{}, // Default sanitizer options
         };
     }
 
@@ -301,32 +319,32 @@ pub const Parser = struct {
         self.initialized = false;
     }
 
-    /// Configure sanitizer options for this parser instance
-    pub fn setSanitizerOptions(self: *Parser, options: z.SanitizerOptions) void {
-        self.sanitizer_options = options;
-    }
+    // /// Configure sanitizer options for this parser instance
+    // pub fn setSanitizerOptions(self: *Parser, options: z.SanitizerOptions) void {
+    //     self.sanitizer_options = options;
+    // }
 
-    /// Set sanitizer to strict mode (no custom elements, remove scripts/styles)
-    pub fn setSanitizerStrict(self: *Parser) void {
-        self.sanitizer_options = .{
-            .skip_comments = true,
-            .remove_scripts = true,
-            .remove_styles = true,
-            .strict_uri_validation = true,
-            .allow_custom_elements = false,
-        };
-    }
+    // /// Set sanitizer to strict mode (no custom elements, remove scripts/styles)
+    // pub fn setSanitizerStrict(self: *Parser) void {
+    //     self.sanitizer_options = .{
+    //         .skip_comments = true,
+    //         .remove_scripts = true,
+    //         .remove_styles = true,
+    //         .strict_uri_validation = true,
+    //         .allow_custom_elements = false,
+    //     };
+    // }
 
-    /// Set sanitizer to permissive mode (allow custom elements and framework attributes)
-    pub fn setSanitizerPermissive(self: *Parser) void {
-        self.sanitizer_options = .{
-            .skip_comments = true,
-            .remove_scripts = true,
-            .remove_styles = false,
-            .strict_uri_validation = true,
-            .allow_custom_elements = true,
-        };
-    }
+    // /// Set sanitizer to permissive mode (allow custom elements and framework attributes)
+    // pub fn setSanitizerPermissive(self: *Parser) void {
+    //     self.sanitizer_options = .{
+    //         .skip_comments = true,
+    //         .remove_scripts = true,
+    //         .remove_styles = false,
+    //         .strict_uri_validation = true,
+    //         .allow_custom_elements = true,
+    //     };
+    // }
 
     pub fn parse(self: *Parser, html: []const u8) !*z.HTMLDocument {
         return lxb_html_parse(self.html_parser, html.ptr, html.len) orelse return Err.ParseFailed;
@@ -336,7 +354,6 @@ pub const Parser = struct {
     /// Parse HTML fragment using a provided document.
     ///
     /// **Sanitization:** Lexbor (always) + Custom (if enabled via boolean).
-    /// Configure sanitizer options once with `setSanitizerOptions()` or presets.
     ///
     /// @param sanitizer_enabled: true to apply configured custom sanitization, false for Lexbor-only
     /// @returns: HTML element node - its children are the parsed elements
@@ -411,9 +428,6 @@ pub const Parser = struct {
             .permissive => try z.sanitizePermissive(self.allocator, fragment_root),
             .custom => |opts| try z.sanitizeWithOptions(self.allocator, fragment_root, .{ .custom = opts }),
         }
-        // if (sanitizer_enabled) {
-        //     try z.sanitizeWithOptions(self.allocator, fragment_root, self.sanitizer_options);
-        // }
 
         return fragment_root;
     }
@@ -765,7 +779,7 @@ test "Serializer sanitation" {
         try testing.expect(std.mem.indexOf(u8, final_html, "onclick") == null);
         try testing.expect(std.mem.indexOf(u8, final_html, "<script>") == null);
         try testing.expect(std.mem.indexOf(u8, final_html, "custom-element") == null); // Custom elements removed in strict
-        
+
         // Should preserve safe content
         try testing.expect(std.mem.indexOf(u8, final_html, "Hello") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "example.com") != null);
@@ -782,7 +796,7 @@ test "Serializer sanitation" {
 
         const final_html = try z.outerNodeHTML(allocator, body);
         defer allocator.free(final_html);
-        
+
         // Verify consistent strict sanitization
         try testing.expect(std.mem.indexOf(u8, final_html, "javascript:") == null);
         try testing.expect(std.mem.indexOf(u8, final_html, "<template>") != null); // Templates are now allowed
@@ -798,15 +812,15 @@ test "Serializer sanitation" {
 
         const final_html = try z.outerNodeHTML(allocator, body);
         defer allocator.free(final_html);
-        
+
         // Should still remove dangerous content
         try testing.expect(std.mem.indexOf(u8, final_html, "javascript:") == null);
         try testing.expect(std.mem.indexOf(u8, final_html, "onclick") == null);
         try testing.expect(std.mem.indexOf(u8, final_html, "<script>") == null);
-        
+
         // But should preserve custom elements
         try testing.expect(std.mem.indexOf(u8, final_html, "custom-element") != null);
-        
+
         // Should preserve safe content and framework attributes
         try testing.expect(std.mem.indexOf(u8, final_html, "phx-click") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "Hello") != null);
@@ -822,12 +836,12 @@ test "Serializer sanitation" {
 
         const final_html = try z.outerNodeHTML(allocator, body);
         defer allocator.free(final_html);
-        
+
         // Should preserve most content including scripts and custom elements
         try testing.expect(std.mem.indexOf(u8, final_html, "<script>") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "custom-element") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "<!-- a comment -->") != null);
-        
+
         // Should preserve safe content
         try testing.expect(std.mem.indexOf(u8, final_html, "Hello") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "<template>") != null);
@@ -838,26 +852,28 @@ test "Serializer sanitation" {
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
-            .{ .custom = .{
-                .allow_custom_elements = true,
-                .skip_comments = false, // Preserve comments
-                .remove_scripts = false, // Allow scripts to demonstrate flexibility
-                .remove_styles = true,
-                .strict_uri_validation = false,
-            } },
+            .{
+                .custom = .{
+                    .allow_custom_elements = true,
+                    .skip_comments = false, // Preserve comments
+                    .remove_scripts = false, // Allow scripts to demonstrate flexibility
+                    .remove_styles = true,
+                    .strict_uri_validation = false,
+                },
+            },
         );
 
         const final_html = try z.outerNodeHTML(allocator, body);
         defer allocator.free(final_html);
-        
+
         // Should preserve comments and custom elements
         try testing.expect(std.mem.indexOf(u8, final_html, "<!-- a comment -->") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "custom-element") != null);
-        
+
         // Should preserve scripts and allow more URIs (as configured)
         try testing.expect(std.mem.indexOf(u8, final_html, "<script>") != null);
         // javascript: URIs might still be filtered at parser level
-        
+
         // Should preserve safe content and framework attributes
         try testing.expect(std.mem.indexOf(u8, final_html, "phx-click") != null);
         try testing.expect(std.mem.indexOf(u8, final_html, "Hello") != null);

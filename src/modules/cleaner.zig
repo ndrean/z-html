@@ -75,7 +75,7 @@ test "normalizeText and nomalize" {
         defer z.destroyDocument(doc);
         const body = z.bodyElement(doc).?;
 
-        try z.normalize(allocator, body);
+        try z.normalizeDOM(allocator, body);
         const normalized = try z.innerHTML(allocator, body);
         defer allocator.free(normalized);
         // print("{s}\n", .{normalized});

@@ -108,7 +108,7 @@ fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
     try parser.useTemplateElement(template_elt, tbody_node, .none);
     try parser.useTemplateElement(template_elt, tbody_node, .none);
 
-    try z.normalize(allocator, z.nodeToElement(body).?);
+    try z.normalizeDOM(allocator, z.nodeToElement(body).?);
 
     const resulting_html = try z.innerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
@@ -344,7 +344,7 @@ fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
 
     // try z.prettyPrint(z.documentRoot(doc).?);
 
-    try z.normalize(allocator, new_div_elt);
+    try z.normalizeDOM(allocator, new_div_elt);
 
     // Show result after setInnerHTML
     const html_new_div = try z.innerHTML(
@@ -566,7 +566,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //         doc = try z.createDocFromString(large_html);
 //         const body_elt = z.bodyElement(doc).?;
 
-//         try z.normalizeWithOptions(
+//         try z.normalizeDOMWithOptions(
 //             allocator,
 //             body_elt,
 //             .{
@@ -801,7 +801,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //         const temp_doc = try z.createDocFromString(large_html);
 //         const temp_body_element = try z.bodyElement(temp_doc);
 
-//         try z.normalizeWithOptions(
+//         try z.normalizeDOMWithOptions(
 //             allocator,
 //             temp_body_element,
 //             .{
@@ -998,7 +998,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //             \\
 //             \\          <div class="code-example">
 //             \\            <pre><code>const html = createDocFromString(input);
-//             \\const normalized = normalize(html);
+//             \\const normalized = normalizeDOM(html);
 //             \\const tuple = domToTuple(normalized);</code></pre>
 //             \\          </div>
 //             \\

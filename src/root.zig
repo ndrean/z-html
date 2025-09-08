@@ -4,6 +4,7 @@ const lxb = @import("modules/core.zig");
 const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
 const tag = @import("modules/html_tags.zig");
+const specs = @import("modules/html_spec.zig");
 const Type = @import("modules/node_types.zig");
 const tree = @import("modules/dom_tree.zig");
 const search = @import("modules/simple_search.zig");
@@ -50,7 +51,8 @@ pub const LXB_DOM_NODE_TYPE_UNKNOWN = 0;
 pub const ElementStyles = colours.ElementStyles;
 pub const SyntaxStyle = colours.SyntaxStyle;
 pub const Style = colours.Style;
-pub const getStyleForElement = colours.getStyleForElement;
+// pub const getStyleForElement = colours.getStyleForElement;
+pub const getStyleForElementEnum = colours.getStyleForElementEnum;
 pub const isKnownAttribute = colours.isKnownAttribute;
 pub const isDangerousAttributeValue = colours.isDangerousAttributeValue;
 
@@ -149,7 +151,7 @@ pub const isTypeDocument = Type.isTypeDocument;
 pub const isTypeFragment = Type.isTypeFragment;
 
 //=====================================
-// HTML tags
+// HTML tags & Html specs
 //=====================================
 pub const HtmlTag = tag.HtmlTag;
 pub const WhitespacePreserveTagSet = tag.WhitespacePreserveTagSet;
@@ -159,6 +161,7 @@ pub const FragmentContext = tag.FragmentContext;
 
 // from lexbor source: /tag/const.h
 
+pub const stringToEnum = tag.stringToEnum;
 pub const tagFromQualifiedName = tag.tagFromQualifiedName;
 pub const tagFromElement = tag.tagFromElement;
 pub const tagFromAnyElement = tag.tagFromAnyElement;
@@ -167,6 +170,16 @@ pub const isVoidName = tag.isVoidName;
 pub const isVoidElement = tag.isVoidElement; // Change name
 // pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
 // pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
+pub const ElementSpecMap = specs.ElementSpecMap;
+pub const getElementSpecFromElement = specs.getElementSpecFromElement;
+pub const isVoidElementFromSpec = specs.isVoidElementFromSpec;
+pub const validateElementAttributeFromElement = specs.validateElementAttributeFromElement;
+pub const getAllowedAttributesFromElement = specs.getAllowedAttributesFromElement;
+pub const isAttributeAllowedFast = specs.isAttributeAllowedFast;
+pub const getElementSpecFast = specs.getElementSpecFast;
+pub const isVoidElementEnum = specs.isVoidElementEnum;
+pub const isAttributeAllowedEnum = specs.isAttributeAllowedEnum;
+pub const getElementSpecByEnum = specs.getElementSpecByEnum;
 
 // ===================================
 // Comment
@@ -193,11 +206,14 @@ pub const escapeHtml = text.escapeHtml;
 // ====================================
 // Normalize
 // ====================================
-pub const normalize = norm.normalize;
-pub const normalizeWithOptions = norm.normalizeWithOptions;
+pub const normalizeDOM = norm.normalizeDOM;
+pub const normalizeDOMWithOptions = norm.normalizeDOMWithOptions;
 pub const normalizeForDisplay = norm.normalizeForDisplay;
 // pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
 pub const normalizeText = cleaner.normalizeText;
+
+pub const normalizeHtmlString = norm.normalizeHtmlString;
+pub const normalizeHtmlStringWithOptions = norm.normalizeHtmlStringWithOptions;
 
 //=====================================
 // DOM navigation
@@ -325,7 +341,6 @@ pub const sanitizePermissive = sanitize.sanitizePermissive;
 
 // Unified HTML specification functions
 pub const isElementAttributeAllowed = sanitize.isElementAttributeAllowed;
-pub const isElementAttributeValueValid = sanitize.isElementAttributeValueValid;
 
 // ===================================================================
 // Debug printing utilities

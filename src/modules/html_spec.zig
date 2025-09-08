@@ -5,6 +5,9 @@
 //! for security validation and the syntax highlighter for visual styling.
 
 const std = @import("std");
+const z = @import("../root.zig");
+const html_tags = @import("html_tags.zig");
+const HtmlTag = html_tags.HtmlTag;
 const print = std.debug.print;
 
 /// Specification for an HTML attribute
@@ -18,10 +21,15 @@ pub const AttrSpec = struct {
 
 /// Specification for an HTML element
 pub const ElementSpec = struct {
-    tag: []const u8,
+    tag_enum: HtmlTag,
     allowed_attrs: []const AttrSpec,
     /// Whether this element is void (self-closing)
     void_element: bool = false,
+
+    /// Get the string representation of the tag
+    pub fn tagName(self: @This()) []const u8 {
+        return self.tag_enum.toString();
+    }
 };
 
 /// Common attributes that are allowed on most elements
@@ -178,82 +186,50 @@ pub const framework_attrs = [_]AttrSpec{
 /// HTML element specifications
 pub const element_specs = [_]ElementSpec{
     // Text elements (commonly used with frameworks)
-    .{ .tag = "body", .allowed_attrs = &common_attrs },
-    .{ .tag = "p", .allowed_attrs = &framework_attrs },
-    .{ .tag = "span", .allowed_attrs = &framework_attrs },
-    .{ .tag = "div", .allowed_attrs = &framework_attrs },
-    .{ .tag = "h1", .allowed_attrs = &common_attrs },
-    .{ .tag = "h2", .allowed_attrs = &common_attrs },
-    .{ .tag = "h3", .allowed_attrs = &common_attrs },
-    .{ .tag = "h4", .allowed_attrs = &common_attrs },
-    .{ .tag = "h5", .allowed_attrs = &common_attrs },
-    .{ .tag = "h6", .allowed_attrs = &common_attrs },
-    .{ .tag = "strong", .allowed_attrs = &common_attrs },
-    .{ .tag = "em", .allowed_attrs = &common_attrs },
-    .{ .tag = "i", .allowed_attrs = &common_attrs },
-    .{ .tag = "b", .allowed_attrs = &common_attrs },
-    .{ .tag = "a", .allowed_attrs = &anchor_attrs },
+    .{ .tag_enum = .body, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .p, .allowed_attrs = &framework_attrs },
+    .{ .tag_enum = .span, .allowed_attrs = &framework_attrs },
+    .{ .tag_enum = .div, .allowed_attrs = &framework_attrs },
+    .{ .tag_enum = .h1, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .h2, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .h3, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .h4, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .h5, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .h6, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .strong, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .em, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .i, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .b, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .code, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .pre, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .blockquote, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .a, .allowed_attrs = &anchor_attrs },
 
     // Media elements
-    .{ .tag = "img", .allowed_attrs = &img_attrs, .void_element = true },
-    .{ .tag = "iframe", .allowed_attrs = &iframe_attrs, .void_element = true },
+    .{ .tag_enum = .img, .allowed_attrs = &img_attrs, .void_element = true },
+    .{ .tag_enum = .iframe, .allowed_attrs = &iframe_attrs, .void_element = true },
 
     // Table elements
-    .{ .tag = "table", .allowed_attrs = &table_attrs },
-    .{ .tag = "thead", .allowed_attrs = &table_attrs },
-    .{ .tag = "tbody", .allowed_attrs = &table_attrs },
-    .{ .tag = "tfoot", .allowed_attrs = &table_attrs },
-    .{ .tag = "tr", .allowed_attrs = &table_attrs },
-    .{ .tag = "th", .allowed_attrs = &table_attrs },
-    .{ .tag = "td", .allowed_attrs = &table_attrs },
-    .{ .tag = "caption", .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .table, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .thead, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .tbody, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .tfoot, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .tr, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .th, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .td, .allowed_attrs = &table_attrs },
+    .{ .tag_enum = .caption, .allowed_attrs = &table_attrs },
 
     // Form elements
-    .{ .tag = "form", .allowed_attrs = &form_attrs },
-    .{ .tag = "input", .allowed_attrs = &input_attrs, .void_element = true },
+    .{ .tag_enum = .form, .allowed_attrs = &form_attrs },
+    .{ .tag_enum = .input, .allowed_attrs = &input_attrs, .void_element = true },
     .{
-        .tag = "button",
+        .tag_enum = .button,
         .allowed_attrs = &([_]AttrSpec{
             .{ .name = "type", .valid_values = &[_][]const u8{ "button", "submit", "reset" } },
             .{ .name = "disabled", .valid_values = &[_][]const u8{""} }, // boolean attribute
         } ++ common_attrs),
     },
-
-    // List elements
-    .{ .tag = "ul", .allowed_attrs = &common_attrs },
-    .{ .tag = "ol", .allowed_attrs = &common_attrs },
-    .{ .tag = "li", .allowed_attrs = &common_attrs },
-
-    // Semantic elements
-    .{ .tag = "nav", .allowed_attrs = &common_attrs },
-    .{ .tag = "header", .allowed_attrs = &common_attrs },
-    .{ .tag = "footer", .allowed_attrs = &common_attrs },
-    .{ .tag = "main", .allowed_attrs = &common_attrs },
-    .{ .tag = "section", .allowed_attrs = &common_attrs },
-    .{ .tag = "article", .allowed_attrs = &common_attrs },
-    .{ .tag = "aside", .allowed_attrs = &common_attrs },
-
-    // Document elements
-    .{ .tag = "html", .allowed_attrs = &common_attrs },
-    .{ .tag = "head", .allowed_attrs = &common_attrs },
-    .{ .tag = "title", .allowed_attrs = &common_attrs },
-    .{ .tag = "meta", .allowed_attrs = &([_]AttrSpec{
-        .{ .name = "charset" },
-        .{ .name = "name" },
-        .{ .name = "content" },
-        .{ .name = "http-equiv" },
-        .{ .name = "viewport" },
-    } ++ common_attrs), .void_element = true },
-    .{ .tag = "link", .allowed_attrs = &([_]AttrSpec{
-        .{ .name = "rel" },
-        .{ .name = "href" },
-        .{ .name = "type" },
-        .{ .name = "media" },
-        .{ .name = "sizes" },
-    } ++ common_attrs), .void_element = true },
-
-    // Additional form elements
-    .{ .tag = "textarea", .allowed_attrs = &([_]AttrSpec{
+    .{ .tag_enum = .textarea, .allowed_attrs = &([_]AttrSpec{
         .{ .name = "name" },
         .{ .name = "rows" },
         .{ .name = "cols" },
@@ -261,42 +237,152 @@ pub const element_specs = [_]ElementSpec{
         .{ .name = "disabled", .valid_values = &[_][]const u8{""} },
         .{ .name = "required", .valid_values = &[_][]const u8{""} },
     } ++ common_attrs) },
-    .{ .tag = "select", .allowed_attrs = &([_]AttrSpec{
+    .{ .tag_enum = .select, .allowed_attrs = &([_]AttrSpec{
         .{ .name = "name" },
         .{ .name = "multiple", .valid_values = &[_][]const u8{""} },
         .{ .name = "size" },
         .{ .name = "disabled", .valid_values = &[_][]const u8{""} },
         .{ .name = "required", .valid_values = &[_][]const u8{""} },
     } ++ common_attrs) },
-    .{ .tag = "option", .allowed_attrs = &([_]AttrSpec{
+    .{ .tag_enum = .option, .allowed_attrs = &([_]AttrSpec{
         .{ .name = "value" },
         .{ .name = "selected", .valid_values = &[_][]const u8{""} },
         .{ .name = "disabled", .valid_values = &[_][]const u8{""} },
     } ++ common_attrs) },
-    .{ .tag = "label", .allowed_attrs = &([_]AttrSpec{
-        .{ .name = "for" },
+    .{ .tag_enum = .optgroup, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "label" },
+        .{ .name = "disabled", .valid_values = &[_][]const u8{""} },
     } ++ common_attrs) },
+    .{ .tag_enum = .fieldset, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "disabled", .valid_values = &[_][]const u8{""} },
+        .{ .name = "form" },
+        .{ .name = "name" },
+    } ++ common_attrs) },
+    .{ .tag_enum = .legend, .allowed_attrs = &common_attrs },
+
+    // List elements
+    .{ .tag_enum = .ul, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .ol, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .li, .allowed_attrs = &common_attrs },
+
+    // Definition list elements
+    .{ .tag_enum = .dl, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .dt, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .dd, .allowed_attrs = &common_attrs },
+
+    // Media elements
+    .{ .tag_enum = .video, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "src" },
+        .{ .name = "controls", .valid_values = &[_][]const u8{""} },
+        .{ .name = "autoplay", .valid_values = &[_][]const u8{""} },
+        .{ .name = "loop", .valid_values = &[_][]const u8{""} },
+        .{ .name = "muted", .valid_values = &[_][]const u8{""} },
+        .{ .name = "poster" },
+        .{ .name = "preload", .valid_values = &[_][]const u8{ "none", "metadata", "auto" } },
+        .{ .name = "width" },
+        .{ .name = "height" },
+    } ++ common_attrs) },
+    .{ .tag_enum = .audio, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "src" },
+        .{ .name = "controls", .valid_values = &[_][]const u8{""} },
+        .{ .name = "autoplay", .valid_values = &[_][]const u8{""} },
+        .{ .name = "loop", .valid_values = &[_][]const u8{""} },
+        .{ .name = "muted", .valid_values = &[_][]const u8{""} },
+        .{ .name = "preload", .valid_values = &[_][]const u8{ "none", "metadata", "auto" } },
+    } ++ common_attrs) },
+    .{ .tag_enum = .source, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "src" },
+        .{ .name = "type" },
+        .{ .name = "media" },
+        .{ .name = "sizes" },
+        .{ .name = "srcset" },
+    } ++ common_attrs), .void_element = true },
+    .{ .tag_enum = .track, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "src" },
+        .{ .name = "kind", .valid_values = &[_][]const u8{ "subtitles", "captions", "descriptions", "chapters", "metadata" } },
+        .{ .name = "srclang" },
+        .{ .name = "label" },
+        .{ .name = "default", .valid_values = &[_][]const u8{""} },
+    } ++ common_attrs), .void_element = true },
+
+    // Semantic elements
+    .{ .tag_enum = .nav, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .header, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .footer, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .main, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .section, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .article, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .aside, .allowed_attrs = &common_attrs },
+
+    // Interactive elements
+    .{ .tag_enum = .details, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "open", .valid_values = &[_][]const u8{""} },
+    } ++ common_attrs) },
+    .{ .tag_enum = .summary, .allowed_attrs = &common_attrs },
+
+    // Figure elements
+    .{ .tag_enum = .figure, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .figcaption, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .picture, .allowed_attrs = &common_attrs },
+
+    // Map elements
+    .{ .tag_enum = .map, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "name" },
+    } ++ common_attrs) },
+    .{ .tag_enum = .area, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "alt" },
+        .{ .name = "coords" },
+        .{ .name = "shape", .valid_values = &[_][]const u8{ "default", "rect", "circle", "poly" } },
+        .{ .name = "href" },
+        .{ .name = "target", .valid_values = &[_][]const u8{ "_blank", "_self", "_parent", "_top" } },
+    } ++ common_attrs), .void_element = true },
+
+    // Document elements
+    .{ .tag_enum = .html, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .head, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .title, .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .meta, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "charset" },
+        .{ .name = "name" },
+        .{ .name = "content" },
+        .{ .name = "http-equiv" },
+        .{ .name = "viewport" },
+    } ++ common_attrs), .void_element = true },
+    .{ .tag_enum = .link, .allowed_attrs = &([_]AttrSpec{
+        .{ .name = "rel" },
+        .{ .name = "href" },
+        .{ .name = "type" },
+        .{ .name = "media" },
+        .{ .name = "sizes" },
+    } ++ common_attrs), .void_element = true },
 
     // Void elements
-    .{ .tag = "br", .allowed_attrs = &common_attrs, .void_element = true },
-    .{ .tag = "hr", .allowed_attrs = &common_attrs, .void_element = true },
+    .{ .tag_enum = .br, .allowed_attrs = &common_attrs, .void_element = true },
+    .{ .tag_enum = .hr, .allowed_attrs = &common_attrs, .void_element = true },
 
     // Template elements
-    .{ .tag = "template", .allowed_attrs = &common_attrs },
+    .{ .tag_enum = .template, .allowed_attrs = &common_attrs },
 
     // SVG elements
-    .{ .tag = "svg", .allowed_attrs = &svg_attrs },
-    .{ .tag = "circle", .allowed_attrs = &svg_attrs },
-    .{ .tag = "rect", .allowed_attrs = &svg_attrs },
-    .{ .tag = "path", .allowed_attrs = &svg_attrs },
-    .{ .tag = "line", .allowed_attrs = &svg_attrs },
-    .{ .tag = "text", .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .svg, .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .circle, .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .rect, .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .path, .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .line, .allowed_attrs = &svg_attrs },
+    .{ .tag_enum = .text, .allowed_attrs = &svg_attrs },
 };
 
-/// Get the specification for an HTML element by tag name
+/// Get the specification for an HTML element by tag name (legacy - prefer getElementSpecFast)
 pub fn getElementSpec(tag: []const u8) ?*const ElementSpec {
+    // First try fast enum-based lookup
+    if (html_tags.tagFromQualifiedName(tag)) |tag_enum| {
+        return getElementSpecByEnum(tag_enum);
+    }
+
+    // Fallback: Linear search for custom elements not in enum
+    // This should rarely be used in practice
     for (&element_specs) |*spec| {
-        if (std.mem.eql(u8, spec.tag, tag)) {
+        if (std.mem.eql(u8, spec.tagName(), tag)) {
             return spec;
         }
     }
@@ -377,19 +463,144 @@ pub fn isAttributeValueValid(element_tag: []const u8, attr_name: []const u8, att
 pub fn getAllowedAttributes(allocator: std.mem.Allocator, element_tag: []const u8) ![][]const u8 {
     const spec = getElementSpec(element_tag) orelse return &[_][]const u8{};
 
-    var attrs = std.ArrayList([]const u8).init(allocator);
+    var attrs: std.ArrayList([]const u8) = .empty;
     for (spec.allowed_attrs) |attr_spec| {
-        try attrs.append(attr_spec.name);
+        try attrs.append(allocator, attr_spec.name);
     }
     return attrs.toOwnedSlice(allocator);
+}
+
+// === ENUM-BASED LOOKUPS FOR PERFORMANCE ===
+
+/// Create enum-based hash map for O(1) lookups
+pub const ElementSpecMap = std.EnumMap(HtmlTag, *const ElementSpec);
+const element_spec_map = blk: {
+    var map = ElementSpecMap{};
+    for (&element_specs) |*spec| {
+        map.put(spec.tag_enum, spec);
+    }
+    break :blk map;
+};
+
+/// Fast enum-based element specification lookup (O(1))
+pub fn getElementSpecByEnum(tag: HtmlTag) ?*const ElementSpec {
+    return element_spec_map.get(tag);
+}
+
+/// Fast enum-based attribute validation
+pub fn isAttributeAllowedEnum(tag: HtmlTag, attr_name: []const u8) bool {
+    const spec = getElementSpecByEnum(tag) orelse return false;
+
+    for (spec.allowed_attrs) |attr_spec| {
+        if (std.mem.eql(u8, attr_spec.name, attr_name)) {
+            return attr_spec.safe;
+        }
+        // Handle prefix matches for framework and data attributes
+        if ((std.mem.eql(u8, attr_spec.name, "aria") and std.mem.startsWith(u8, attr_name, "aria-")) or
+            (std.mem.eql(u8, attr_spec.name, "data") and std.mem.startsWith(u8, attr_name, "data-")) or
+            (std.mem.eql(u8, attr_spec.name, "x-on") and std.mem.startsWith(u8, attr_name, "x-on:")) or
+            (std.mem.eql(u8, attr_spec.name, "x-bind") and std.mem.startsWith(u8, attr_name, "x-bind:")) or
+            (std.mem.eql(u8, attr_spec.name, "phx-value") and std.mem.startsWith(u8, attr_name, "phx-value-")) or
+            (std.mem.eql(u8, attr_spec.name, "v-on") and std.mem.startsWith(u8, attr_name, "v-on:")) or
+            (std.mem.eql(u8, attr_spec.name, "v-bind") and std.mem.startsWith(u8, attr_name, "v-bind:")))
+        {
+            return attr_spec.safe;
+        }
+    }
+    return false;
+}
+
+/// Fast enum-based void element check
+pub fn isVoidElementEnum(tag: HtmlTag) bool {
+    return switch (tag) {
+        .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,
+        else => false,
+    };
+}
+
+/// Bridge function: Convert string to enum and use fast lookup
+pub fn getElementSpecFast(tag_name: []const u8) ?*const ElementSpec {
+    if (html_tags.tagFromQualifiedName(tag_name)) |tag| {
+        return getElementSpecByEnum(tag);
+    }
+    // Fallback to string-based lookup for custom elements
+    return getElementSpec(tag_name);
+}
+
+/// Bridge function: Convert string to enum and use fast validation
+pub fn isAttributeAllowedFast(element_tag: []const u8, attr_name: []const u8) bool {
+    if (html_tags.tagFromQualifiedName(element_tag)) |tag| {
+        return isAttributeAllowedEnum(tag, attr_name);
+    }
+    // Fallback to string-based validation for custom elements
+    return isAttributeAllowed(element_tag, attr_name);
+}
+
+// === INTEGRATION BRIDGES ===
+
+/// Get element specification from DOM element (integrates with html_tags.zig)
+pub fn getElementSpecFromElement(element: *z.HTMLElement) ?*const ElementSpec {
+    if (html_tags.tagFromElement(element)) |tag| {
+        return getElementSpecByEnum(tag);
+    }
+    // Fallback for custom elements
+    const tag_name = z.qualifiedName_zc(element);
+    return getElementSpec(tag_name);
+}
+
+/// Check if element is void using unified specification
+pub fn isVoidElementFromSpec(element: *z.HTMLElement) bool {
+    if (html_tags.tagFromElement(element)) |tag| {
+        return isVoidElementEnum(tag);
+    }
+    // Fallback for custom elements (they are never void)
+    return false;
+}
+
+/// Validate element and attribute combination from DOM element
+pub fn validateElementAttributeFromElement(element: *z.HTMLElement, attr_name: []const u8) bool {
+    if (html_tags.tagFromElement(element)) |tag| {
+        return isAttributeAllowedEnum(tag, attr_name);
+    }
+    // Fallback for custom elements
+    const tag_name = z.qualifiedName_zc(element);
+    return isAttributeAllowed(tag_name, attr_name);
+}
+
+/// Get all allowed attributes for a DOM element
+pub fn getAllowedAttributesFromElement(allocator: std.mem.Allocator, element: *z.HTMLElement) ![][]const u8 {
+    if (z.tagFromElement(element)) |tag| {
+        if (getElementSpecByEnum(tag)) |spec| {
+            var attrs: std.ArrayList([]const u8) = .empty;
+            for (spec.allowed_attrs) |attr_spec| {
+                try attrs.append(allocator, attr_spec.name);
+            }
+            return attrs.toOwnedSlice(allocator);
+        }
+    }
+    // Fallback for custom elements
+    const tag_name = z.qualifiedName_zc(element);
+    return getAllowedAttributes(allocator, tag_name);
 }
 
 const testing = std.testing;
 
 test "element spec lookup" {
+    // Test enum-based lookup (fast path)
     const table_spec = getElementSpec("table");
     try testing.expect(table_spec != null);
-    try testing.expectEqualStrings("table", table_spec.?.tag);
+    try testing.expectEqualStrings("table", table_spec.?.tagName());
+
+    // Test unknown element
+    const unknown_spec = getElementSpec("unknown-element");
+    try testing.expect(unknown_spec == null);
+
+    // Test that fast path and legacy path return same result for known elements
+    const div_spec_legacy = getElementSpec("div");
+    const div_spec_fast = getElementSpecFast("div");
+    try testing.expect(div_spec_legacy != null);
+    try testing.expect(div_spec_fast != null);
+    try testing.expect(div_spec_legacy == div_spec_fast); // Same pointer
 }
 
 test "attribute validation" {
@@ -419,4 +630,79 @@ test "attribute value validation" {
     // Test title attribute on anchor element (should be allowed)
     try testing.expect(isAttributeAllowed("a", "title"));
     try testing.expect(isAttributeValueValid("a", "title", "any title text"));
+}
+
+test "enum-based functions" {
+    // Test getElementSpecByEnum
+    const table_spec = getElementSpecByEnum(.table);
+    try testing.expect(table_spec != null);
+    try testing.expectEqualStrings("table", table_spec.?.tagName());
+
+    // Test isAttributeAllowedEnum
+    try testing.expect(isAttributeAllowedEnum(.table, "scope"));
+    try testing.expect(isAttributeAllowedEnum(.th, "scope"));
+    try testing.expect(!isAttributeAllowedEnum(.table, "onclick"));
+
+    // Test isVoidElementEnum
+    try testing.expect(isVoidElementEnum(.img));
+    try testing.expect(isVoidElementEnum(.br));
+    try testing.expect(isVoidElementEnum(.input));
+    try testing.expect(!isVoidElementEnum(.div));
+    try testing.expect(!isVoidElementEnum(.table));
+}
+
+test "fast bridge functions" {
+    // Test getElementSpecFast (string to enum conversion)
+    const table_spec = getElementSpecFast("table");
+    try testing.expect(table_spec != null);
+    try testing.expectEqualStrings("table", table_spec.?.tagName());
+
+    // Test unknown element
+    const unknown_spec = getElementSpecFast("unknown-element");
+    try testing.expect(unknown_spec == null);
+
+    // Test isAttributeAllowedFast
+    try testing.expect(isAttributeAllowedFast("table", "scope"));
+    try testing.expect(!isAttributeAllowedFast("table", "onclick"));
+    try testing.expect(isAttributeAllowedFast("div", "aria-label"));
+}
+
+test "DOM element integration functions" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // Create test elements
+    const table_element = try z.createElement(doc, "table");
+    const img_element = try z.createElement(doc, "img");
+    const div_element = try z.createElement(doc, "div");
+
+    // Test getElementSpecFromElement
+    const table_spec = getElementSpecFromElement(table_element);
+    try testing.expect(table_spec != null);
+    try testing.expectEqualStrings("table", table_spec.?.tagName());
+
+    // Test isVoidElementFromSpec
+    try testing.expect(isVoidElementFromSpec(img_element));
+    try testing.expect(!isVoidElementFromSpec(table_element));
+    try testing.expect(!isVoidElementFromSpec(div_element));
+
+    // Test validateElementAttributeFromElement
+    try testing.expect(validateElementAttributeFromElement(table_element, "scope"));
+    try testing.expect(!validateElementAttributeFromElement(table_element, "onclick"));
+    try testing.expect(validateElementAttributeFromElement(div_element, "class"));
+
+    // Test getAllowedAttributesFromElement
+    const attrs = try getAllowedAttributesFromElement(testing.allocator, table_element);
+    defer testing.allocator.free(attrs);
+    try testing.expect(attrs.len > 0);
+
+    // Check that "scope" is in the allowed attributes for table
+    var found_scope = false;
+    for (attrs) |attr| {
+        if (std.mem.eql(u8, attr, "scope")) {
+            found_scope = true;
+            break;
+        }
+    }
+    try testing.expect(found_scope);
 }

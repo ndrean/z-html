@@ -7,453 +7,11 @@
 //! - ensure safe URI usage
 const std = @import("std");
 const z = @import("../root.zig");
-const html_spec = @import("html_spec.zig");
+const HtmlTag = z.HtmlTag;
 const Err = z.Err;
 const print = std.debug.print;
 
 const testing = std.testing;
-
-// === Whitelist definitions ===
-pub const AttrSet = std.StaticStringMap(void);
-const special_common = AttrSet.initComptime(.{
-    .{"phx-"},
-    .{":if"},
-    .{":for"},
-    .{":let"},
-    .{"data-"},
-});
-
-pub const allowed_a = AttrSet.initComptime(.{
-    .{"href"},
-    .{"title"},
-    .{"target"},
-    .{"id"},
-    .{"aria"},
-    .{"role"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_img = AttrSet.initComptime(.{
-    .{"src"},
-    .{"alt"},
-    .{"title"},
-    .{"sizes"},
-    .{"height"},
-    .{"width"},
-    .{"lazy"},
-    .{"loading"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_common = AttrSet.initComptime(.{
-    .{"aria"},
-    .{"hidden"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_meta = AttrSet.initComptime(.{
-    .{"charset"},
-    .{"name"},
-    .{"content"},
-});
-pub const allowed_link = AttrSet.initComptime(.{
-    .{"rel"},
-    .{"href"},
-    .{"type"},
-    .{"sizes"},
-    .{"media"},
-    .{"as"},
-    .{"crossorigin"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_input = AttrSet.initComptime(.{
-    .{"type"},
-    .{"name"},
-    .{"value"},
-    .{"placeholder"},
-    .{"required"},
-    .{"minlength"},
-    .{"maxlength"},
-    .{"form"},
-    .{"autocomplete"},
-    .{"list"},
-    .{"max"},
-    .{"min"},
-    .{"readonly"},
-    .{"step"},
-    .{"accept"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_label = AttrSet.initComptime(.{
-    .{"for"},
-});
-pub const allowed_form = AttrSet.initComptime(.{
-    .{"action"},
-    .{"method"},
-    .{"enctype"},
-    .{"target"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_button = AttrSet.initComptime(.{
-    .{"type"},
-    .{"name"},
-    .{"value"},
-    .{"disabled"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_table = AttrSet.initComptime(.{
-    .{"scope"},
-    .{"id"},
-    .{"class"},
-});
-
-// === SVG attribute whitelists
-pub const allowed_svg_common = AttrSet.initComptime(.{
-    // Core attributes
-    .{"id"},          .{"class"},        .{"style"},             .{"title"},
-    // Geometric attributes
-    .{"x"},           .{"y"},            .{"width"},             .{"height"},
-    .{"r"},           .{"rx"},           .{"ry"},                .{"cx"},
-    .{"cy"},          .{"x1"},           .{"y1"},                .{"x2"},
-    .{"y2"},          .{"dx"},           .{"dy"},
-    // Presentation attributes (safe ones)
-                   .{"fill"},
-    .{"stroke"},      .{"stroke-width"}, .{"stroke-linecap"},    .{"stroke-linejoin"},
-    .{"opacity"},     .{"fill-opacity"}, .{"stroke-opacity"},    .{"font-size"},
-    .{"font-family"}, .{"text-anchor"},  .{"dominant-baseline"}, .{"alignment-baseline"},
-    // Transform (generally safe)
-    .{"transform"},   .{"viewBox"},      .{"xmlns"},
-});
-pub const allowed_svg_path = AttrSet.initComptime(.{
-    .{"d"},
-    .{"pathLength"},
-});
-pub const allowed_svg_text = AttrSet.initComptime(.{
-    .{"x"},
-    .{"y"},
-    .{"dx"},
-    .{"dy"},
-    .{"rotate"},
-    .{"textLength"},
-});
-pub const allowed_svg_circle = AttrSet.initComptime(.{
-    .{"cx"},
-    .{"cy"},
-    .{"r"},
-});
-pub const allowed_svg_rect = AttrSet.initComptime(.{
-    .{"x"},
-    .{"y"},
-    .{"width"},
-    .{"height"},
-    .{"rx"},
-    .{"ry"},
-});
-
-// Form element attribute sets
-pub const allowed_select = AttrSet.initComptime(.{
-    .{"name"},
-    .{"multiple"},
-    .{"size"},
-    .{"required"},
-    .{"disabled"},
-    .{"form"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_option = AttrSet.initComptime(.{
-    .{"value"},
-    .{"selected"},
-    .{"disabled"},
-    .{"label"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_optgroup = AttrSet.initComptime(.{
-    .{"label"},
-    .{"disabled"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_textarea = AttrSet.initComptime(.{
-    .{"name"},
-    .{"rows"},
-    .{"cols"},
-    .{"placeholder"},
-    .{"required"},
-    .{"disabled"},
-    .{"readonly"},
-    .{"maxlength"},
-    .{"minlength"},
-    .{"wrap"},
-    .{"form"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_fieldset = AttrSet.initComptime(.{
-    .{"disabled"},
-    .{"form"},
-    .{"name"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_legend = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-
-// Media element attribute sets
-pub const allowed_video = AttrSet.initComptime(.{
-    .{"src"},
-    .{"controls"},
-    .{"autoplay"},
-    .{"loop"},
-    .{"muted"},
-    .{"poster"},
-    .{"preload"},
-    .{"width"},
-    .{"height"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_audio = AttrSet.initComptime(.{
-    .{"src"},
-    .{"controls"},
-    .{"autoplay"},
-    .{"loop"},
-    .{"muted"},
-    .{"preload"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_source = AttrSet.initComptime(.{
-    .{"src"},
-    .{"type"},
-    .{"media"},
-    .{"sizes"},
-    .{"srcset"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_track = AttrSet.initComptime(.{
-    .{"src"},
-    .{"kind"},
-    .{"srclang"},
-    .{"label"},
-    .{"default"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-
-// Semantic element attribute sets
-pub const allowed_details = AttrSet.initComptime(.{
-    .{"open"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_summary = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_figure = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_figcaption = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_picture = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_map = AttrSet.initComptime(.{
-    .{"name"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_area = AttrSet.initComptime(.{
-    .{"alt"},
-    .{"coords"},
-    .{"shape"},
-    .{"href"},
-    .{"target"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_dl = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_dt = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_dd = AttrSet.initComptime(.{
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-pub const allowed_svg_line = AttrSet.initComptime(.{
-    .{"x1"},
-    .{"y1"},
-    .{"x2"},
-    .{"y2"},
-});
-pub const allowed_svg_animate = AttrSet.initComptime(.{
-    .{"attributeName"},
-    .{"values"},
-    .{"dur"},
-    .{"repeatCount"},
-});
-
-// === iframe attributes with sandbox focus
-pub const allowed_iframe = AttrSet.initComptime(.{
-    .{"src"},
-    .{"sandbox"},
-    .{"srcdoc"},
-    .{"name"},
-    .{"loading"},
-    .{"width"},
-    .{"height"},
-    .{"class"},
-    .{"id"},
-    .{"aria"},
-    .{"hidden"},
-});
-// === HTMLTags
-pub const TagWhitelist = std.StaticStringMap(*const AttrSet);
-pub const ALLOWED_TAGS = TagWhitelist.initComptime(.{
-    .{ "a", &allowed_a },
-    .{ "img", &allowed_img },
-    .{ "iframe", &allowed_iframe }, // Conditional support with sandbox validation
-    .{ "div", &allowed_common },
-    .{ "span", &allowed_common },
-    .{ "p", &allowed_common },
-    .{ "ul", &allowed_common },
-    .{ "ol", &allowed_common },
-    .{ "li", &allowed_common },
-    .{ "strong", &allowed_common },
-    .{ "em", &allowed_common },
-    .{ "br", &allowed_common },
-    .{ "h1", &allowed_common },
-    .{ "h2", &allowed_common },
-    .{ "h3", &allowed_common },
-    .{ "h4", &allowed_common },
-    .{ "h5", &allowed_common },
-    .{ "h6", &allowed_common },
-    .{ "blockquote", &allowed_common },
-    .{ "pre", &allowed_common },
-    .{ "code", &allowed_common },
-    .{ "template", &allowed_common },
-    .{ "button", &allowed_button },
-    .{ "i", &allowed_common },
-    .{ "table", &allowed_table },
-    .{ "thead", &allowed_table },
-    .{ "tbody", &allowed_table },
-    .{ "tr", &allowed_table },
-    .{ "th", &allowed_table },
-    .{ "td", &allowed_table },
-    .{ "caption", &allowed_table },
-    .{ "tfoot", &allowed_table },
-
-    // Form elements
-    .{ "form", &allowed_form },
-    .{ "input", &allowed_input },
-    .{ "textarea", &allowed_textarea },
-    .{ "select", &allowed_select },
-    .{ "option", &allowed_option },
-    .{ "optgroup", &allowed_optgroup },
-    .{ "label", &allowed_label },
-    .{ "fieldset", &allowed_fieldset },
-    .{ "legend", &allowed_legend },
-
-    // Media elements
-    .{ "audio", &allowed_audio },
-    .{ "video", &allowed_video },
-    .{ "source", &allowed_source },
-    .{ "track", &allowed_track },
-
-    // Semantic elements
-    .{ "details", &allowed_details },
-    .{ "summary", &allowed_summary },
-    .{ "figure", &allowed_figure },
-    .{ "figcaption", &allowed_figcaption },
-    .{ "picture", &allowed_picture },
-    .{ "map", &allowed_map },
-    .{ "area", &allowed_area },
-    .{ "dl", &allowed_dl },
-    .{ "dt", &allowed_dt },
-    .{ "dd", &allowed_dd },
-
-    // SVG elements (safe ones) - defined in centralized HtmlTag enum
-    .{ "svg", &allowed_svg_common },
-    .{ "path", &allowed_svg_path },
-    .{ "circle", &allowed_svg_circle },
-    .{ "rect", &allowed_svg_rect },
-    .{ "line", &allowed_svg_line },
-    .{ "text", &allowed_svg_text },
-    .{ "g", &allowed_svg_common }, // group
-    .{ "defs", &allowed_svg_common }, // definitions
-    .{ "use", &allowed_svg_common }, // use element
-});
 
 /// [sanitize] Defines which URLs can be considered safe as used in an attribute
 pub fn isSafeUri(value: []const u8) bool {
@@ -490,14 +48,14 @@ fn isIframeSafe(element: *z.HTMLElement) bool {
     return true; // Has sandbox and safe src
 }
 
-// /// [sanitize] Check if an attribute is allowed by the whitelist
-// fn isAttributeAllowed(attr_set: *const AttrSet, attr_name: []const u8) bool {
-//     return attr_set.has(attr_name) or special_common.has(attr_name);
-// }
-
 /// [sanitize] Check if an element and attribute combination is allowed using unified specification
 pub fn isElementAttributeAllowed(element_tag: []const u8, attr_name: []const u8) bool {
-    return html_spec.isAttributeAllowed(element_tag, attr_name);
+    return z.isAttributeAllowedFast(element_tag, attr_name);
+}
+
+/// [sanitize] Fast enum-based element and attribute validation
+pub fn isElementAttributeAllowedEnum(tag: HtmlTag, attr_name: []const u8) bool {
+    return z.isAttributeAllowedEnum(tag, attr_name);
 }
 
 /// [sanitize] Check if attribute is a framework directive or custom attribute
@@ -524,11 +82,6 @@ pub fn isFrameworkAttribute(attr_name: []const u8) bool {
         std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')
 }
 
-/// [sanitize] Check if an attribute value is valid using unified specification
-pub fn isElementAttributeValueValid(element_tag: []const u8, attr_name: []const u8, attr_value: []const u8) bool {
-    return html_spec.isAttributeValueValid(element_tag, attr_name, attr_value);
-}
-
 fn isDescendantOfSvg(tag: z.HtmlTag, parent: z.HtmlTag) bool {
     return (tag == .svg or parent == .svg) or return false;
 }
@@ -539,20 +92,6 @@ fn isDangerousSvgDescendant(tag_name: []const u8) bool {
         std.mem.eql(u8, tag_name, "animate") or // Can have onbegin, onend events
         std.mem.eql(u8, tag_name, "animateTransform") or
         std.mem.eql(u8, tag_name, "set");
-}
-
-/// [sanitize] Validate an element using unified specification
-pub fn validateElementWithSpec(element: *z.HTMLElement) bool {
-    const tag_name = z.tagName_zc(element);
-    const lowercase_tag = std.ascii.lowerString(tag_name, tag_name);
-
-    // Check if element itself is allowed
-    const spec = html_spec.getElementSpec(lowercase_tag);
-    if (spec == null) {
-        return false; // Element not in specification
-    }
-
-    return true;
 }
 
 /// Helper to set the parent context to avoid walking up the DOM tree
@@ -744,8 +283,8 @@ fn handleSvgElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: *z
         return removeAndContinue(context_ptr, node);
     }
 
-    // Safe SVG element - check if allowed and sanitize attributes
-    if (ALLOWED_TAGS.get(tag_name)) |_| {
+    // Safe SVG element - check if allowed using centralized spec
+    if (z.getElementSpecFast(tag_name) != null) {
         collectSvgDangerousAttributes(context_ptr, element, tag_name) catch return z._STOP;
     } else {
         // SVG element not in whitelist - remove
@@ -772,16 +311,15 @@ fn handleKnownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: 
         return handleSvgElement(context_ptr, node, element, tag_str);
     }
 
-    // Standard HTML element - use strict whitelist
-    if (ALLOWED_TAGS.get(tag_str)) |_| {
+    // Standard HTML element - use centralized spec
+    if (z.getElementSpecByEnum(tag) != null) {
         // Special handling for iframe - check sandbox requirement
-        if (std.mem.eql(u8, tag_str, "iframe")) {
+        if (tag == .iframe) {
             if (!isIframeSafe(element)) {
-                // iframe without sandbox or with dangerous src - remove it
                 return removeAndContinue(context_ptr, node);
             }
         }
-        collectDangerousAttributes(context_ptr, element, tag_str) catch return z._STOP;
+        collectDangerousAttributesEnum(context_ptr, element, tag) catch return z._STOP;
     } else {
         // Known tag but not in whitelist - check if it's a custom element
         if (context_ptr.options.allow_custom_elements and isCustomElement(tag_str)) {
@@ -930,10 +468,8 @@ fn collectCustomElementAttributes(context: *SanitizeContext, element: *z.HTMLEle
     }
 }
 
-/// Strict sanitization for standard HTML elements - uses whitelist
-fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_name: []const u8) !void {
-    const allowed_attrs = ALLOWED_TAGS.get(tag_name) orelse return;
-    // uses buffer collected attributes
+/// Fast enum-based attribute sanitization for standard HTML elements
+fn collectDangerousAttributesEnum(context: *SanitizeContext, element: *z.HTMLElement, tag: HtmlTag) !void {
     const attrs = z.getAttributes_bf(context.allocator, element) catch return;
 
     defer {
@@ -950,7 +486,7 @@ fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement
         if (isFrameworkAttribute(attr_pair.name)) {
             // Always allow framework-specific attributes
             continue;
-        } else if (!allowed_attrs.has(attr_pair.name)) {
+        } else if (!isElementAttributeAllowedEnum(tag, attr_pair.name)) {
             should_remove = true;
         } else {
             // Check for dangerous schemes in ANY attribute value first
@@ -985,6 +521,62 @@ fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement
         }
     }
 }
+
+// /// Strict sanitization for standard HTML elements - uses whitelist (legacy - keep for compatibility)
+// fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_name: []const u8) !void {
+//     const allowed_attrs = ALLOWED_TAGS.get(tag_name) orelse return;
+//     // uses buffer collected attributes
+//     const attrs = z.getAttributes_bf(context.allocator, element) catch return;
+
+//     defer {
+//         for (attrs) |attr| {
+//             context.allocator.free(attr.name);
+//             context.allocator.free(attr.value);
+//         }
+//         context.allocator.free(attrs);
+//     }
+
+//     for (attrs) |attr_pair| {
+//         var should_remove = false;
+
+//         if (isFrameworkAttribute(attr_pair.name)) {
+//             // Always allow framework-specific attributes
+//             continue;
+//         } else if (!allowed_attrs.has(attr_pair.name)) {
+//             should_remove = true;
+//         } else {
+//             // Check for dangerous schemes in ANY attribute value first
+//             if (std.mem.startsWith(u8, attr_pair.value, "javascript:") or
+//                 std.mem.startsWith(u8, attr_pair.value, "vbscript:"))
+//             {
+//                 should_remove = true;
+//             } else if (std.mem.startsWith(u8, attr_pair.value, "data:") and
+//                 (std.mem.indexOf(u8, attr_pair.value, "base64") != null or
+//                     std.mem.startsWith(u8, attr_pair.value, "data:text/html") or
+//                     std.mem.startsWith(u8, attr_pair.value, "data:text/javascript")))
+//             {
+//                 should_remove = true;
+//             } else if (std.mem.startsWith(u8, attr_pair.name, "on")) {
+//                 // Remove all event handlers
+//                 should_remove = true;
+//             } else if (std.mem.eql(u8, attr_pair.name, "style")) {
+//                 // Remove inline styles
+//                 should_remove = true;
+//             } else if (std.mem.eql(u8, attr_pair.name, "href") or std.mem.eql(u8, attr_pair.name, "src")) {
+//                 if (context.options.strict_uri_validation and !isSafeUri(attr_pair.value)) {
+//                     should_remove = true;
+//                 }
+//             } else if (std.mem.eql(u8, attr_pair.name, "target")) {
+//                 if (!isValidTarget(attr_pair.value)) {
+//                     should_remove = true;
+//                 }
+//             }
+//         }
+//         if (should_remove) {
+//             try context.addAttributeToRemove(element, attr_pair.name);
+//         }
+//     }
+// }
 
 fn isValidTarget(value: []const u8) bool {
     return std.mem.eql(u8, value, "_blank") or
@@ -1082,7 +674,7 @@ test "iframe sandbox validation" {
 
     // Normalize to clean up whitespace left by element removal
     const body_element = z.nodeToElement(body) orelse return;
-    try z.normalize(allocator, body_element);
+    try z.normalizeDOM(allocator, body_element);
 
     const result = try z.outerNodeHTML(allocator, body);
     defer allocator.free(result);
@@ -1191,7 +783,7 @@ test "comprehensive sanitization modes" {
 
         // Normalize to clean up empty text nodes
         const body_element = z.nodeToElement(body) orelse return;
-        try z.normalize(allocator, body_element);
+        try z.normalizeDOM(allocator, body_element);
 
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
