@@ -155,9 +155,6 @@ pub const isTypeFragment = Type.isTypeFragment;
 //=====================================
 pub const HtmlTag = tag.HtmlTag;
 pub const WhitespacePreserveTagSet = tag.WhitespacePreserveTagSet;
-pub const VoidTagSet = tag.VoidTagSet;
-pub const NoEscapeTagSet = tag.NoEscapeTagSet;
-pub const FragmentContext = tag.FragmentContext;
 
 // from lexbor source: /tag/const.h
 
@@ -166,10 +163,7 @@ pub const tagFromQualifiedName = tag.tagFromQualifiedName;
 pub const tagFromElement = tag.tagFromElement;
 pub const tagFromAnyElement = tag.tagFromAnyElement;
 pub const matchesTagName = tag.matchesTagName;
-pub const isVoidName = tag.isVoidName;
-pub const isVoidElement = tag.isVoidElement; // Change name
-// pub const isNoEscapeElement = tag.isNoEscapeElement; // change name
-// pub const isNoEscapeElementExtended = tag.isNoEscapeElementExtended; // For custom elements
+
 pub const ElementSpecMap = specs.ElementSpecMap;
 pub const getElementSpecFromElement = specs.getElementSpecFromElement;
 pub const isVoidElementFromSpec = specs.isVoidElementFromSpec;
@@ -206,14 +200,20 @@ pub const escapeHtml = text.escapeHtml;
 // ====================================
 // Normalize
 // ====================================
+// DOM based normalization
+pub const isWhitespaceOnly = norm.isWhitespaceOnly;
 pub const normalizeDOM = norm.normalizeDOM;
-pub const normalizeDOMWithOptions = norm.normalizeDOMWithOptions;
-pub const normalizeForDisplay = norm.normalizeForDisplay;
-// pub const removeOuterWhitespaceTextNodes = cleaner.removeOuterWhitespaceTextNodes;
-pub const normalizeText = cleaner.normalizeText;
+pub const normalizeDOMwithOptions = norm.normalizeDOMwithOptions;
 
-pub const normalizeHtmlString = norm.normalizeHtmlString;
-pub const normalizeHtmlStringWithOptions = norm.normalizeHtmlStringWithOptions;
+pub const normalizeDOMForDisplay = norm.normalizeDOMForDisplay;
+
+// String based normalization
+pub const StringNormalizeOptions = cleaner.StringNormalizeOptions;
+
+pub const normalizeHtmlString = cleaner.normalizeHtmlString;
+pub const normalizeHtmlStringWithOptions = cleaner.normalizeHtmlStringWithOptions;
+
+pub const normalizeText = cleaner.normalizeText;
 
 //=====================================
 // DOM navigation
@@ -265,6 +265,8 @@ pub const Stream = chunks.Stream;
 //=====================================
 // Fragments & Template element
 //=====================================
+pub const FragmentContext = frag_temp.FragmentContext;
+
 // fragments
 pub const fragmentToNode = frag_temp.fragmentToNode;
 pub const createDocumentFragment = frag_temp.createDocumentFragment;
@@ -429,4 +431,23 @@ const testing = std.testing;
 
 test {
     std.testing.refAllDecls(@This());
+}
+
+pub fn get(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    defer allocating.deinit();
+
+    var client: std.http.Client = .{
+        .allocator = allocator,
+    };
+    defer client.deinit();
+
+    const response = try client.fetch(.{
+        .method = .GET,
+        .location = .{ .url = url },
+        .response_writer = &allocating.writer,
+    });
+
+    std.debug.assert(response.status == .ok);
+    return allocating.toOwnedSlice();
 }

@@ -37,6 +37,94 @@ extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
 
+// === FragmentContext Html tags
+
+/// [fragment] Fragment parsing context - defines how the fragment should be interpreted
+pub const FragmentContext = enum {
+    fragment,
+    /// Parse as if inside <body> (default for most cases)
+    body,
+    /// Parse as if inside <div> (for general content)
+    div,
+    /// Parse as if inside <template> (for web components)
+    template,
+    /// Parse as if inside <table> (for table rows/cells)
+    table,
+    tbody,
+    tr,
+    /// Parse as if inside <select> (for options)
+    select,
+    /// Parse as if inside <ul> (for list items)
+    ul,
+    /// Parse as if inside <ol> (for ordered list items)
+    ol,
+    /// Parse as if inside <dl> (for definition terms/descriptions)
+    dl,
+    /// Parse as if inside <fieldset> (for legend elements)
+    fieldset,
+    /// Parse as if inside <details> (for summary elements)
+    details,
+    /// Parse as if inside <optgroup> (for grouped options)
+    optgroup,
+    /// Parse as if inside <map> (for area elements)
+    map,
+    /// Parse as if inside <figure> (for img/figcaption elements)
+    figure,
+    /// Parse as if inside <form> (for input/label/button elements)
+    form,
+    /// Parse as if inside <video> (for source/track elements)
+    video,
+    /// Parse as if inside <audio> (for source/track elements)
+    audio,
+    /// Parse as if inside <picture> (for source/img elements)
+    picture,
+    /// Parse as if inside <head> (for meta tags, styles)
+    head,
+    /// Custom context element
+    custom,
+    /// Convert context enum to HTML tag name string
+    /// Inlined for zero function call overhead in fragment parsing
+    pub inline fn toTagName(self: FragmentContext) []const u8 {
+        return switch (self) {
+            .fragment => "html", // default root
+            .body => "body",
+            .div => "div",
+            .template => "template",
+            .table => "table",
+            .tbody => "tbody",
+            .tr => "tr",
+            .select => "select",
+            .ul => "ul",
+            .ol => "ol",
+            .dl => "dl",
+            .fieldset => "fieldset",
+            .details => "details",
+            .optgroup => "optgroup",
+            .map => "map",
+            .figure => "figure",
+            .form => "form",
+            .video => "video",
+            .audio => "audio",
+            .picture => "picture",
+            .head => "head",
+            .custom => "div", // fallback
+        };
+    }
+    pub inline fn toTag(name: []const u8) ?FragmentContext {
+        return z.stringToEnum(FragmentContext, name);
+    }
+};
+
+test "FragmentContext" {
+    // const doc = try z.createDocument();
+    // defer z.destroyDocument(doc);
+    // const fragment = try z.createDocumentFragment(doc);
+
+    try testing.expectEqualStrings(FragmentContext.toTagName(.body), "body");
+    try testing.expectEqualStrings(FragmentContext.toTagName(.table), "table");
+    try testing.expect(FragmentContext.toTag("div").? == .div);
+}
+
 // === Document Fragment =============================================
 
 /// [fragment] Get the underlying DOM node from a fragment

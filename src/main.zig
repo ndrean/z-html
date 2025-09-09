@@ -20,21 +20,16 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
-    try demoSimpleParsing(gpa);
-    try demoTemplateWithParser(gpa);
-    try demoParserReUse(gpa);
-    try demoStreamParser(gpa);
-    try demoInsertAdjacentElement(gpa);
-    try demoInsertAdjacentHTML(gpa);
-    try demoSetInnerHTML(gpa);
-    try demoSearchComparison(gpa);
+    // try demoSimpleParsing(gpa);
+    // try demoTemplateWithParser(gpa);
+    // try demoParserReUse(gpa);
+    // try demoStreamParser(gpa);
+    // try demoInsertAdjacentElement(gpa);
+    // try demoInsertAdjacentHTML(gpa);
+    // try demoSetInnerHTML(gpa);
+    // try demoSearchComparison(gpa);
     try demoSuspiciousAttributes(gpa);
-    try demoFetchContent(gpa, "https://example.com");
-
-    // std.debug.print("=== Z-HTML Performance Benchmark (Release Mode) ===\n", .{});
-    // try runNormalizeBenchmark(allocator);
-    // try newNormalizeBencharmark(allocator);
-    // try runPerformanceBenchmark(allocator);
+    // try zexplore_example_com(gpa, "https://www.example.com");
 }
 
 /// use `parseString` or `createDocFromString` to create a document with a BODY element populated by the input string
@@ -141,7 +136,7 @@ fn demoParserReUse(allocator: std.mem.Allocator) !void {
     // print("\n === Demonstrate parser engine reuse ===\n\n", .{});
     // print("\n Insert interpolated <li id=\"item-X\"> Item X</li>\n\n", .{});
 
-    // try z.prettyPrint(body);
+    // try z.prettyPrint(allocator, body);
     // print("\n\n", .{});
 }
 
@@ -188,7 +183,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
     // const html_node = z.documentRoot(html_doc).?;
 
     // print("\n\n", .{});
-    // try z.prettyPrint(html_node);
+    // try z.prettyPrint(allocator, html_node);
     // print("\n\n", .{});
     // try z.printDocStruct(html_doc);
     // print("\n\n", .{});
@@ -256,7 +251,7 @@ fn demoInsertAdjacentElement(allocator: std.mem.Allocator) !void {
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
     // print("\n=== Demonstrate insertAdjacentElement ===\n\n", .{});
-    // try z.prettyPrint(body);
+    // try z.prettyPrint(allocator, body);
 
     // Normalize whitespace for clean comparison
     const clean_html = try z.normalizeText(allocator, html);
@@ -316,7 +311,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
     // print("\n=== Demonstrate insertAdjacentHTML ===\n\n", .{});
-    // try z.prettyPrint(body);
+    // try z.prettyPrint(allocator, body);
 
     // Normalize whitespace for clean comparison
     const clean_html = try z.normalizeText(allocator, html);
@@ -342,7 +337,7 @@ fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
 
     const new_div_elt = try z.setInnerHTML(div, "<p class=\"new-content\">New Content</p>");
 
-    // try z.prettyPrint(z.documentRoot(doc).?);
+    // try z.prettyPrint(allocator,z.documentRoot(doc).?);
 
     try z.normalizeDOM(allocator, new_div_elt);
 
@@ -384,7 +379,7 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     const doc = try z.createDocFromString(test_html);
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
-    try z.prettyPrint(body);
+    try z.prettyPrint(allocator, body);
 
     print("\nSearch target: ----> class=\"main\"\n\n", .{});
 
@@ -438,43 +433,68 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
 }
 
 fn demoSuspiciousAttributes(allocator: std.mem.Allocator) !void {
-    _ = allocator; // Silence unused parameter warning
     // Create a document with lots of suspicious/malicious attributes to see the highlighting
-    const malicious_content = "<div><button disabled hidden onclick=\"alert('XSS')\" phx-click=\"increment\" data-invalid=\"bad\" scope=\"invalid\">Dangerous button</button><img src=\"javascript:alert('XSS')\" alt=\"not safe\" onerror=\"alert('hack')\" loading=\"unknown\"><a href=\"javascript:alert('XSS')\" target=\"_self\" role=\"invalid\">Dangerous link</a><p id=\"valid\" class=\"good\" aria-label=\"ok\" style=\"bad\" onload=\"bad()\">Mixed attributes</p></div>";
+    const malicious_content =
+        \\<div>
+        \\  <!-- a comment -->
+        \\  <button disabled hidden onclick="alert('XSS')" phx-click="increment" data-invalid="bad" scope="invalid">Dangerous button</button>
+        \\  <img src="javascript:alert('XSS')" alt="not safe" onerror="alert('hack')" loading="unknown">
+        \\  <a href="javascript:alert('XSS')" target="_self" role="invalid">Dangerous link</a>
+        \\  <p id="valid" class="good" aria-label="ok" style="bad" onload="bad()">Mixed attributes</p>
+        \\  <custom-elt><p>Hi there</p></custom-elt>
+        \\  <template>
+        \\      <span>Reuse me</span>
+        \\      <script>console.log('Hello from template');</script>
+        \\  </template>
+        \\</div>
+    ;
 
     const doc = try z.createDocFromString(malicious_content);
     defer z.destroyDocument(doc);
 
-    // const body = z.bodyNode(doc).?;
-    print("\n=== Demonstrating prettyPrint - suspicious/invalid attributes highlighted ===\n\n", .{});
-    print("🟥 Red = Dangerous attributes (onclick, onerror, etc.)\n", .{});
-    print("🟨 Yellow = Invalid attribute values\n", .{});
-    print("🟦 Blue = Valid attributes and values\n\n", .{});
-    // try z.prettyPrint(body);
-    print("\n\n", .{});
+    const body = z.bodyNode(doc).?;
+    const div = z.firstChild(body).?;
+    const text = z.firstChild(div).?;
+    const com = z.nextSibling(text).?;
+    print("{s}\n", .{z.nodeTypeName(com)});
+    try z.prettyPrint(allocator, body);
+    print("\n", .{});
+
+    try z.sanitizeNode(allocator, body, .permissive);
+    try z.prettyPrint(allocator, body);
+    print("\n", .{});
 }
 
-fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
-    var client: std.http.Client = .{
-        .allocator = allocator,
-    };
-    defer client.deinit();
+fn zexplore_example_com(allocator: std.mem.Allocator, url: []const u8) !void {
+    const page = try z.get(allocator, url);
+    defer allocator.free(page);
+    const doc = try z.createDocFromString(page);
+    defer z.destroyDocument(doc);
+    const html = z.documentRoot(doc).?;
+    try z.prettyPrint(allocator, html);
 
-    const stdout_writer_buf: []u8 = try allocator.alloc(u8, 4096);
-    defer allocator.free(stdout_writer_buf);
-    var file_writer: std.fs.File.Writer = std.fs.File.stdout().writer(stdout_writer_buf);
-    const writer_interface: *std.Io.Writer = &file_writer.interface;
-    _ = writer_interface;
+    var css_engine = try z.createCssEngine(allocator);
+    defer css_engine.deinit();
 
-    const resp = try client.fetch(.{
-        .location = .{
-            .url = url,
-        },
-        .method = .GET,
-    });
+    const a_link = try css_engine.querySelector(html, "a[href]");
 
-    std.debug.assert(resp.status == .ok);
-    try file_writer.interface.flush();
+    const href_value = z.getAttribute_zc(z.nodeToElement(a_link.?).?, "href").?;
+    std.debug.print("{s}\n", .{href_value});
+
+    const style_by_walker = z.getElementByTag(html, .style);
+    var css_content: []const u8 = undefined;
+    if (style_by_walker) |style| {
+        css_content = z.textContent_zc(z.elementToNode(style));
+        print("{s}\n", .{css_content});
+    }
+
+    const style_by_css = try css_engine.querySelector(html, "style");
+
+    if (style_by_css) |style| {
+        const css_content_2 = z.textContent_zc(style);
+        // print("{s}\n", .{css_content_2});
+        std.debug.assert(std.mem.eql(u8, css_content, css_content_2));
+    }
 }
 
 // fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
@@ -566,7 +586,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //         doc = try z.createDocFromString(large_html);
 //         const body_elt = z.bodyElement(doc).?;
 
-//         try z.normalizeDOMWithOptions(
+//         try z.normalizeDOMwithOptions(
 //             allocator,
 //             body_elt,
 //             .{
@@ -801,7 +821,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //         const temp_doc = try z.createDocFromString(large_html);
 //         const temp_body_element = try z.bodyElement(temp_doc);
 
-//         try z.normalizeDOMWithOptions(
+//         try z.normalizeDOMwithOptions(
 //             allocator,
 //             temp_body_element,
 //             .{
@@ -939,7 +959,7 @@ fn demoFetchContent(allocator: std.mem.Allocator, url: []const u8) !void {
 //         \\    <title>Medium Blog Post - Performance Test</title>
 //         \\    <link rel="stylesheet" href="/css/main.css"/>
 //         \\    <!-- Analytics comment -->
-//         \\    <script src="/js/analytics.js"></script>
+//         \\    <script src="/js/analytics.js"></>
 //         \\  </head>
 //         \\  <body class="blog-layout">
 //         \\    <header class="site-header">

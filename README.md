@@ -16,18 +16,15 @@ The primitives exposed here stay as close as possible to `JavaScript` semantics.
 
 This project exposes a significant / essential subset of all available `lexbor` functions:
 
-- Parsing with a parser engine
-  - document
-  - fragment context-aware parsing
+- Direct parsing or  with a parser engine (document or fragment context-aware)
 - streaming and chunk processing
 - Serialization
 - Sanitization
 - CSS selectors search with cached CSS selectors parsing
 - Support of `<template>` elements.
 - Attribute search
-- Collections and _exact string matching_:
 - DOM manipulation
-- DOM normalization with options (remove comments, whitespace, empty nodes)
+- DOM / HTML-string normalization with options (remove comments, whitespace, empty nodes)
 - Pretty printing
 
 ## `lexbor` DOM memory management: Document Ownership and zero-copy functions
@@ -44,7 +41,144 @@ Some functions borrow memory from `lexbor` for zero-copy operations: their resul
 
 We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by mapping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consumed immediately whilst the allocated result can outlive the calling function.
 
-## Examples
+## First examples
+
+### Scrap the web and explore a page
+
+```cpp
+test "scrap example.com" {
+  const allocator = std.testing.allocator;
+
+  const page = try z.get(allocator, url);
+  defer allocator.free(page);
+
+  const doc = try z.createDocFromString(page);
+  defer z.destroyDocument(doc);
+
+  const html = z.documentRoot(doc).?;
+  try z.prettyPrint(allocator, html);
+
+  var css_engine = try z.createCssEngine(allocator);
+  defer css_engine.deinit();
+
+  const a_link = try css_engine.querySelector(html, "a[href]");
+
+  const href_value = z.getAttribute_zc(z.nodeToElement(a_link.?).?, "href").?;
+  std.debug.print("\n{s}\n", .{href_value});
+
+  var css_content: []const u8 = undefined;
+  const style_by_walker = z.getElementByTag(html, .style);
+  if (style_by_walker) |style| {
+      css_content = z.textContent_zc(z.elementToNode(style));
+      print("\n{s}\n", .{css_content});
+  }
+
+  const style_by_css = try css_engine.querySelector(html, "style");
+
+  if (style_by_css) |style| {
+      const css_content_2 = z.textContent_zc(style);
+      std.debug.assert(std.mem.eql(u8, css_content, css_content_2));
+  }
+}
+```
+
+<br>
+
+You will get a colourful print in your terminal, where the attributes, values, html elements get coloured.
+
+<br>
+
+<br>
+
+You will also see the value of the `href` attribute of a the first `<>` link:
+
+```txt
+ https://www.iana.org/domains/example
+ ```
+
+<details>
+<summary>You will then see the text content of the STYLE element (no CSS parsing):</summary>
+
+```css
+body {
+    background-color: #f0f0f2;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    
+}
+div {
+    width: 600px;
+    margin: 5em auto;
+    padding: 2em;
+    background-color: #fdfdff;
+    border-radius: 0.5em;
+    box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
+}
+a:link, a:visited {
+    color: #38488f;
+    text-decoration: none;
+}
+@media (max-width: 700px) {
+    div {
+        margin: 0 auto;
+        width: auto;
+    }
+}
+```
+
+</details>
+
+### Scan a page for potential malicious content
+
+```html
+<div>
+  <!-- a comment -->
+  <button disabled hidden onclick="alert('XSS')" phx-click="increment" data-invalid="bad" scope="invalid">Dangerous button</button>
+  <img src="javascript:alert('XSS')" alt="not safe" onerror="alert('hack')" loading="unknown">
+  <a href="javascript:alert('XSS')" target="_self" role="invalid">Dangerous link</a>
+  <p id="valid" class="good" aria-label="ok" style="bad" onload="bad()">Mixed attributes</p>
+  <custom-elt><p>Hi there</p></custom-elt>
+  <template><span>Reuse me</span></template>
+</div>
+```
+
+You parse this HTML string:
+
+```cpp
+const doc = try z.createDocFromString(html_string);
+defer z.destryDocument(doc);
+```
+
+We then print the HTML. The DOM is agressively cleaned (whitespace only text nodes and comments removed).
+
+```cpp
+const body = z.bodyNode(doc).?;
+try z.prettyPrint(allocator, body);
+```
+
+> [!NOTE]
+> The intent is to highlight potential XSS threats. It works by parsing the string into a fragment. When a HTMLElement gets an unknow attribute, its colour is white and the attribute value is highlighted in RED.
+
+You get the following output in your terminal.
+
+<br>
+
+<br>
+
+We can then run a _sanitization_ process against the DOM, so you get a context where the attributes are whitelisted.
+
+```cpp
+try z.sanitizeNode(allocator, body, .permissive);
+try z.prettyPrint(allocator, body);
+```
+
+The result is shown below.
+
+<br>
+
+<br>
+
 
 ### Building a document & Parsing
 
@@ -185,7 +319,7 @@ fn demoParser(allocator: std.mem.Allocator) !void {
         try parser.insertFragment(ul, li, .ul, false);
     }
 
-    try z.prettyPrint(body);
+    try z.prettyPrint(allocator, body);
 }
 ```
 
@@ -204,7 +338,7 @@ test "setInnerHTML" {
 
     const new_div = try z.setInnerHTML(div, "<p class=\"new-content\">New Content</p>");
 
-    try z.prettyPrint(new_div);
+    try z.prettyPrint(allocator, new_div);
 }
 ```
 

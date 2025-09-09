@@ -166,15 +166,10 @@ const ProcessCtx = struct {
 ///
 /// ---
 ///```
-pub fn prettyPrint(node: *z.DomNode) !void {
+pub fn prettyPrint(allocator: std.mem.Allocator, node: *z.DomNode) !void {
     // First, apply aggressive normalization for clean TTY display
     if (z.nodeToElement(node)) |element| {
-        // Only normalize if we have an allocator available - prettyPrint is used in tests
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        defer _ = gpa.deinit();
-        const allocator = gpa.allocator();
-
-        z.normalizeForDisplay(allocator, element) catch {
+        z.normalizeDOMForDisplay(allocator, element) catch {
             // If normalization fails, continue with original content
         };
     }
