@@ -41,9 +41,10 @@ Some functions borrow memory from `lexbor` for zero-copy operations: their resul
 
 We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by mapping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consumed immediately whilst the allocated result can outlive the calling function.
 
+<hr>
+
 ## Examples
 
-<hr>
 
 ### Scrap the web and explore a page 
 
