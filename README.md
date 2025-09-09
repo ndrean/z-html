@@ -1,12 +1,10 @@
-# z-html: a `lexbor` in `Zig` project
+# zexplorer: a `lexbor` in `Zig` project
 
-> [!WARNING]
-> Work in progress
 
 [![Zig support](https://img.shields.io/badge/Zig-0.15.1-color?logo=zig&color=%23f3ab20)](http://github.com/ndrean/z-html)
 [![Scc Code Badge](https://sloc.xyz/github/ndrean/z-html/)](https://github.com/ndrean/z-html)
 
-`zhtml` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
+`zexplorer` is a wrapper of the `C` library [lexbor](https://github.com/lexbor/lexbor), an HTML parser/DOM emulator.
 
 This is useful for web scraping, email sanitization, test engine for integrated tests, SSR post-processing of fragments.
 
@@ -208,7 +206,7 @@ You have several methods available.
 The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
 
 ```c
-const z = @import("zhtml");
+const z = @import("zexplorer");
 
 const doc: *HTMLDocument = try z.createDocument();
 defer z.destroyDocument(doc);
@@ -244,7 +242,7 @@ defer z.destroyDocument(doc);
 You receive chunks and build a document.
 
 ```c
-const z = @import("zhtml");
+const z = @import("zexplorer");
 const print = std.debug.print;
 
 fn demoStreamParser(allocator: std.mem.Allocator) !void {
@@ -361,19 +359,30 @@ make -f Makefile.lexbor
 ```
 
 
-The _build.zig_ file runs all the tests from _root.zig_.
-It imports all the submodules and runs the tests.
+- tests: The _build.zig_ file runs all the tests from _root.zig_.It imports all the submodules and runs the tests.
 
 ```sh
 zig build test --summary all
 ```
 
-Build the lib with
+- demo: Build the __main.zig_ demo with:
 
 ```sh
 zig build run -Doptimize=Debug
 #
 zig build run -Doptimize=ReleaseFast
+```
+
+- library:
+
+```sh
+zig build --release=fast
+```
+
+- fetch to include source code:
+
+```sh
+# to test
 ```
 
 ### Source: `lexbor` examples
@@ -384,12 +393,14 @@ zig build run -Doptimize=ReleaseFast
 In the built static object _liblexbor_static.a_:
 
 ```sh
-nm lexbor_src_2.4.0/build/liblexbor_static.a | grep -i "serialize"
+nm lexbor_src_2.5.0/build/liblexbor_static.a | grep -i "serialize"
 ```
 
 In the source code:
 
 ```sh
-find lexbor_src_2.4.0/source -name "*.h" | xargs grep -l "lxb_selectors_opt_set_noi"
+find lexbor_src_2.5.0/source -name "*.h" | xargs grep -l "lxb_selectors_opt_set_noi"
 ```
+
+
 
