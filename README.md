@@ -43,7 +43,9 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 ## First examples
 
-### Scrap the web and explore a page
+<hr>
+
+### Scrap the web and explore a page 
 
 ```c
 test "scrap example.com" {
@@ -131,6 +133,8 @@ a:link, a:visited {
 
 </details>
 
+<hr>
+
 ### Scan a page for potential malicious content
 
 ```html
@@ -170,7 +174,7 @@ You get the following output in your terminal.
 
 We can then run a _sanitization_ process against the DOM, so you get a context where the attributes are whitelisted.
 
-```cpp
+```c
 try z.sanitizeNode(allocator, body, .permissive);
 try z.prettyPrint(allocator, body);
 ```
@@ -182,6 +186,7 @@ The result is shown below.
 
 <br>
 
+<hr>
 
 ### Building a document & Parsing
 
