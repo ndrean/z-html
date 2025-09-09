@@ -9,10 +9,9 @@ pub fn build(b: *std.Build) void {
 
     // Wrapper library
     const wrapper_lib = b.addLibrary(.{
-        .name = "minimal",
+        .name = "zexplorer",
         .linkage = .static,
         .root_module = b.createModule(.{
-            // .root_source_file = b.path("src/minimal.c"),
             .target = target,
             .optimize = optimize,
         }),
@@ -22,6 +21,7 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c99"},
     });
     wrapper_lib.addIncludePath(lexbor_src_path);
+    wrapper_lib.addObjectFile(lexbor_static_lib_path);
     wrapper_lib.linkLibC();
 
     const zhtml_module = b.addModule(
@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         },
     );
+    b.installArtifact(wrapper_lib);
 
     // Main executable
     const exe = b.addExecutable(.{
