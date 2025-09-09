@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
     wrapper_lib.linkLibC();
 
     const zhtml_module = b.addModule(
-        "zhtml",
+        "zexplorer",
         .{
             .root_source_file = b.path("src/root.zig"),
             .target = target,
