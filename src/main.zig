@@ -86,7 +86,7 @@ fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    const doc = try parser.parse(normed_html);
+    const doc = try parser.parse(normed_html, .none);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
@@ -116,7 +116,7 @@ fn demoParserReUse(allocator: std.mem.Allocator) !void {
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
 
-    const doc = try parser.parse("<div><ul></ul></div>");
+    const doc = try parser.parse("<div><ul></ul></div>", .none);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;

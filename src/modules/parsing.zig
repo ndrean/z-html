@@ -155,102 +155,70 @@ test "setInnerHTML & lexbor security sanitation" {
     try testing.expectEqualStrings(expected, outer);
 }
 
-/// [parser] Set the inner HTML of an element with enhanced sanitization options.
-///
-/// **Two-Layer Sanitization Approach:**
-/// 1. **Lexbor's sanitization** (always applied) - handles most security concerns
-/// 2. **Custom sanitizer** (optional) - handles edge cases like SVG, custom elements, framework attributes
-///
-/// Use this when you need more control than the basic `setInnerHTML` provides.
-/// Common use cases: SVG content, custom web components, framework-specific attributes.
-///
-/// @param sanitizer_enabled: true to apply custom sanitization, false for Lexbor-only
-pub fn setInnerSafeHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8, sanitizer: z.SanitizeOptions) !void {
-    const node = z.elementToNode(element);
-    const target_doc = z.ownerDocument(node);
+// /// [parser] Set the inner HTML of an element with enhanced sanitization options.
+// ///
+// /// **Two-Layer Sanitization Approach:**
+// /// 1. **Lexbor's sanitization** (always applied) - handles most security concerns
+// /// 2. **Custom sanitizer** (optional) - handles edge cases like SVG, custom elements, framework attributes
+// ///
+// /// Use this when you need more control than the basic `setInnerHTML` provides.
+// /// Common use cases: SVG content, custom web components, framework-specific attributes.
+// ///
+// /// @param sanitizer_enabled: true to apply custom sanitization, false for Lexbor-only
+// pub fn setInnerSafeHTML(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8, sanitizer: z.SanitizeOptions) !void {
+//     const node = z.elementToNode(element);
+//     const target_doc = z.ownerDocument(node);
 
-    var parser = try z.Parser.init(allocator);
-    defer parser.deinit();
+//     var parser = try z.Parser.init(allocator);
+//     defer parser.deinit();
 
-    const fragment_root = try parser.parseFragmentDoc(
-        target_doc,
-        content,
-        .div,
-        sanitizer,
-    );
-    parser.appendFragment(node, fragment_root);
-}
+//     const fragment_root = try parser.parseFragmentDoc(
+//         target_doc,
+//         content,
+//         .div,
+//         sanitizer,
+//     );
+//     parser.appendFragment(node, fragment_root);
+// }
 
-/// [parser] Version of setInnerSafeHTML with sanitization preset `true`.
-///
-/// **Strict Mode:** Removes all potentially dangerous content including custom elements
-/// for user-generated content from untrusted sources.
-pub fn setInnerSafeHTMLStrict(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
-    const node = z.elementToNode(element);
-    const target_doc = z.ownerDocument(node);
+// /// [parser] Version of setInnerSafeHTML with sanitization preset `true`.
+// ///
+// /// **Strict Mode:** Removes all potentially dangerous content including custom elements
+// /// for user-generated content from untrusted sources.
+// pub fn setInnerSafeHTMLStrict(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
+//     const node = z.elementToNode(element);
+//     const target_doc = z.ownerDocument(node);
 
-    var parser = try z.Parser.init(allocator);
-    defer parser.deinit();
+//     var parser = try z.Parser.init(allocator);
+//     defer parser.deinit();
 
-    const fragment_root = try parser.parseFragmentDoc(
-        target_doc,
-        content,
-        .div,
-        .strict, // sanitizer enabled
-    );
-    parser.appendFragment(node, fragment_root);
-}
+//     const fragment_root = try parser.parseFragmentDoc(
+//         target_doc,
+//         content,
+//         .div,
+//         .strict, // sanitizer enabled
+//     );
+//     parser.appendFragment(node, fragment_root);
+// }
 
-/// [parser] Set the inner HTML with permissive sanitization preset.
-///
-/// **Permissive Mode:** Allows custom elements and framework attributes while removing XSS vectors.
-pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
-    const node = z.elementToNode(element);
-    const target_doc = z.ownerDocument(node);
+// /// [parser] Set the inner HTML with permissive sanitization preset.
+// ///
+// /// **Permissive Mode:** Allows custom elements and framework attributes while removing XSS vectors.
+// pub fn setInnerSafeHTMLPermissive(allocator: std.mem.Allocator, element: *z.HTMLElement, content: []const u8) !void {
+//     const node = z.elementToNode(element);
+//     const target_doc = z.ownerDocument(node);
 
-    var parser = try z.Parser.init(allocator);
-    defer parser.deinit();
+//     var parser = try z.Parser.init(allocator);
+//     defer parser.deinit();
 
-    const fragment_root = try parser.parseFragmentDoc(
-        target_doc,
-        content,
-        .div,
-        .permissive, // permissive sanitization
-    );
-    parser.appendFragment(node, fragment_root);
-}
-
-test "setInnerHTML flavours" {
-    const allocator = testing.allocator;
-
-    const doc = try z.createDocument();
-    defer z.destroyDocument(doc);
-
-    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><x-widget><button onclick=\"increment\">Click</button></x-widget>";
-
-    const result0 = "<script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a><x-widget><button onclick=\"increment\">Click</button></x-widget>";
-
-    const result1 = "<img alt=\"escaped\"><p id=\"1\" phx-click=\"increment\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a>";
-
-    const result2 = "<img alt=\"escaped\"><p id=\"1\" phx-click=\"increment\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a><x-widget><button>Click</button></x-widget>";
-
-    const expectations = [_]struct { name: []const u8, result: []const u8, mode: z.SanitizeOptions }{
-        .{ .name = "flavor0", .result = result0, .mode = .none },
-        .{ .name = "flavor1", .result = result1, .mode = .strict },
-        .{ .name = "flavor2", .result = result2, .mode = .permissive },
-    };
-
-    for (expectations) |exp| {
-        const div = try z.createElement(doc, "div");
-        try z.setInnerSafeHTML(allocator, div, malicious_content, exp.mode);
-        const inner = try z.innerHTML(allocator, div);
-        defer allocator.free(inner);
-        // print("\n{s}: \n{s}\n", .{ exp.name, inner });
-
-        try testing.expectEqualStrings(exp.result, inner);
-        _ = try setInnerHTML(div, "");
-    }
-}
+//     const fragment_root = try parser.parseFragmentDoc(
+//         target_doc,
+//         content,
+//         .div,
+//         .permissive, // permissive sanitization
+//     );
+//     parser.appendFragment(node, fragment_root);
+// }
 
 // ===================================================================
 
@@ -319,35 +287,30 @@ pub const Parser = struct {
         self.initialized = false;
     }
 
-    // /// Configure sanitizer options for this parser instance
-    // pub fn setSanitizerOptions(self: *Parser, options: z.SanitizerOptions) void {
-    //     self.sanitizer_options = options;
-    // }
+    pub fn parse(self: *Parser, html: []const u8, sanitizer: z.SanitizeOptions) !*z.HTMLDocument {
+        const doc = lxb_html_parse(self.html_parser, html.ptr, html.len) orelse return Err.ParseFailed;
 
-    // /// Set sanitizer to strict mode (no custom elements, remove scripts/styles)
-    // pub fn setSanitizerStrict(self: *Parser) void {
-    //     self.sanitizer_options = .{
-    //         .skip_comments = true,
-    //         .remove_scripts = true,
-    //         .remove_styles = true,
-    //         .strict_uri_validation = true,
-    //         .allow_custom_elements = false,
-    //     };
-    // }
+        switch (sanitizer) {
+            .none => {}, // No sanitization
+            .minimum => {
+                const root = z.documentRoot(doc) orelse return Err.DocumentRootNotFound;
+                try z.sanitizeWithOptions(self.allocator, root, .minimum);
+            },
+            .strict => {
+                const root = z.documentRoot(doc) orelse return Err.DocumentRootNotFound;
+                try z.sanitizeStrict(self.allocator, root);
+            },
+            .permissive => {
+                const root = z.documentRoot(doc) orelse return Err.DocumentRootNotFound;
+                try z.sanitizePermissive(self.allocator, root);
+            },
+            .custom => |opts| {
+                const root = z.documentRoot(doc) orelse return Err.DocumentRootNotFound;
+                try z.sanitizeWithOptions(self.allocator, root, .{ .custom = opts });
+            },
+        }
 
-    // /// Set sanitizer to permissive mode (allow custom elements and framework attributes)
-    // pub fn setSanitizerPermissive(self: *Parser) void {
-    //     self.sanitizer_options = .{
-    //         .skip_comments = true,
-    //         .remove_scripts = true,
-    //         .remove_styles = false,
-    //         .strict_uri_validation = true,
-    //         .allow_custom_elements = true,
-    //     };
-    // }
-
-    pub fn parse(self: *Parser, html: []const u8) !*z.HTMLDocument {
-        return lxb_html_parse(self.html_parser, html.ptr, html.len) orelse return Err.ParseFailed;
+        return doc;
     }
 
     //  ----[TODO]--- changes to firstChild?
@@ -380,6 +343,7 @@ pub const Parser = struct {
 
         switch (sanitizer) {
             .none => {}, // No sanitization
+            .minimum => try z.sanitizeWithOptions(self.allocator, fragment_root, .minimum),
             .strict => try z.sanitizeStrict(self.allocator, fragment_root),
             .permissive => try z.sanitizePermissive(self.allocator, fragment_root),
             .custom => |opts| try z.sanitizeWithOptions(self.allocator, fragment_root, .{ .custom = opts }),
@@ -424,6 +388,7 @@ pub const Parser = struct {
 
         switch (sanitizer) {
             .none => {}, // No sanitization
+            .minimum => try z.sanitizeWithOptions(self.allocator, fragment_root, .minimum),
             .strict => try z.sanitizeStrict(self.allocator, fragment_root),
             .permissive => try z.sanitizePermissive(self.allocator, fragment_root),
             .custom => |opts| try z.sanitizeWithOptions(self.allocator, fragment_root, .{ .custom = opts }),
@@ -443,25 +408,6 @@ pub const Parser = struct {
             fragment_child = next_sibling;
         }
         z.destroyNode(fragment_node.?);
-    }
-
-    pub fn setInnerSafeHTML(
-        self: *Parser,
-        element: *z.HTMLElement,
-        content: []const u8,
-        sanitizer: z.SanitizeOptions,
-    ) !void {
-        const node = z.elementToNode(element);
-        const target_doc = z.ownerDocument(node);
-
-        // lexbor sanitization + sanitizer enabled
-        const fragment_root = try self.parseFragmentDoc(
-            target_doc,
-            content,
-            .div,
-            sanitizer,
-        );
-        self.appendFragment(node, fragment_root);
     }
 
     /// Parse a template string and return the template element (with DocumentFragment content)
@@ -580,6 +526,7 @@ pub const Parser = struct {
         // Apply sanitization
         switch (sanitizer) {
             .none => {}, // No sanitization
+            .minimum => try z.sanitizeWithOptions(self.allocator, cloned_content, .minimum),
             .strict => try z.sanitizeStrict(self.allocator, cloned_content),
             .permissive => try z.sanitizePermissive(self.allocator, cloned_content),
             .custom => |opts| try z.sanitizeWithOptions(self.allocator, cloned_content, .{ .custom = opts }),
@@ -588,23 +535,43 @@ pub const Parser = struct {
         z.appendFragment(target, cloned_content);
     }
 
-    /// Parse HTML fragment string and insert it directly into parent given a context (most common use case)
-    pub fn insertFragment(
+    // /// Parse HTML fragment string and insert it directly into parent given a context (most common use case)
+    // pub fn insertFragment(
+    //     self: *Parser,
+    //     parent: *z.DomNode,
+    //     html: []const u8,
+    //     context: z.FragmentContext,
+    //     sanitizer: z.SanitizeOptions,
+    // ) !void {
+    //     const parent_doc = z.ownerDocument(parent);
+    //     const fragment_root = try self.parseFragmentDoc(
+    //         parent_doc,
+    //         html,
+    //         context,
+    //         sanitizer,
+    //     );
+    //     // Note: appendFragment already destroys fragment_root, no defer needed
+    //     self.appendFragment(parent, fragment_root);
+    // }
+
+    pub fn setInnerSafeHTML(
         self: *Parser,
-        parent: *z.DomNode,
-        html: []const u8,
+        element: *z.HTMLElement,
+        content: []const u8,
         context: z.FragmentContext,
         sanitizer: z.SanitizeOptions,
     ) !void {
-        const parent_doc = z.ownerDocument(parent);
+        const node = z.elementToNode(element);
+        const target_doc = z.ownerDocument(node);
+
+        // lexbor sanitization + sanitizer enabled
         const fragment_root = try self.parseFragmentDoc(
-            parent_doc,
-            html,
+            target_doc,
+            content,
             context,
             sanitizer,
         );
-        // Note: appendFragment already destroys fragment_root, no defer needed
-        self.appendFragment(parent, fragment_root);
+        self.appendFragment(node, fragment_root);
     }
 
     /// Parse HTML fragment and return array of child nodes for immediate inspection and validation
@@ -628,25 +595,72 @@ pub const Parser = struct {
     }
 };
 
+test "parser.setInnerSafeHTML flavours" {
+    const allocator = testing.allocator;
+
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    var parser = try z.Parser.init(allocator);
+    defer parser.deinit();
+
+    const malicious_content = "<script>alert('XSS')</script><img src=\"data:text/html,<script>alert('XSS')</script>\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=<img src=x onerror=alert('hello')>\">URL Escaped</a><x-widget><button onclick=\"increment\">Click</button></x-widget>";
+
+    const result0 = "<script>alert('XSS')</script><img src=\"data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;\" alt=\"escaped\"><p id=\"1\" phx-click=\"increment\" onclick=\"alert('XSS')\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a><x-widget><button onclick=\"increment\">Click</button></x-widget>";
+
+    const result1 = "<img alt=\"escaped\"><p id=\"1\" phx-click=\"increment\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a>";
+
+    const result2 = "<img alt=\"escaped\"><p id=\"1\" phx-click=\"increment\">Click me</p><a href=\"http://example.org/results?search=&lt;img src=x onerror=alert('hello')&gt;\">URL Escaped</a><x-widget><button>Click</button></x-widget>";
+
+    const expectations = [_]struct { name: []const u8, result: []const u8, mode: z.SanitizeOptions }{
+        .{ .name = "flavor0", .result = result0, .mode = .none },
+        .{ .name = "flavor1", .result = result1, .mode = .strict },
+        .{ .name = "flavor2", .result = result2, .mode = .permissive },
+    };
+
+    for (expectations) |exp| {
+        const div_elt = try z.createElement(doc, "div");
+        try parser.setInnerSafeHTML(
+            div_elt,
+            malicious_content,
+            .body,
+            exp.mode,
+        );
+        const inner = try z.innerHTML(allocator, div_elt);
+        defer allocator.free(inner);
+        // print("\n{s}: \n{s}\n", .{ exp.name, inner });
+
+        try testing.expectEqualStrings(exp.result, inner);
+        _ = try setInnerHTML(div_elt, "");
+    }
+}
+
 test "parser.parse & parseFragmentDoc" {
     const allocator = testing.allocator;
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    const html = "<div></div>";
     {
-        const doc = try parser.parse(html);
+        const html = "";
+        const doc = try parser.parse(html, .none);
+        defer z.destroyDocument(doc);
+        const body = z.bodyNode(doc);
+        std.debug.assert(body != null);
+    }
+    {
+        const html = "<div></div>";
+        const doc = try parser.parse(html, .none);
         defer z.destroyDocument(doc);
         const div = z.getElementByTag(z.documentRoot(doc).?, .div);
         std.debug.assert(div != null);
     }
     {
+        const html = "<div></div>";
         const doc = try z.createDocFromString("");
         defer z.destroyDocument(doc);
-        const body = z.bodyNode(doc).?;
+        const body = z.bodyElement(doc).?;
 
-        try parser.insertFragment(body, html, .body, .none);
-        // const html_node = try parser.parseFragmentDoc(doc, html, .body, .none);
-        const div = z.getElementByTag(body, .div);
+        try parser.setInnerSafeHTML(body, html, .body, .none);
+        const div = z.getElementByTag(z.elementToNode(body), .div);
         std.debug.assert(div != null);
     }
 }
@@ -704,12 +718,12 @@ test "security of parseFragment and appendFragment first test" {
     try testing.expectEqualStrings(expected, result);
 }
 
-test "insertFragment with sanitization option" {
+test "setInnerSafeHTML with sanitization option" {
     const allocator = testing.allocator;
 
     var parser = try Parser.init(allocator);
     defer parser.deinit();
-    const doc = try parser.parse("<div id=\"1\"></div>");
+    const doc = try parser.parse("<div id=\"1\"></div>", .none);
     defer z.destroyDocument(doc);
 
     const html1 = "<p> some text</p>";
@@ -717,12 +731,12 @@ test "insertFragment with sanitization option" {
     const html3 = "<ul><li><script>alert(1);</script></li></ul>";
 
     const div_elt = z.getElementById(z.bodyNode(doc).?, "1").?;
-    const div: *z.DomNode = @ptrCast(div_elt);
+    // const div: *z.DomNode = @ptrCast(div_elt);
 
     // append fragments and check the result
-    try parser.insertFragment(div, html1, .div, .permissive);
-    try parser.insertFragment(div, html2, .div, .strict);
-    try parser.insertFragment(div, html3, .div, .strict);
+    try parser.setInnerSafeHTML(div_elt, html1, .div, .permissive);
+    try parser.setInnerSafeHTML(div_elt, html2, .div, .strict);
+    try parser.setInnerSafeHTML(div_elt, html3, .div, .strict);
 
     const result = try z.outerHTML(allocator, div_elt);
     defer allocator.free(result);
@@ -763,7 +777,7 @@ test "Serializer sanitation" {
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    var doc = try parser.parse("");
+    var doc = try parser.parse("", .none);
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
 
@@ -772,6 +786,7 @@ test "Serializer sanitation" {
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
+            .div,
             .strict,
         );
 
@@ -791,10 +806,11 @@ test "Serializer sanitation" {
     }
     // Test 2: .strict mode (repeat test)
     {
-        doc = try parser.parse("");
+        doc = try parser.parse("", .none);
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
+            .div,
             .strict,
         );
 
@@ -807,10 +823,11 @@ test "Serializer sanitation" {
     }
     // Test 3: .permissive mode
     {
-        doc = try parser.parse("");
+        doc = try parser.parse("", .none);
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
+            .div,
             .permissive,
         );
 
@@ -831,10 +848,11 @@ test "Serializer sanitation" {
     }
     // Test 4: .none mode
     {
-        doc = try parser.parse("");
+        doc = try parser.parse("", .none);
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
+            .div,
             .none,
         );
 
@@ -852,10 +870,11 @@ test "Serializer sanitation" {
     }
     // Test 5: .custom mode
     {
-        doc = try parser.parse("");
+        doc = try parser.parse("", .none);
         try parser.setInnerSafeHTML(
             z.nodeToElement(body).?,
             malicious_content,
+            .div,
             .{
                 .custom = .{
                     .allow_custom_elements = true,
@@ -884,18 +903,18 @@ test "Serializer sanitation" {
     }
 }
 
-test "parser insertFragment multiple inserts" {
+test "parser setInnerSafeHTML multiple inserts" {
     const allocator = testing.allocator;
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
-    const doc = try parser.parse("<div><ul></ul></div>");
+    const doc = try parser.parse("<div><ul></ul></div>", .none);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
 
     const ul_elt = z.getElementByTag(body, .ul).?;
-    const ul = z.elementToNode(ul_elt);
+    // const ul = z.elementToNode(ul_elt);
 
     for (0..10) |i| {
         const li = try std.fmt.allocPrint(
@@ -905,7 +924,7 @@ test "parser insertFragment multiple inserts" {
         );
         defer allocator.free(li);
 
-        try parser.insertFragment(ul, li, .ul, .permissive);
+        try parser.setInnerSafeHTML(ul_elt, li, .ul, .permissive);
     }
 
     const ul_html = try z.innerHTML(allocator, ul_elt);
@@ -920,7 +939,7 @@ test "template parsing and use template element" {
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
 
-    const doc = try parser.parse("<ul id='items'></ul>");
+    const doc = try parser.parse("<ul id='items'></ul>", .none);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
@@ -981,7 +1000,7 @@ test "templates can be reused" {
     var parser = try Parser.init(allocator);
     defer parser.deinit();
 
-    const doc = try parser.parse("<ul id='list'></ul>");
+    const doc = try parser.parse("<ul id='list'></ul>", .none);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
@@ -1084,8 +1103,8 @@ test "simple parseFragment with SVG" {
         \\</svg>
     ;
 
-    try parser.insertFragment(
-        z.elementToNode(z.bodyElement(doc).?),
+    try parser.setInnerSafeHTML(
+        z.bodyElement(doc).?,
         mixed_html_svg,
         .body,
         .permissive, // Use permissive to preserve SVG
@@ -1270,7 +1289,7 @@ test "fragment contexts: select options" {
         \\</optgroup>
     ;
 
-    try parser.insertFragment(select_node, options_html, .select, .permissive);
+    try parser.setInnerSafeHTML(z.nodeToElement(select_node).?, options_html, .select, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1292,7 +1311,7 @@ test "fragment contexts: table rows" {
     try parseString(doc, "<table><tbody id='employees'></tbody></table>");
     const body = z.bodyNode(doc).?;
     const tbody = z.getElementById(body, "employees").?;
-    const tbody_node = z.elementToNode(tbody);
+    // const tbody_node = z.elementToNode(tbody);
 
     const rows_html =
         \\<tr>
@@ -1307,7 +1326,7 @@ test "fragment contexts: table rows" {
         \\</tr>
     ;
 
-    try parser.insertFragment(tbody_node, rows_html, .tbody, .permissive);
+    try parser.setInnerSafeHTML(tbody, rows_html, .tbody, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1328,8 +1347,7 @@ test "fragment contexts: list items" {
 
     try parseString(doc, "<ul id='tasks'></ul>");
     const body = z.bodyNode(doc).?;
-    const ul = z.getElementById(body, "tasks").?;
-    const ul_node = z.elementToNode(ul);
+    const ul_elt = z.getElementById(body, "tasks").?;
 
     const items_html =
         \\<li>Complete project documentation</li>
@@ -1337,7 +1355,7 @@ test "fragment contexts: list items" {
         \\<li>Update deployment scripts</li>
     ;
 
-    try parser.insertFragment(ul_node, items_html, .ul, .permissive);
+    try parser.setInnerSafeHTML(ul_elt, items_html, .ul, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1359,7 +1377,6 @@ test "fragment contexts: form elements" {
     try parseString(doc, "<form id='login'></form>");
     const body = z.bodyNode(doc).?;
     const form = z.getElementById(body, "login").?;
-    const form_node = z.elementToNode(form);
 
     const form_html =
         \\<label for="email">Email:</label>
@@ -1369,7 +1386,7 @@ test "fragment contexts: form elements" {
         \\<button type="submit">Login</button>
     ;
 
-    try parser.insertFragment(form_node, form_html, .form, .permissive);
+    try parser.setInnerSafeHTML(form, form_html, .form, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1391,7 +1408,6 @@ test "fragment contexts: definition lists" {
     try parseString(doc, "<dl id='glossary'></dl>");
     const body = z.bodyNode(doc).?;
     const dl = z.getElementById(body, "glossary").?;
-    const dl_node = z.elementToNode(dl);
 
     const dl_html =
         \\<dt>HTML</dt>
@@ -1402,7 +1418,7 @@ test "fragment contexts: definition lists" {
         \\<dd>JavaScript programming language</dd>
     ;
 
-    try parser.insertFragment(dl_node, dl_html, .dl, .permissive);
+    try parser.setInnerSafeHTML(dl, dl_html, .dl, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1424,7 +1440,6 @@ test "fragment contexts: media elements" {
     try parseString(doc, "<video id='demo' controls></video>");
     const body = z.bodyNode(doc).?;
     const video = z.getElementById(body, "demo").?;
-    const video_node = z.elementToNode(video);
 
     const media_html =
         \\<source src="/video.webm" type="video/webm">
@@ -1433,7 +1448,7 @@ test "fragment contexts: media elements" {
         \\<p>Your browser doesn't support HTML5 video.</p>
     ;
 
-    try parser.insertFragment(video_node, media_html, .video, .permissive);
+    try parser.setInnerSafeHTML(video, media_html, .video, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1455,7 +1470,6 @@ test "fragment contexts: malformed HTML recovery" {
     try parseString(doc, "<div id='content'></div>");
     const body = z.bodyNode(doc).?;
     const div = z.getElementById(body, "content").?;
-    const div_node = z.elementToNode(div);
 
     const malformed_html =
         \\<div class="card">
@@ -1465,7 +1479,7 @@ test "fragment contexts: malformed HTML recovery" {
         \\</div>
     ;
 
-    try parser.insertFragment(div_node, malformed_html, .body, .permissive);
+    try parser.setInnerSafeHTML(div, malformed_html, .body, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1488,7 +1502,6 @@ test "fragment contexts: fieldset legend" {
     try parseString(doc, "<fieldset id='contact'></fieldset>");
     const body = z.bodyNode(doc).?;
     const fieldset = z.getElementById(body, "contact").?;
-    const fieldset_node = z.elementToNode(fieldset);
 
     const fieldset_html =
         \\<legend>Contact Information</legend>
@@ -1498,7 +1511,7 @@ test "fragment contexts: fieldset legend" {
         \\<input type="tel" id="phone" name="phone">
     ;
 
-    try parser.insertFragment(fieldset_node, fieldset_html, .fieldset, .permissive);
+    try parser.setInnerSafeHTML(fieldset, fieldset_html, .fieldset, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1520,7 +1533,6 @@ test "fragment contexts: details summary" {
     try parseString(doc, "<details id='faq'></details>");
     const body = z.bodyNode(doc).?;
     const details = z.getElementById(body, "faq").?;
-    const details_node = z.elementToNode(details);
 
     const details_html =
         \\<summary>Click to expand FAQ</summary>
@@ -1531,7 +1543,7 @@ test "fragment contexts: details summary" {
         \\</ul>
     ;
 
-    try parser.insertFragment(details_node, details_html, .details, .permissive);
+    try parser.setInnerSafeHTML(details, details_html, .details, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1553,7 +1565,6 @@ test "fragment contexts: optgroup nested options" {
     try parseString(doc, "<optgroup id='states' label='US States'></optgroup>");
     const body = z.bodyNode(doc).?;
     const optgroup = z.getElementById(body, "states").?;
-    const optgroup_node = z.elementToNode(optgroup);
 
     const options_html =
         \\<option value="ny">New York</option>
@@ -1562,7 +1573,7 @@ test "fragment contexts: optgroup nested options" {
         \\<option value="fl">Florida</option>
     ;
 
-    try parser.insertFragment(optgroup_node, options_html, .optgroup, .permissive);
+    try parser.setInnerSafeHTML(optgroup, options_html, .optgroup, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1584,7 +1595,6 @@ test "fragment contexts: map areas" {
     try parseString(doc, "<map id='imagemap' name='navigation'></map>");
     const body = z.bodyNode(doc).?;
     const map = z.getElementById(body, "imagemap").?;
-    const map_node = z.elementToNode(map);
 
     const areas_html =
         \\<area shape="rect" coords="0,0,100,100" href="/section1" alt="Section 1">
@@ -1592,7 +1602,7 @@ test "fragment contexts: map areas" {
         \\<area shape="poly" coords="200,0,250,50,200,100,150,50" href="/section3" alt="Section 3">
     ;
 
-    try parser.insertFragment(map_node, areas_html, .map, .permissive);
+    try parser.setInnerSafeHTML(map, areas_html, .map, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1615,14 +1625,13 @@ test "fragment contexts: figure caption" {
     try parseString(doc, "<figure id='chart'></figure>");
     const body = z.bodyNode(doc).?;
     const figure = z.getElementById(body, "chart").?;
-    const figure_node = z.elementToNode(figure);
 
     const figure_html =
         \\<img src="/sales-chart.png" alt="Sales Chart" width="400" height="300">
         \\<figcaption>Monthly sales performance for Q4 2024 showing 15% growth</figcaption>
     ;
 
-    try parser.insertFragment(figure_node, figure_html, .figure, .permissive);
+    try parser.setInnerSafeHTML(figure, figure_html, .figure, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1644,7 +1653,6 @@ test "fragment contexts: picture responsive" {
     try parseString(doc, "<picture id='hero'></picture>");
     const body = z.bodyNode(doc).?;
     const picture = z.getElementById(body, "hero").?;
-    const picture_node = z.elementToNode(picture);
 
     const picture_html =
         \\<source media="(min-width: 800px)" srcset="/hero-large.jpg">
@@ -1652,7 +1660,7 @@ test "fragment contexts: picture responsive" {
         \\<img src="/hero-small.jpg" alt="Hero image" loading="lazy">
     ;
 
-    try parser.insertFragment(picture_node, picture_html, .picture, .permissive);
+    try parser.setInnerSafeHTML(picture, picture_html, .picture, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);
@@ -1747,7 +1755,6 @@ test "fragment contexts: audio sources" {
     try parseString(doc, "<audio id='podcast' controls></audio>");
     const body = z.bodyNode(doc).?;
     const audio = z.getElementById(body, "podcast").?;
-    const audio_node = z.elementToNode(audio);
 
     const audio_html =
         \\<source src="/podcast.ogg" type="audio/ogg">
@@ -1756,7 +1763,7 @@ test "fragment contexts: audio sources" {
         \\<p>Your browser doesn't support HTML5 audio.</p>
     ;
 
-    try parser.insertFragment(audio_node, audio_html, .audio, .permissive);
+    try parser.setInnerSafeHTML(audio, audio_html, .audio, .permissive);
 
     const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(result);

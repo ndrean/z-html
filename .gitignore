@@ -6,3 +6,5 @@
 /kcov-output/
 /.vscode/
 /.lexical/
+.gitignore
+CLAUDE.md

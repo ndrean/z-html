@@ -185,25 +185,25 @@ The result is shown below.
 
 <br>
 
-The "normal" process is to use the "parser engine". It will create a document-fragment, sanitize this fragment, and insert into the document.
+#### Using the parser with sanitization option
+
+You can create a sanitized document with the parser (a ready-to-use parsing engine).
 
 ```c
-const doc = try z.createDocFromString("");
-const body = z.bodyNode(doc).?;
-
 var parser = try z.Parser.init(testing.allocator);
 defer parser.deinit();
 
-try parser.insertFragment(body, html, .body, .none);
+const doc = try parser.parse(body, html, .body, .permissive);
+defer z.destroyDocument(doc);
 ```
 
 <hr>
 
-### Building a document & Parsing
+### Several ways to build and feed a document
 
 You have several methods available.
 
-The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
 
 ```c
 const z = @import("zexplorer");
@@ -212,6 +212,7 @@ const doc: *HTMLDocument = try z.createDocument();
 defer z.destroyDocument(doc);
 try z.parseString(doc, "<div></div>");
 
+// you can create programmatically and append elemments to a node
 const body: *DomNode = z.bodyNode(doc).?;
 const p: *HTMLElement = try z.createElement(doc, "p");
 z.appendChild(body, z.elementToNode(p));
@@ -227,13 +228,14 @@ Your document now contains this HTML:
 </body>
 ```
 
-You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
+2. You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
 
 ```c
 const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
 defer z.destroyDocument(doc);
-
 ```
+
+3. You have the parser engine as seen before.
 
 <hr>
 

@@ -49,4 +49,5 @@ pub const LexborError = error{
     InvalidClassName,
     ImportNodeFailed,
     SerializationFailed,
+    DocumentRootNotFound,
 };

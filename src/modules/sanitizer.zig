@@ -148,13 +148,15 @@ fn collectSvgDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElem
 
 pub const SanitizeOptions = union(enum) {
     none: void,
+    minimum: void,
     strict: void,
     permissive: void,
     custom: SanitizerOptions,
 
     pub inline fn get(self: @This()) SanitizerOptions {
         return switch (self) {
-            .none => SanitizerOptions{
+            .none => unreachable, // Should never reach here - early exit in sanitizeWithOptions
+            .minimum => SanitizerOptions{
                 .skip_comments = false,
                 .remove_scripts = false,
                 .remove_styles = false,
@@ -181,6 +183,22 @@ pub const SanitizeOptions = union(enum) {
 };
 
 /// [sanitize] Settings of the sanitizer
+///
+/// The `.minimum` option does:
+/// 1. Dangerous URL schemes: javascript:,
+///  vbscript: in ANY attribute value
+///  2. Dangerous data URLs: data:text/html,
+///  data:text/javascript, data: with base64
+///  3. Event handlers: All on* attributes
+///  (onclick, onerror, etc.)
+///  4. Invalid targets: Non-standard target
+///  attribute values
+///  5. Inline styles: style attributes (removes
+///  CSS injection)
+///  6. Dangerous SVG elements: script,
+///  foreignObject, animate, etc. in SVG context
+///  7. Unsafe iframes: iframes without sandbox
+///  attribute
 pub const SanitizerOptions = struct {
     skip_comments: bool = true,
     remove_scripts: bool = true,
@@ -522,62 +540,6 @@ fn collectDangerousAttributesEnum(context: *SanitizeContext, element: *z.HTMLEle
     }
 }
 
-// /// Strict sanitization for standard HTML elements - uses whitelist (legacy - keep for compatibility)
-// fn collectDangerousAttributes(context: *SanitizeContext, element: *z.HTMLElement, tag_name: []const u8) !void {
-//     const allowed_attrs = ALLOWED_TAGS.get(tag_name) orelse return;
-//     // uses buffer collected attributes
-//     const attrs = z.getAttributes_bf(context.allocator, element) catch return;
-
-//     defer {
-//         for (attrs) |attr| {
-//             context.allocator.free(attr.name);
-//             context.allocator.free(attr.value);
-//         }
-//         context.allocator.free(attrs);
-//     }
-
-//     for (attrs) |attr_pair| {
-//         var should_remove = false;
-
-//         if (isFrameworkAttribute(attr_pair.name)) {
-//             // Always allow framework-specific attributes
-//             continue;
-//         } else if (!allowed_attrs.has(attr_pair.name)) {
-//             should_remove = true;
-//         } else {
-//             // Check for dangerous schemes in ANY attribute value first
-//             if (std.mem.startsWith(u8, attr_pair.value, "javascript:") or
-//                 std.mem.startsWith(u8, attr_pair.value, "vbscript:"))
-//             {
-//                 should_remove = true;
-//             } else if (std.mem.startsWith(u8, attr_pair.value, "data:") and
-//                 (std.mem.indexOf(u8, attr_pair.value, "base64") != null or
-//                     std.mem.startsWith(u8, attr_pair.value, "data:text/html") or
-//                     std.mem.startsWith(u8, attr_pair.value, "data:text/javascript")))
-//             {
-//                 should_remove = true;
-//             } else if (std.mem.startsWith(u8, attr_pair.name, "on")) {
-//                 // Remove all event handlers
-//                 should_remove = true;
-//             } else if (std.mem.eql(u8, attr_pair.name, "style")) {
-//                 // Remove inline styles
-//                 should_remove = true;
-//             } else if (std.mem.eql(u8, attr_pair.name, "href") or std.mem.eql(u8, attr_pair.name, "src")) {
-//                 if (context.options.strict_uri_validation and !isSafeUri(attr_pair.value)) {
-//                     should_remove = true;
-//                 }
-//             } else if (std.mem.eql(u8, attr_pair.name, "target")) {
-//                 if (!isValidTarget(attr_pair.value)) {
-//                     should_remove = true;
-//                 }
-//             }
-//         }
-//         if (should_remove) {
-//             try context.addAttributeToRemove(element, attr_pair.name);
-//         }
-//     }
-// }
-
 fn isValidTarget(value: []const u8) bool {
     return std.mem.eql(u8, value, "_blank") or
         std.mem.eql(u8, value, "_self") or
@@ -626,6 +588,9 @@ pub fn sanitizeWithOptions(
     root_node: *z.DomNode,
     options: SanitizeOptions,
 ) (std.mem.Allocator.Error || z.Err)!void {
+    // Early exit for .none - do absolutely nothing
+    if (options == .none) return;
+
     const sanitizer_options = options.get();
     var context = SanitizeContext.init(allocator, sanitizer_options);
     defer context.deinit();
@@ -744,18 +709,18 @@ test "comprehensive sanitization modes" {
 
     // print("\n=== Comprehensive Sanitization Test ===\n", .{});
 
-    // Test 1: .none mode (no sanitization)
+    // Test 1: .minimum mode (minimal sanitization - only truly dangerous content)
     {
         const doc = try z.createDocFromString(comprehensive_malicious_html);
         defer z.destroyDocument(doc);
         const body = z.bodyNode(doc).?;
 
-        try sanitizeWithOptions(allocator, body, .none);
+        try sanitizeWithOptions(allocator, body, .minimum);
 
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
 
-        // print("\n=== .none mode (no sanitization) ===\n", .{});
+        // print("\n=== .minimum mode (minimal sanitization) ===\n", .{});
 
         // Should preserve most content including scripts and custom elements
         try testing.expect(std.mem.indexOf(u8, result, "script") != null);

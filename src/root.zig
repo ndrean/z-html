@@ -250,9 +250,6 @@ pub const parseString = parse.parseString;
 pub const createDocFromString = parse.createDocFromString;
 
 pub const setInnerHTML = parse.setInnerHTML;
-pub const setInnerSafeHTML = parse.setInnerSafeHTML;
-pub const setInnerSafeHTMLStrict = parse.setInnerSafeHTMLStrict;
-pub const setInnerSafeHTMLPermissive = parse.setInnerSafeHTMLPermissive;
 
 // Parser engine for fragment processing
 pub const Parser = parse.Parser;
