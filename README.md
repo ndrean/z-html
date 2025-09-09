@@ -45,7 +45,7 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 ### Scrap the web and explore a page
 
-```cpp
+```c
 test "scrap example.com" {
   const allocator = std.testing.allocator;
 
@@ -90,7 +90,7 @@ You will get a colourful print in your terminal, where the attributes, values, h
 
 <img width="965" height="739" alt="Screenshot 2025-09-09 at 13 54 12" src="https://github.com/user-attachments/assets/ff770cdb-95ab-468b-aa5e-5bbc30cf6649" />
 
-</details>>
+</details>
 
 You will also see the value of the `href` attribute of a the first `<>` link:
 
@@ -147,14 +147,14 @@ a:link, a:visited {
 
 You parse this HTML string:
 
-```cpp
+```c
 const doc = try z.createDocFromString(html_string);
 defer z.destryDocument(doc);
 ```
 
 We then print the HTML. The DOM is agressively cleaned (whitespace only text nodes and comments removed).
 
-```cpp
+```c
 const body = z.bodyNode(doc).?;
 try z.prettyPrint(allocator, body);
 ```
@@ -178,7 +178,7 @@ try z.prettyPrint(allocator, body);
 The result is shown below.
 
 <br>
-<img width="511" height="347" alt="Screenshot 2025-09-09 at 16 11 30" src="https://github.com/user-attachments/assets/ff7fa678-328b-495a-8a81-2ff465141be3" />
+<img width="900" height="500" alt="Screenshot 2025-09-09 at 16 11 30" src="https://github.com/user-attachments/assets/ff7fa678-328b-495a-8a81-2ff465141be3" />
 
 <br>
 
