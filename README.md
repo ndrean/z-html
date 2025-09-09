@@ -86,9 +86,11 @@ test "scrap example.com" {
 
 You will get a colourful print in your terminal, where the attributes, values, html elements get coloured.
 
-<br>
+<details><summary> HTML content of example.com</summary>
 
-<br>
+<img width="965" height="739" alt="Screenshot 2025-09-09 at 13 54 12" src="https://github.com/user-attachments/assets/ff770cdb-95ab-468b-aa5e-5bbc30cf6649" />
+
+</details>>
 
 You will also see the value of the `href` attribute of a the first `<>` link:
 
@@ -163,7 +165,7 @@ try z.prettyPrint(allocator, body);
 You get the following output in your terminal.
 
 <br>
-
+<img width="931" height="499" alt="Screenshot 2025-09-09 at 16 08 19" src="https://github.com/user-attachments/assets/45cfea8b-73d9-401e-8c23-457e0a6f92e1" />
 <br>
 
 We can then run a _sanitization_ process against the DOM, so you get a context where the attributes are whitelisted.
@@ -176,6 +178,7 @@ try z.prettyPrint(allocator, body);
 The result is shown below.
 
 <br>
+<img width="511" height="347" alt="Screenshot 2025-09-09 at 16 11 30" src="https://github.com/user-attachments/assets/ff7fa678-328b-495a-8a81-2ff465141be3" />
 
 <br>
 
