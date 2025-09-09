@@ -629,7 +629,8 @@ pub const Parser = struct {
 };
 
 test "parser.parse & parseFragmentDoc" {
-    var parser = try z.Parser.init(testing.allocator);
+    const allocator = testing.allocator;
+    var parser = try z.Parser.init(allocator);
     defer parser.deinit();
     const html = "<div></div>";
     {
@@ -639,10 +640,13 @@ test "parser.parse & parseFragmentDoc" {
         std.debug.assert(div != null);
     }
     {
-        const doc = try z.createDocument();
+        const doc = try z.createDocFromString("");
         defer z.destroyDocument(doc);
-        const html_node = try parser.parseFragmentDoc(doc, html, .body, .none);
-        const div = z.getElementByTag(html_node, .div);
+        const body = z.bodyNode(doc).?;
+
+        try parser.insertFragment(body, html, .body, .none);
+        // const html_node = try parser.parseFragmentDoc(doc, html, .body, .none);
+        const div = z.getElementByTag(body, .div);
         std.debug.assert(div != null);
     }
 }
