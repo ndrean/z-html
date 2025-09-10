@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const z = @import("root.zig");
-const tree = @import("modules/dom_tree.zig");
-const tree_opt = @import("modules/dom_tree_optimized.zig");
 const native_os = builtin.os.tag;
 const print = std.debug.print;
 
@@ -20,6 +18,7 @@ pub fn main() !void {
         _ = debug_allocator.deinit();
     };
 
+    // try zexplore_example_com(gpa, "https://www.example.com");
     // try demoSimpleParsing(gpa);
     // try demoTemplateWithParser(gpa);
     // try demoParserReUse(gpa);
@@ -27,9 +26,8 @@ pub fn main() !void {
     // try demoInsertAdjacentElement(gpa);
     // try demoInsertAdjacentHTML(gpa);
     // try demoSetInnerHTML(gpa);
-    // try demoSearchComparison(gpa);
-    try demoSuspiciousAttributes(gpa);
-    // try zexplore_example_com(gpa, "https://www.example.com");
+    try demoSearchComparison(gpa);
+    // try demoSuspiciousAttributes(gpa);
 }
 
 /// use `parseString` or `createDocFromString` to create a document with a BODY element populated by the input string
@@ -361,7 +359,7 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
         \\<div class="main-container">
         \\  <h1 class="title main">Main Title</h1>
         \\  <section class="content">
-        \\    <p class="text main-text">First paragraph</p>
+        \\    <p id="1" class="text main-text">First paragraph</p>
         \\    <div class="box main-box">Box content</div>
         \\    <article class="post main-post">Article content</article>
         \\  </section>
@@ -370,7 +368,7 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
         \\    <p class="text sidebar-text">Sidebar paragraph</p>
         \\    <div class="widget">Widget content</div>
         \\  </aside>
-        \\  <footer class="footer main-footer">
+        \\  <footer  aria-label="foot" class="main-footer">
         \\    <p class="copyright">© 2024</p>
         \\  </footer>
         \\</div>
@@ -380,8 +378,8 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     defer z.destroyDocument(doc);
     const body = z.bodyNode(doc).?;
     try z.prettyPrint(allocator, body);
-
-    print("\nSearch target: ----> class=\"main\"\n\n", .{});
+    var css_engine = try z.createCssEngine(allocator);
+    defer css_engine.deinit();
 
     // 1. Walker-based attribute search (token-based matching with hasClass)
     const walker_results = try z.getElementsByClassName(allocator, doc, "main");
@@ -397,8 +395,6 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     }
 
     // 2. CSS Selector search (case-insensitive, token-based)
-    var css_engine = try z.createCssEngine(allocator);
-    defer css_engine.deinit();
 
     const css_results = try z.querySelectorAll(allocator, doc, ".main");
     defer allocator.free(css_results);
@@ -411,6 +407,27 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
         const class_attr = z.getAttribute_zc(element, "class") orelse "none";
         print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
     }
+
+    const p2 = z.getElementById(body, "1").?;
+    print("---{s}\n", .{z.classList_zc(p2)});
+
+    const aria = try z.getElementByDataAttribute(
+        body,
+        "aria",
+        "label",
+        null,
+    );
+    print("{s}\n", .{z.getAttribute_zc(aria.?, "aria-label").?});
+
+    var footer_token_list = try z.ClassList.init(
+        allocator,
+        aria.?,
+    );
+    defer footer_token_list.deinit();
+    try footer_token_list.add("footer");
+    std.debug.assert(footer_token_list.contains("footer"));
+    _ = try footer_token_list.toggle("footer");
+    std.debug.assert(!footer_token_list.contains("footer"));
 
     // Demonstrate DOM synchronization by adding an element
     const new_element = try z.createElementWithAttrs(doc, "span", &.{.{ .name = "class", .value = "main new-element" }});

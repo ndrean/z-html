@@ -41,23 +41,20 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 <hr>
 
-## Examples
+## Example: scrap the web and explore a page
 
-
-### Scrap the web and explore a page 
-
-```c
+```cpp
 test "scrap example.com" {
   const allocator = std.testing.allocator;
 
-  const page = try z.get(allocator, url);
+  const page = try z.get(allocator, "https://example.com");
   defer allocator.free(page);
 
   const doc = try z.createDocFromString(page);
   defer z.destroyDocument(doc);
 
   const html = z.documentRoot(doc).?;
-  try z.prettyPrint(allocator, html);
+  try z.prettyPrint(allocator, html); // see image below
 
   var css_engine = try z.createCssEngine(allocator);
   defer css_engine.deinit();
@@ -65,20 +62,21 @@ test "scrap example.com" {
   const a_link = try css_engine.querySelector(html, "a[href]");
 
   const href_value = z.getAttribute_zc(z.nodeToElement(a_link.?).?, "href").?;
-  std.debug.print("\n{s}\n", .{href_value});
+  std.debug.print("\n{s}\n", .{href_value}); // result below
 
   var css_content: []const u8 = undefined;
-  const style_by_walker = z.getElementByTag(html, .style);
-  if (style_by_walker) |style| {
-      css_content = z.textContent_zc(z.elementToNode(style));
-      print("\n{s}\n", .{css_content});
-  }
-
   const style_by_css = try css_engine.querySelector(html, "style");
 
   if (style_by_css) |style| {
-      const css_content_2 = z.textContent_zc(style);
-      std.debug.assert(std.mem.eql(u8, css_content, css_content_2));
+      const css_content_css = z.textContent_zc(style);
+      print("\n{s}\n", .{css_content}); // see below
+  }
+
+  // alternative search by DOM traverse
+  const style_by_walker = z.getElementByTag(html, .style);
+  if (style_by_walker) |style| {
+      css_content_walker = z.textContent_zc(z.elementToNode(style));
+      std.debug.assert(std.mem.eql(u8, css_content_css, css_content_walker));
   }
 }
 ```
@@ -92,8 +90,9 @@ You will get a colourful print in your terminal, where the attributes, values, h
 <img width="965" height="739" alt="Screenshot 2025-09-09 at 13 54 12" src="https://github.com/user-attachments/assets/ff770cdb-95ab-468b-aa5e-5bbc30cf6649" />
 
 </details>
+<br>
 
-You will also see the value of the `href` attribute of a the first `<>` link:
+You will also see the value of the `href` attribute of a the first `<a>` link:
 
 ```txt
  https://www.iana.org/domains/example
@@ -134,36 +133,34 @@ a:link, a:visited {
 
 <hr>
 
-### Scan a page for potential malicious content
+## Example: scan a page for potential malicious content
+
+The intent is to highlight potential XSS threats. It works by parsing the string into a fragment. When a HTMLElement gets an unknow attribute, its colour is white and the attribute value is highlighted in RED.
+
+Let's parse and print the following HTML string:
 
 ```html
-<div>
-  <!-- a comment -->
-  <button disabled hidden onclick="alert('XSS')" phx-click="increment" data-invalid="bad" scope="invalid">Dangerous button</button>
-  <img src="javascript:alert('XSS')" alt="not safe" onerror="alert('hack')" loading="unknown">
-  <a href="javascript:alert('XSS')" target="_self" role="invalid">Dangerous link</a>
-  <p id="valid" class="good" aria-label="ok" style="bad" onload="bad()">Mixed attributes</p>
-  <custom-elt><p>Hi there</p></custom-elt>
-  <template><span>Reuse me</span></template>
-</div>
+const html_string = 
+    <div>
+    <!-- a comment -->
+    <button disabled hidden onclick="alert('XSS')" phx-click="increment" data-invalid="bad" scope="invalid">Dangerous button</button>
+    <img src="javascript:alert('XSS')" alt="not safe" onerror="alert('hack')" loading="unknown">
+    <a href="javascript:alert('XSS')" target="_self" role="invalid">Dangerous link</a>
+    <p id="valid" class="good" aria-label="ok" style="bad" onload="bad()">Mixed attributes</p>
+    <custom-elt><p>Hi there</p></custom-elt>
+    <template><span>Reuse me</span></template>
+    </div>
 ```
 
 You parse this HTML string:
 
-```c
+```cpp
 const doc = try z.createDocFromString(html_string);
 defer z.destryDocument(doc);
-```
 
-We then print the HTML. The DOM is agressively cleaned (whitespace only text nodes and comments removed).
-
-```c
 const body = z.bodyNode(doc).?;
 try z.prettyPrint(allocator, body);
 ```
-
-> [!NOTE]
-> The intent is to highlight potential XSS threats. It works by parsing the string into a fragment. When a HTMLElement gets an unknow attribute, its colour is white and the attribute value is highlighted in RED.
 
 You get the following output in your terminal.
 
@@ -173,7 +170,7 @@ You get the following output in your terminal.
 
 We can then run a _sanitization_ process against the DOM, so you get a context where the attributes are whitelisted.
 
-```c
+```cpp
 try z.sanitizeNode(allocator, body, .permissive);
 try z.prettyPrint(allocator, body);
 ```
@@ -184,8 +181,9 @@ The result is shown below.
 <img width="900" height="500" alt="Screenshot 2025-09-09 at 16 11 30" src="https://github.com/user-attachments/assets/ff7fa678-328b-495a-8a81-2ff465141be3" />
 
 <br>
+<hr>
 
-#### Using the parser with sanitization option
+## Example: using the parser with sanitization option
 
 You can create a sanitized document with the parser (a ready-to-use parsing engine).
 
@@ -199,51 +197,11 @@ defer z.destroyDocument(doc);
 
 <hr>
 
-### Several ways to build and feed a document
-
-You have several methods available.
-
-1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
-
-```c
-const z = @import("zexplorer");
-
-const doc: *HTMLDocument = try z.createDocument();
-defer z.destroyDocument(doc);
-try z.parseString(doc, "<div></div>");
-
-// you can create programmatically and append elemments to a node
-const body: *DomNode = z.bodyNode(doc).?;
-const p: *HTMLElement = try z.createElement(doc, "p");
-z.appendChild(body, z.elementToNode(p));
-```
-
-Your document now contains this HTML:
-
-```html
-<head></head>
-<body>
-  <div></div>
-  <p></p>
-</body>
-```
-
-2. You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
-
-```c
-const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
-defer z.destroyDocument(doc);
-```
-
-3. You have the parser engine as seen before.
-
-<hr>
-
-### Processing streams
+## Example: Processing streams
 
 You receive chunks and build a document.
 
-```c
+```cpp
 const z = @import("zexplorer");
 const print = std.debug.print;
 
@@ -317,36 +275,117 @@ chunk:  </tbody></table></body></html>;
 
 <hr>
 
-### Search examples - TODO -
+## Example: Search examples and attributes and classList DOMTOkenList like
 
 We have two types of search available, each with different behaviors and use cases:
 
-
-1. CSS Selector Search
-
-```zig  
-// Token-based, case-insensitive, most flexible
-const css_results = try z.querySelectorAll(allocator, doc, ".bold");
-defer allocator.free(css_results);
-print("Found {} elements\n", .{css_results.len});
+```html
+const html = 
+    <div class="main-container">
+        <h1 class="title main">Main Title</h1>
+        <section class="content">
+        <p class="text main-text">First paragraph</p>
+        <div class="box main-box">Box content</div>
+        <article class="post main-post">Article content</article>
+        </section>
+        <aside class="sidebar">
+        <h2 class="subtitle">Sidebar Title</h2>
+        <p class="text sidebar-text">Sidebar paragraph</p>
+        <div class="widget">Widget content</div>
+        </aside>
+        <footer class="main-footer" aria-label="foot">
+        <p class="copyright">© 2024</p>
+        </footer>
+    </div>
 ```
 
-2. Attribute-based Search
+A CSS Selector search and some walker search and attributes:
 
-```zig
-// Manual traversal with hasClass checking  
-var current_element = z.firstElementChild(body);
-while (current_element) |element| {
-    if (z.hasClass(element, "bold")) {
-        // Found matching element
-    }
-    current_element = z.nextElementSibling(element);
-}
+```cpp
+const doc = try z.createDocFromString(html);
+defer z.destroyDocument(doc);
+const body = z.bodyNode(doc);
+
+var css_engine = try z.try z.createCssEngine(allocator);
+defer css_engine.deinit();
+
+const divs = css_engine.querySelectorAll(body, "div");
+std.debug.assert(divs.len == 3);
+
+const p1 = try css_engine.querySelector(body,"p#1",);
+const p_elt = z.nodeToElement(p1.?).?;
+const cl_p1 = z.classList_zc(p_elt)
+
+std.debug.assert(std.mem.eql(u8, "text main-text",cl_p1 ))
+
+const p2 = try z.getElementById("1").?;
+const cl_p2 = z.classList_zc(p2);
+std.debug.asser(std.mem.eql(u8, cl_p1, cl_p2));
+
+const footer = try z.getElementByDataAttribute( body,"aria","label",null);
+const aria_value = z.getAttribute_zc(footer.?, "aria-label");
+std.debug.assert(std.mem.eql(u8, "foot", aria_value));
+```
+
+Working the `classList` like a DOMTokenList
+
+```cpp
+var footer_token_list = try z.ClassList.init(allocator,aria.?,);
+defer footer_token_list.deinit();
+
+try footer_token_list.add("footer");
+std.debug.assert(footer_token_list.contains("footer"));
+
+_ = try footer_token_list.toggle("footer");
+std.debug.assert(!footer_token_list.contains("footer"));
 ```
 
 <hr>
 
-### Other examples
+## Other examples
+
+You have several methods available.
+
+1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+
+```cpp
+const z = @import("zexplorer");
+
+const doc: *HTMLDocument = try z.createDocument();
+defer z.destroyDocument(doc);
+try z.parseString(doc, "<div></div>");
+const body: *DomNode = z.bodyNode(doc).?;
+
+// you can create programmatically and append elemments to a node
+const p: *HTMLElement = try z.createElement(doc, "p");
+z.appendChild(body, z.elementToNode(p));
+```
+
+Your document now contains this HTML:
+
+```html
+<head></head>
+<body>
+  <div></div>
+  <p></p>
+</body>
+```
+
+2. You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
+
+```cpp
+const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
+defer z.destroyDocument(doc);
+```
+
+3. You have the parser engine as seen before
+
+```cpp
+var parser = z.Parser.init(allocator);
+defer parser.deinit();
+const doc = try parser.parse("<div><p></p></div>");
+defer z.detroyDocument(doc);
+```
 
 The file _main.zig_ shows more use cases with parsing and serialization as well as the tests  (`setInnerHTML`, `setInenrSafeHTML`, `insertAdjacentElement` or `insertAdjacentHTML`...)
 
@@ -354,24 +393,23 @@ The file _main.zig_ shows more use cases with parsing and serialization as well 
 
 ## Building the lib
 
-`lexbor` is built with static linking
+- `lexbor` is built with static linking
 
 ```sh
 make -f Makefile.lexbor
 ```
 
-
-- tests: The _build.zig_ file runs all the tests from _root.zig_.It imports all the submodules and runs the tests.
+- tests: The _build.zig_ file runs all the tests from _root.zig_. It imports all the submodules and runs the tests.
 
 ```sh
 zig build test --summary all
 ```
 
-- demo: Build the __main.zig_ demo with:
+- run the demo in the __main.zig_ demo with:
 
 ```sh
 zig build run -Doptimize=Debug
-#
+# or
 zig build run -Doptimize=ReleaseFast
 ```
 
@@ -387,22 +425,20 @@ zig build --release=fast
 # to test
 ```
 
-### Source: `lexbor` examples
+### Notes on search in `lexbor` source/examples
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
+Once you build `mexbor`, you have the static object located at _/lexbor_src_2.5.0/build/liblexbor_static.a_.
 
-In the built static object _liblexbor_static.a_:
+To check which primitives are exported, you can use:
 
 ```sh
 nm lexbor_src_2.5.0/build/liblexbor_static.a | grep -i "serialize"
 ```
 
-In the source code:
+Directly in the source code:
 
 ```sh
 find lexbor_src_2.5.0/source -name "*.h" | xargs grep -l "lxb_selectors_opt_set_noi"
 ```
-
-
-

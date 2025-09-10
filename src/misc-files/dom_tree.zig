@@ -13,38 +13,6 @@ const testing = std.testing;
 
 // Structure ====================================================================
 
-/// [tree] Debug: Walk and print DOM tree
-fn walkTree(node: *z.DomNode, depth: u8) void {
-    var child = z.firstChild(node);
-    while (child != null) {
-        const name = if (z.isTypeElement(child.?)) z.qualifiedName_zc(z.nodeToElement(child.?).?) else z.nodeName_zc(child.?);
-
-        // Convert string to enum and use fast lookup
-        const tag_enum = z.stringToEnum(z.HtmlTag, name);
-        const ansi_colour = if (tag_enum) |tag| z.getStyleForElementEnum(tag) orelse z.Style.DIM_WHITE else z.Style.DIM_WHITE;
-        const ansi_reset = z.Style.RESET;
-        const indent = switch (@min(depth, 10)) {
-            0 => "",
-            1 => "  ",
-            2 => "    ",
-            3 => "      ",
-            4 => "        ",
-            5 => "          ",
-            else => "            ",
-        };
-        print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
-
-        walkTree(child.?, depth + 1);
-        child = z.nextSibling(child.?);
-    }
-}
-
-/// [tree] Debug: print document structure (for debugging)
-pub fn printDocStruct(doc: *z.HTMLDocument) !void {
-    const root = z.documentRoot(doc).?;
-    walkTree(root, 0);
-}
-
 // Tuple Tree ===================================================================
 
 /// Represents different types of HTML nodes as tuples

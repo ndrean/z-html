@@ -2,6 +2,7 @@
 pub const LexborError = error{
     AllocationFailed,
     DocCreateFailed,
+    DocumentNotFound,
     ParseFailed,
     ParserCreateFailed,
     HtmlParserNotInitialized,

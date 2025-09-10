@@ -1484,13 +1484,15 @@ pub fn insertAdjacentHTML(
     };
 
     const target_node = elementToNode(target);
+    const target_doc = ownerDocument(target_node);
 
     var parser = try z.Parser.init(allocator);
     defer parser.deinit();
 
-    // Parse the HTML fragment once
-    const fragment_root = try parser.parseStringContext(
+    // Parse the HTML fragment once using target element as context
+    const fragment_root = try parser.parseStringInContext(
         html,
+        target_doc,
         .body,
         sanitizer,
     );

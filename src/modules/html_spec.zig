@@ -6,8 +6,7 @@
 
 const std = @import("std");
 const z = @import("../root.zig");
-const html_tags = @import("html_tags.zig");
-const HtmlTag = html_tags.HtmlTag;
+const Err = z.Err;
 const print = std.debug.print;
 
 /// Specification for an HTML attribute
@@ -20,8 +19,8 @@ pub const AttrSpec = struct {
 };
 
 /// Specification for an HTML element
-pub const ElementSpec = struct {
-    tag_enum: HtmlTag,
+const ElementSpec = struct {
+    tag_enum: z.HtmlTag,
     allowed_attrs: []const AttrSpec,
     /// Whether this element is void (self-closing)
     void_element: bool = false,
@@ -33,7 +32,7 @@ pub const ElementSpec = struct {
 };
 
 /// Common attributes that are allowed on most elements
-pub const common_attrs = [_]AttrSpec{
+const common_attrs = [_]AttrSpec{
     .{ .name = "id" },
     .{ .name = "class" },
     .{ .name = "style" },
@@ -53,14 +52,14 @@ pub const common_attrs = [_]AttrSpec{
 };
 
 /// Table-specific attributes
-pub const table_attrs = [_]AttrSpec{
+const table_attrs = [_]AttrSpec{
     .{ .name = "scope", .valid_values = &[_][]const u8{ "col", "row", "colgroup", "rowgroup" } },
     .{ .name = "colspan" },
     .{ .name = "rowspan" },
 } ++ common_attrs;
 
 /// Form-specific attributes
-pub const form_attrs = [_]AttrSpec{
+const form_attrs = [_]AttrSpec{
     .{ .name = "action" },
     .{ .name = "method", .valid_values = &[_][]const u8{ "get", "post" } },
     .{ .name = "enctype" },
@@ -68,7 +67,7 @@ pub const form_attrs = [_]AttrSpec{
 } ++ common_attrs;
 
 /// Input-specific attributes
-pub const input_attrs = [_]AttrSpec{
+const input_attrs = [_]AttrSpec{
     .{ .name = "type", .valid_values = &[_][]const u8{ "text", "email", "password", "number", "tel", "url", "search", "submit", "reset", "button", "hidden" } },
     .{ .name = "name" },
     .{ .name = "value" },
@@ -80,7 +79,7 @@ pub const input_attrs = [_]AttrSpec{
 } ++ common_attrs;
 
 /// SVG-specific attributes
-pub const svg_attrs = [_]AttrSpec{
+const svg_attrs = [_]AttrSpec{
     .{ .name = "viewBox" },
     .{ .name = "width" },
     .{ .name = "height" },
@@ -98,7 +97,7 @@ pub const svg_attrs = [_]AttrSpec{
 } ++ common_attrs;
 
 /// Image-specific attributes
-pub const img_attrs = [_]AttrSpec{
+const img_attrs = [_]AttrSpec{
     .{ .name = "src" },
     .{ .name = "alt" },
     .{ .name = "width" },
@@ -113,10 +112,10 @@ pub const img_attrs = [_]AttrSpec{
     .{ .name = "ismap", .valid_values = &[_][]const u8{""} }, // boolean
 } ++ common_attrs;
 
-pub const iframe_attrs = [_]AttrSpec{ .{ .name = "src" }, .{ .name = "sandbox" }, .{ .name = "srcdoc" }, .{ .name = "name" }, .{ .name = "loading" } } ++ common_attrs;
+const iframe_attrs = [_]AttrSpec{ .{ .name = "src" }, .{ .name = "sandbox" }, .{ .name = "srcdoc" }, .{ .name = "name" }, .{ .name = "loading" } } ++ common_attrs;
 
 /// Anchor-specific attributes
-pub const anchor_attrs = [_]AttrSpec{
+const anchor_attrs = [_]AttrSpec{
     .{ .name = "href" },
     .{ .name = "target", .valid_values = &[_][]const u8{ "_blank", "_self", "_parent", "_top" } },
     .{ .name = "rel" },
@@ -128,7 +127,7 @@ pub const anchor_attrs = [_]AttrSpec{
 } ++ common_attrs;
 
 /// Framework-specific attribute sets (for better organization)
-pub const framework_attrs = [_]AttrSpec{
+const framework_attrs = [_]AttrSpec{
     // Alpine.js attributes
     .{ .name = "x-data" },
     .{ .name = "x-show" },
@@ -372,10 +371,12 @@ pub const element_specs = [_]ElementSpec{
     .{ .tag_enum = .text, .allowed_attrs = &svg_attrs },
 };
 
+// === STRING BASED LOOKUPS ===--------------------------
+
 /// Get the specification for an HTML element by tag name (legacy - prefer getElementSpecFast)
-pub fn getElementSpec(tag: []const u8) ?*const ElementSpec {
+fn getElementSpec(tag: []const u8) ?*const ElementSpec {
     // First try fast enum-based lookup
-    if (html_tags.tagFromQualifiedName(tag)) |tag_enum| {
+    if (z.tagFromQualifiedName(tag)) |tag_enum| {
         return getElementSpecByEnum(tag_enum);
     }
 
@@ -460,7 +461,7 @@ pub fn isAttributeValueValid(element_tag: []const u8, attr_name: []const u8, att
 }
 
 /// Get all allowed attributes for an element (useful for autocomplete, etc.)
-pub fn getAllowedAttributes(allocator: std.mem.Allocator, element_tag: []const u8) ![][]const u8 {
+fn getAllowedAttributes(allocator: std.mem.Allocator, element_tag: []const u8) ![][]const u8 {
     const spec = getElementSpec(element_tag) orelse return &[_][]const u8{};
 
     var attrs: std.ArrayList([]const u8) = .empty;
@@ -470,10 +471,10 @@ pub fn getAllowedAttributes(allocator: std.mem.Allocator, element_tag: []const u
     return attrs.toOwnedSlice(allocator);
 }
 
-// === ENUM-BASED LOOKUPS FOR PERFORMANCE ===
+// === ENUM-BASED LOOKUPS ===--------------------------
 
 /// Create enum-based hash map for O(1) lookups
-pub const ElementSpecMap = std.EnumMap(HtmlTag, *const ElementSpec);
+pub const ElementSpecMap = std.EnumMap(z.HtmlTag, *const ElementSpec);
 const element_spec_map = blk: {
     var map = ElementSpecMap{};
     for (&element_specs) |*spec| {
@@ -483,12 +484,12 @@ const element_spec_map = blk: {
 };
 
 /// Fast enum-based element specification lookup (O(1))
-pub fn getElementSpecByEnum(tag: HtmlTag) ?*const ElementSpec {
+pub fn getElementSpecByEnum(tag: z.HtmlTag) ?*const ElementSpec {
     return element_spec_map.get(tag);
 }
 
 /// Fast enum-based attribute validation
-pub fn isAttributeAllowedEnum(tag: HtmlTag, attr_name: []const u8) bool {
+pub fn isAttributeAllowedEnum(tag: z.HtmlTag, attr_name: []const u8) bool {
     const spec = getElementSpecByEnum(tag) orelse return false;
 
     for (spec.allowed_attrs) |attr_spec| {
@@ -511,7 +512,7 @@ pub fn isAttributeAllowedEnum(tag: HtmlTag, attr_name: []const u8) bool {
 }
 
 /// Fast enum-based void element check
-pub fn isVoidElementEnum(tag: HtmlTag) bool {
+pub fn isVoidElementEnum(tag: z.HtmlTag) bool {
     return switch (tag) {
         .area, .base, .br, .col, .embed, .hr, .img, .input, .link, .meta, .source, .track, .wbr => true,
         else => false,
@@ -520,7 +521,7 @@ pub fn isVoidElementEnum(tag: HtmlTag) bool {
 
 /// Bridge function: Convert string to enum and use fast lookup
 pub fn getElementSpecFast(tag_name: []const u8) ?*const ElementSpec {
-    if (html_tags.tagFromQualifiedName(tag_name)) |tag| {
+    if (z.tagFromQualifiedName(tag_name)) |tag| {
         return getElementSpecByEnum(tag);
     }
     // Fallback to string-based lookup for custom elements
@@ -529,7 +530,7 @@ pub fn getElementSpecFast(tag_name: []const u8) ?*const ElementSpec {
 
 /// Bridge function: Convert string to enum and use fast validation
 pub fn isAttributeAllowedFast(element_tag: []const u8, attr_name: []const u8) bool {
-    if (html_tags.tagFromQualifiedName(element_tag)) |tag| {
+    if (z.tagFromQualifiedName(element_tag)) |tag| {
         return isAttributeAllowedEnum(tag, attr_name);
     }
     // Fallback to string-based validation for custom elements
@@ -540,7 +541,7 @@ pub fn isAttributeAllowedFast(element_tag: []const u8, attr_name: []const u8) bo
 
 /// Get element specification from DOM element (integrates with html_tags.zig)
 pub fn getElementSpecFromElement(element: *z.HTMLElement) ?*const ElementSpec {
-    if (html_tags.tagFromElement(element)) |tag| {
+    if (z.tagFromElement(element)) |tag| {
         return getElementSpecByEnum(tag);
     }
     // Fallback for custom elements
@@ -550,7 +551,7 @@ pub fn getElementSpecFromElement(element: *z.HTMLElement) ?*const ElementSpec {
 
 /// Check if element is void using unified specification
 pub fn isVoidElementFromSpec(element: *z.HTMLElement) bool {
-    if (html_tags.tagFromElement(element)) |tag| {
+    if (z.tagFromElement(element)) |tag| {
         return isVoidElementEnum(tag);
     }
     // Fallback for custom elements (they are never void)
@@ -559,7 +560,7 @@ pub fn isVoidElementFromSpec(element: *z.HTMLElement) bool {
 
 /// Validate element and attribute combination from DOM element
 pub fn validateElementAttributeFromElement(element: *z.HTMLElement, attr_name: []const u8) bool {
-    if (html_tags.tagFromElement(element)) |tag| {
+    if (z.tagFromElement(element)) |tag| {
         return isAttributeAllowedEnum(tag, attr_name);
     }
     // Fallback for custom elements

@@ -42,48 +42,28 @@ extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.
 /// [fragment] Fragment parsing context - defines how the fragment should be interpreted
 pub const FragmentContext = enum {
     fragment,
-    /// Parse as if inside <body> (default for most cases)
     body,
-    /// Parse as if inside <div> (for general content)
     div,
-    /// Parse as if inside <template> (for web components)
     template,
-    /// Parse as if inside <table> (for table rows/cells)
     table,
     tbody,
     tr,
-    /// Parse as if inside <select> (for options)
     select,
-    /// Parse as if inside <ul> (for list items)
     ul,
-    /// Parse as if inside <ol> (for ordered list items)
     ol,
-    /// Parse as if inside <dl> (for definition terms/descriptions)
     dl,
-    /// Parse as if inside <fieldset> (for legend elements)
     fieldset,
-    /// Parse as if inside <details> (for summary elements)
     details,
-    /// Parse as if inside <optgroup> (for grouped options)
     optgroup,
-    /// Parse as if inside <map> (for area elements)
     map,
-    /// Parse as if inside <figure> (for img/figcaption elements)
     figure,
-    /// Parse as if inside <form> (for input/label/button elements)
     form,
-    /// Parse as if inside <video> (for source/track elements)
     video,
-    /// Parse as if inside <audio> (for source/track elements)
     audio,
-    /// Parse as if inside <picture> (for source/img elements)
     picture,
-    /// Parse as if inside <head> (for meta tags, styles)
     head,
-    /// Custom context element
     custom,
     /// Convert context enum to HTML tag name string
-    /// Inlined for zero function call overhead in fragment parsing
     pub inline fn toTagName(self: FragmentContext) []const u8 {
         return switch (self) {
             .fragment => "html", // default root
@@ -267,19 +247,34 @@ pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
     return lxb_html_template_content_wrapper(template);
 }
 
-/// [template] Clone the content of a template element into a target node
-// pub fn useTemplateElement(template: *z.HTMLTemplateElement, target: *z.DomNode) !void {
-pub fn useTemplateElement(template_elt: *z.HTMLElement, target: *z.DomNode) !void {
+/// [template] Clone the content of a template element into a target node with optional sanitization
+///
+/// @param allocator: Memory allocator for sanitization operations
+/// @param template_elt: HTML template element to clone content from
+/// @param target: Target node to append cloned content to
+/// @param sanitizer: Sanitization options to apply to cloned content
+pub fn useTemplateElement(
+    allocator: std.mem.Allocator,
+    template_elt: *z.HTMLElement,
+    target: *z.DomNode,
+    sanitizer: z.SanitizeOptions,
+) !void {
     if (!z.isTemplate(z.elementToNode(template_elt))) return Err.NotATemplateElement;
     const template = z.elementToTemplate(template_elt).?;
     const template_content = templateContent(template);
     const content_node = z.fragmentToNode(template_content);
 
-    // const template_doc = z.ownerDocument(z.templateToNode(template));
-
     const cloned_content = z.cloneNode(content_node);
 
     if (cloned_content) |content| {
+        // Apply sanitization to cloned content before appending
+        switch (sanitizer) {
+            .none => {}, // No sanitization
+            .minimum => try z.sanitizeWithOptions(allocator, content, .minimum),
+            .strict => try z.sanitizeStrict(allocator, content),
+            .permissive => try z.sanitizePermissive(allocator, content),
+            .custom => |opts| try z.sanitizeWithOptions(allocator, content, .{ .custom = opts }),
+        }
         z.appendFragment(target, content);
     } else {
         return Err.FragmentCloneFailed;
@@ -311,8 +306,8 @@ test "create template programmatically" {
     try testing.expect(z.isNodeEmpty(body));
 
     // clone twice the template content into the DOM
-    try useTemplateElement(template_elt, body);
-    try useTemplateElement(template_elt, body);
+    try useTemplateElement(testing.allocator, template_elt, body, .none);
+    try useTemplateElement(testing.allocator, template_elt, body, .none);
 
     const child_nodes = try z.childNodes(
         testing.allocator,
@@ -386,12 +381,12 @@ test "use template element" {
     const tbody = z.getElementByTag(body, .tbody);
     const tbody_node = z.elementToNode(tbody.?);
 
-    const failure = useTemplateElement(tbody.?, tbody_node);
+    const failure = useTemplateElement(allocator, tbody.?, tbody_node, .none);
     try testing.expectError(Err.NotATemplateElement, failure);
 
     // add twice the template
-    try useTemplateElement(template_elt, tbody_node);
-    try useTemplateElement(template_elt, tbody_node);
+    try useTemplateElement(allocator, template_elt, tbody_node, .none);
+    try useTemplateElement(allocator, template_elt, tbody_node, .none);
 
     const resulting_html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(resulting_html);
@@ -433,4 +428,64 @@ test "use template element" {
     try testing.expectEqualStrings(expected_serialized_html, resulting_html);
 
     // try z.printDocumentStructure(doc);
+}
+
+test "useTemplateElement with existing template - multiple uses" {
+    const allocator = testing.allocator;
+
+    const pretty_html =
+        \\<table id="producttable">
+        \\  <thead>
+        \\    <tr>
+        \\      <td>UPC_Code</td>
+        \\      <td>Product_Name</td>
+        \\    </tr>
+        \\  </thead>
+        \\  <tbody>
+        \\    <!-- existing data could optionally be included here -->
+        \\  </tbody>
+        \\</table>
+        \\
+        \\<template id="productrow">
+        \\  <tr>
+        \\    <td class="record">Code: 1</td>
+        \\    <td>Name: 1</td>
+        \\  </tr>
+        \\</template>
+    ;
+
+    const initial_html = try z.normalizeText(allocator, pretty_html);
+    defer allocator.free(initial_html);
+
+    const doc = try z.createDocFromString(initial_html);
+    defer z.destroyDocument(doc);
+
+    const body = z.bodyNode(doc).?;
+
+    // Get the existing template element from DOM
+    const template_elt = z.getElementById(body, "productrow").?;
+    const template = z.elementToTemplate(template_elt).?;
+
+    const tbody = z.getElementByTag(body, .tbody).?;
+    const tbody_node = z.elementToNode(tbody);
+
+    // Use existing template element twice (HTMLElement and HTMLTemplateElement types)
+    try useTemplateElement(allocator, template_elt, tbody_node, .permissive);
+    try useTemplateElement(allocator, z.templateToElement(template), tbody_node, .permissive);
+
+    const result = try z.outerHTML(allocator, z.nodeToElement(body).?);
+    defer allocator.free(result);
+
+    // Should have two rows added
+    var tr_count: usize = 0;
+    var search_pos: usize = 0;
+    while (std.mem.indexOfPos(u8, result, search_pos, "<tr>")) |pos| {
+        tr_count += 1;
+        search_pos = pos + 4;
+    }
+    try testing.expectEqual(@as(usize, 4), tr_count); // 1 header + 2 data rows + 1 in template
+
+    // Verify content
+    try testing.expect(std.mem.indexOf(u8, result, "Code: 1") != null);
+    try testing.expect(std.mem.indexOf(u8, result, "Name: 1") != null);
 }
