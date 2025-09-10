@@ -41,8 +41,6 @@ pub inline fn nodeType(node: *z.DomNode) NodeType {
 ///
 /// Returns the actual node name (`#text`, `#comment`, `#document-fragment`) for special nodes, `#element` for regular HTML tags.
 pub inline fn nodeTypeName(node: *z.DomNode) []const u8 {
-    // const node_name = z.nodeName_zc(node);
-
     // Direct string comparison for maximum performance - return actual names for special nodes
     if (z.nodeType(node) == .text) {
         return "#text";

@@ -12,7 +12,7 @@ const testing = std.testing;
 extern "c" fn lxb_dom_node_text_content(node: *z.DomNode, len: ?*usize) ?[*:0]u8;
 extern "c" fn lxb_dom_node_text_content_set(node: *z.DomNode, content: [*]const u8, len: usize) u8;
 extern "c" fn lxb_dom_character_data_replace(node: *z.DomNode, data: [*]const u8, len: usize, offset: usize, count: usize) u8;
-extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void; //<- ?????
+extern "c" fn lexbor_destroy_text_wrapper(node: *z.DomNode, text: ?[*:0]u8) void;
 
 // === comment ===
 
@@ -128,12 +128,6 @@ pub fn textContent_zc(node: *z.DomNode) []const u8 {
     return text_ptr[0..len];
 }
 
-// pub const TextOptions = struct {
-//     escape: bool = false,
-//     remove_comments: bool = false,
-//     remove_empty_elements: bool = false,
-//     keep_new_lines: bool = false,
-// };
 
 /// [core] Sets any inner content of a node with new content as text.
 ///
@@ -192,9 +186,9 @@ test "setContentAsText" {
     try testing.expectEqualStrings("Hola", z.textContent_zc(div));
 }
 
-/// [core] replace the text data of a _text node_ with escape option.
+/// [core] Replace the text data of a _text node_.
 ///
-/// If `options.escape = true`, the text will be HTML-escaped before insertion.
+/// Only works on text nodes. Use `setContentAsText()` to replace any node's content.
 /// ## Example
 /// ```
 /// const doc = try z.createDocFromString("<p>Hello <strong>world</strong></p>");
@@ -202,7 +196,7 @@ test "setContentAsText" {
 /// const p = firstChild(try bodyNode(doc));
 /// const inner_text = firstChild(p.?);
 ///
-/// try replaceText(allocator, inner_text.?, "Hi ", .{});
+/// try replaceText(inner_text.?, "Hi ");
 /// try testing.expectEqualStrings("Hi world", z.textContent_zc(p.?));
 ///
 /// const html = try z.outerHTML(allocator, z.nodeToElement(p.?).?);
@@ -211,17 +205,8 @@ test "setContentAsText" {
 /// ---
 /// ```
 pub fn replaceText(node: ?*z.DomNode, text: []const u8) !void {
-    // const n = node orelse return Err.NoNode;
-
     if (node == null) return Err.NoNode;
     if (z.nodeType(node.?) != .text) return Err.NotTextNode;
-
-    // const final_text = if (options.escape)
-    //     try z.escapeHtml(allocator, text)
-    // else
-    //     text;
-
-    // defer if (options.escape) allocator.free(final_text);
 
     const current_len = z.textContent_zc(node.?).len;
 

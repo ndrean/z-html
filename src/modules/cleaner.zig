@@ -12,14 +12,19 @@ pub const StringNormalizeOptions = struct {
     remove_whitespace_text_nodes: bool = true,
 };
 
-/// String-based HTML normalization - removes whitespace-only text nodes
+/// [cleaner] String-based HTML normalization - removes whitespace-only text nodes
 ///
 /// Skips content between preserve tags: <pre>, <textarea>, <script>, <style>, <code>
+/// Caller needs to free the returned slice
 pub fn normalizeHtmlString(allocator: std.mem.Allocator, html: []const u8) ![]u8 {
     return normalizeHtmlStringWithOptions(allocator, html, .{});
 }
 
-/// String-based HTML normalization with options
+/// [cleaner] String-based HTML normalization with options
+///
+/// Provides control over comment removal and whitespace text node removal.
+/// Preserves content within special tags: <pre>, <textarea>, <script>, <style>, <code>
+/// Caller needs to free the returned slice
 pub fn normalizeHtmlStringWithOptions(allocator: std.mem.Allocator, html: []const u8, options: StringNormalizeOptions) ![]u8 {
     var result: std.ArrayList(u8) = .empty;
     defer result.deinit(allocator);
@@ -153,7 +158,6 @@ test "string based normalize text behaviour" {
         const normed = try z.normalizeHtmlString(allocator, outer);
         defer allocator.free(normed);
 
-        // const expected = "<body><div><p>\n      Some\n    <i>  text   </i></p></div></body>";
         const expected =
             \\<body><div><p>
             \\      Some
@@ -174,7 +178,6 @@ test "string based normalize text behaviour" {
     }
     // preserve PRE tag
     {
-        // const html2 = "<div>\n  <pre>  preserve  this  </pre>\n  <p>Normal text</p>  \n</div>";
         const html2 =
             \\<div>
             \\  <pre>  preserve  this  </pre>
@@ -196,7 +199,6 @@ test "string based normalize text behaviour" {
         const expected3 = "<div><script>\n  console.log('test');\n  </script><span>Text</span></div>";
         try testing.expectEqualStrings(expected3, normalized3);
     }
-    // const html_with_comments = "<div>\n<!-- Comment 1 -->\n<p> Text </p>\n<!-- Comment 2 -->\n</div>";
 
     const html_with_comments =
         \\<div>
@@ -244,9 +246,9 @@ test "string based normalize text behaviour" {
 
 /// [cleaner] Remove excessive whitespace from HTML text to match serialized output.
 ///
-/// Removes whitespace between HTML elements but preserves whitespace within text content.
-/// If keep_new_lines is true, preserves newline characters in text content.
-/// If escape is true, HTML-escapes the result after whitespace normalization.
+/// Collapses consecutive whitespace to single spaces and removes whitespace between tags.
+/// Preserves meaningful spaces within text content.
+/// Trims leading and trailing whitespace from the result.
 ///
 /// Caller needs to free the slice
 pub fn normalizeText(allocator: std.mem.Allocator, html: []const u8) ![]u8 {

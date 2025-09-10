@@ -436,9 +436,10 @@ pub const Parser = struct {
         );
     }
 
-    /// [parser] parsing and appending method
+    /// [parser] Universal parsing and appending method
     ///
     /// Automatically detects and handles both template strings and regular HTML fragments.
+    /// Templates are detected by scanning for `<template` tags in the content.
     /// Templates are processed by cloning their content, regular HTML is parsed and sanitized.
     /// All content is appended to the target element.
     pub fn parseAndAppend(
@@ -449,8 +450,7 @@ pub const Parser = struct {
         sanitizer: z.SanitizeOptions,
     ) !void {
         // Check if content contains template elements
-        // if (std.mem.indexOf(u8, content, "<template") != null) {
-        if (context == .template) {
+        if (std.mem.indexOf(u8, content, "<template") != null) {
             return self.parseAndAppendTemplates(
                 target,
                 content,
@@ -608,7 +608,7 @@ pub const Parser = struct {
     ///
     /// Use this when you need to count, inspect, or validate individual nodes immediately after parsing.
     /// Note: Returned nodes are tied to the parsing context and should not be stored for later use.
-    /// For DOM insertion, use `insertFragment` instead. The caller is responsible for freeing the returned array with `allocator.free(nodes)`.
+    /// For DOM insertion, use `parseAndAppendFragment` instead. The caller is responsible for freeing the returned array with `allocator.free(nodes)`.
     /// See test "parseFragmentNodes - direct usage of returned nodes" for usage example.
     pub fn parseFragmentNodes(
         self: *Parser,
@@ -618,18 +618,14 @@ pub const Parser = struct {
         context: z.FragmentContext,
         sanitizer: z.SanitizeOptions,
     ) ![]*z.DomNode {
-        // Create context element for fragment parsing
-        const context_tag = context.toTagName();
-        const context_element = try z.createElement(doc, context_tag);
-        defer z.destroyNode(z.elementToNode(context_element));
-
-        // Use standalone parseFragment function
+        // Parse using Parser's method 
         const fragment_root = try self.parseStringInContext(
             html,
             doc,
             context,
             sanitizer,
         );
+        defer z.destroyNode(fragment_root);
 
         return z.childNodes(allocator, fragment_root);
     }

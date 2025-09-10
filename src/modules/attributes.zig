@@ -46,6 +46,9 @@ pub fn stringEquals(first: []const u8, second: []const u8) bool {
     return lexbor_str_data_ncmp(first.ptr, second.ptr, first.len);
 }
 
+/// [attributes] Fast string contains check using lexbor's optimized functions
+///
+/// Returns true if `where` contains `what`
 pub fn stringContains(where: []const u8, what: []const u8) bool {
     if (what.len == 0) return true;
     if (where.len == 0) return false;
@@ -54,13 +57,13 @@ pub fn stringContains(where: []const u8, what: []const u8) bool {
 }
 
 test "lexbor string functions" {
-    // Test stringEquals only (stringEndsWith needs verification)
+    // Test stringEquals
     try testing.expect(stringEquals("hello", "hello"));
     try testing.expect(!stringEquals("hello", "world"));
     try testing.expect(!stringEquals("hello", "hello2"));
     try testing.expect(stringEquals("", ""));
 
-    // TODO: Fix stringEndsWith - the function signature or logic might be wrong
+    // Test stringContains
     try testing.expect(stringContains("hello world", "world"));
     try testing.expect(!stringContains("hello world", "planet"));
 }
@@ -244,66 +247,6 @@ fn getNextAttribute(attr: *DomAttr) ?*DomAttr {
 }
 
 // ----------------------------------------------------------
-/// [attributes] _deprecated_ Collect all attributes from an element.
-///
-/// First version.
-///
-/// Caller needs to free the slice
-/// ## Example
-/// ```
-/// test "getAttributes" {
-///   const doc = try z.createDocFromString("");
-///   defer z.destroyDocument(doc);
-///
-///   const body = z.bodyNode(doc).?;
-///   const button = try z.createElementWithAttrs(
-///       doc,
-///        "button",
-///        &.{
-///            .{ .name = "phx-click", .value = "increment" },
-///            .{ .name = "hidden", .value = "" },
-///        },
-///    );
-///    z.appendChild(body, z.elementToNode(button));
-///
-///    const allocator = testing.allocator;
-///    const attrs = try z.getAttributes(allocator, button);
-///    defer {
-///        for (attrs) |attr| {
-///            allocator.free(attr.name);
-///            allocator.free(attr.value);
-///        }
-///        allocator.free(attrs);
-///    }
-///    try testing.expect(attrs.len == 2);
-///    try testing.expectEqualStrings("phx-click", attrs[0].name);
-///    try testing.expectEqualStrings("hidden", attrs[1].name);
-///}
-/// ```
-fn getAttributes(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]AttributePair {
-    var attribute = getFirstAttribute(element);
-    if (attribute == null) return &[_]AttributePair{}; // Early return for elements without attributes
-
-    var attrs: std.ArrayList(AttributePair) = .empty;
-    defer attrs.deinit(allocator);
-
-    while (attribute != null) {
-        const name_copy = try getAttributeName(allocator, attribute.?);
-        const value_copy = try getAttributeValue(allocator, attribute.?);
-
-        try attrs.append(
-            allocator,
-            AttributePair{
-                .name = name_copy,
-                .value = value_copy,
-            },
-        );
-
-        attribute = getNextAttribute(attribute.?);
-    }
-
-    return attrs.toOwnedSlice(allocator);
-}
 
 /// [attributes] Collect all attributes with stack buffer optimization (bf = buffered)
 ///
@@ -385,7 +328,7 @@ pub fn getElementId(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8
     return result;
 }
 
-/// [core] Get element ID as borrowed string for faster access
+/// [attributes] Get element ID as borrowed string for faster access
 pub fn getElementId_zc(element: *z.HTMLElement) []const u8 {
     var id_len: usize = 0;
     const id_ptr = lxb_dom_element_id_noi(
@@ -395,6 +338,9 @@ pub fn getElementId_zc(element: *z.HTMLElement) []const u8 {
     return id_ptr[0..id_len];
 }
 
+/// [attributes] Check if element has a specific ID
+///
+/// Uses fast string comparison for ID matching
 pub fn hasElementId(element: *z.HTMLElement, id: []const u8) bool {
     const id_value = z.getElementId_zc(element);
     if (id_value.len != id.len or id_value.len == 0) return false;

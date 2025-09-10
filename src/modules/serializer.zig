@@ -38,7 +38,7 @@ extern "c" fn lxb_html_serialize_pretty_tree_cb(
 
 // ==================================================================
 
-/// [Serialize] Serializes the given DOM node to an owned string
+/// [serializer] Serializes the given DOM node to an owned string
 pub fn outerNodeHTML(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     var str = lxbString{
         .data = null,
@@ -51,7 +51,7 @@ pub fn outerNodeHTML(allocator: std.mem.Allocator, node: *z.DomNode) ![]u8 {
     }
 
     if (str.data == null or str.length == 0) {
-        return Err.NoBodyElement;
+        return Err.EmptyTextContent;
     }
     const result = try allocator.alloc(u8, str.length);
     @memcpy(result, str.data.?[0..str.length]);
@@ -74,7 +74,7 @@ pub fn outerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     }
 
     if (str.data == null or str.length == 0) {
-        return Err.NoBodyElement;
+        return Err.EmptyTextContent;
     }
     const result = try allocator.alloc(u8, str.length);
     @memcpy(result, str.data.?[0..str.length]);
@@ -82,7 +82,7 @@ pub fn outerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     return result;
 }
 
-/// [Serialize] Get element's inner HTML
+/// [serializer] Get element's inner HTML
 ///
 /// Caller needs to free the returned slice
 pub fn innerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
@@ -103,7 +103,7 @@ pub fn innerHTML(allocator: std.mem.Allocator, element: *z.HTMLElement) ![]u8 {
     }
 
     if (str.data == null or str.length == 0) {
-        return Err.NoBodyElement;
+        return Err.EmptyTextContent;
     }
     const result = try allocator.alloc(u8, str.length);
     @memcpy(result, str.data.?[0..str.length]);
@@ -134,6 +134,7 @@ const ProcessCtx = struct {
     expect_attr_value: bool,
     found_equal: bool,
     current_element_tag: ?[]const u8 = null,
+    current_element_enum: ?z.HtmlTag = null, // Store enum for faster attribute validation
     current_attribute: ?[]const u8 = null,
     expect_element_next: bool = false, // Next token after < should be element name
 
@@ -146,6 +147,7 @@ const ProcessCtx = struct {
             .expect_attr_value = false,
             .found_equal = false,
             .current_element_tag = null,
+            .current_element_enum = null,
             .current_attribute = null,
             .expect_element_next = false,
         };
@@ -180,7 +182,7 @@ pub fn prettyPrint(allocator: std.mem.Allocator, node: *z.DomNode) !void {
         ProcessCtx.init(0),
     );
     if (result != z._OK) {
-        return Err.SerializationFailed;
+        return Err.SerializeFailed;
     }
     return;
 }
@@ -238,6 +240,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
         // Closing bracket - done parsing this element and its attributes
         ctx_ptr.expect_element_next = false;
         ctx_ptr.current_element_tag = null;
+        ctx_ptr.current_element_enum = null;
         ctx_ptr.expect_attr_value = false;
         ctx_ptr.found_equal = false;
         applyStyle(z.SyntaxStyle.brackets, text);
@@ -254,17 +257,20 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
             if (tag_style) |style| {
                 ctx_ptr.expect_element_next = false;
                 ctx_ptr.current_element_tag = text; // Track current element for attribute validation
+                ctx_ptr.current_element_enum = tag; // Store enum for faster attribute validation
                 applyStyle(style, text);
                 return z._CONTINUE;
             }
         }
     }
 
-    // Handle attributes using unified specification (with intelligent fallback)
-    const isAttr = if (ctx_ptr.current_element_tag) |element_tag|
-        html_spec.isAttributeAllowed(element_tag, text)
+    // Handle attributes using optimized enum-based validation (with fallbacks)
+    const isAttr = if (ctx_ptr.current_element_enum) |element_enum|
+        html_spec.isAttributeAllowedEnum(element_enum, text) // O(1) enum-based lookup
+    else if (ctx_ptr.current_element_tag) |element_tag|
+        html_spec.isAttributeAllowed(element_tag, text) // String-based fallback for custom elements
     else
-        z.isKnownAttribute(text);
+        z.isKnownAttribute(text); // General attribute validation
 
     if (isAttr) {
         ctx_ptr.current_attribute = text; // Track current attribute for value validation
@@ -335,6 +341,40 @@ test "what does std.mem.endsWith, std.mem.eql find?" {
     const t2 = "=\"";
     try testing.expect(std.mem.endsWith(u8, t1, "=\""));
     try testing.expect(std.mem.eql(u8, t2, "=\""));
+}
+
+test "outerNodeHTML" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<p>test</p>");
+    defer z.destroyDocument(doc);
+    
+    const body = z.bodyElement(doc).?;
+    const body_node = z.elementToNode(body);
+    
+    const outer = try outerNodeHTML(allocator, body_node);
+    defer allocator.free(outer);
+    
+    try testing.expectEqualStrings("<body><p>test</p></body>", outer);
+}
+
+test "prettyPrint" {
+    const allocator = testing.allocator;
+    const doc = try z.createDocFromString("<div><p>hello</p></div>");
+    defer z.destroyDocument(doc);
+    
+    const body = z.bodyElement(doc).?;
+    const body_node = z.elementToNode(body);
+    
+    // Test that prettyPrint doesn't crash - output goes to stdout
+    try prettyPrint(allocator, body_node);
+}
+
+test "printDocStruct" {
+    const doc = try z.createDocFromString("<div><p>test</p></div>");
+    defer z.destroyDocument(doc);
+    
+    // Test that printDocStruct doesn't crash - output goes to stdout  
+    try printDocStruct(doc);
 }
 
 test "web component" {

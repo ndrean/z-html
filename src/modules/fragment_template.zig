@@ -96,13 +96,26 @@ pub const FragmentContext = enum {
 };
 
 test "FragmentContext" {
-    // const doc = try z.createDocument();
-    // defer z.destroyDocument(doc);
-    // const fragment = try z.createDocumentFragment(doc);
-
     try testing.expectEqualStrings(FragmentContext.toTagName(.body), "body");
     try testing.expectEqualStrings(FragmentContext.toTagName(.table), "table");
     try testing.expect(FragmentContext.toTag("div").? == .div);
+}
+
+test "fragment creation and destruction" {
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+    
+    // Test createDocumentFragment and fragmentToNode
+    const fragment = try createDocumentFragment(doc);
+    const fragment_node = fragmentToNode(fragment);
+    
+    try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(fragment_node));
+    try testing.expect(z.nodeType(fragment_node) == .fragment);
+    try testing.expect(z.isNodeEmpty(fragment_node));
+    
+    // Test destroyDocumentFragment
+    destroyDocumentFragment(fragment);
+    // Note: After destruction, we can't safely test the fragment anymore
 }
 
 // === Document Fragment =============================================
@@ -428,6 +441,53 @@ test "use template element" {
     try testing.expectEqualStrings(expected_serialized_html, resulting_html);
 
     // try z.printDocumentStructure(doc);
+}
+
+test "fragment and template utility functions" {
+    const allocator = testing.allocator;
+    
+    const doc = try z.createDocFromString("<html><body></body></html>");
+    defer z.destroyDocument(doc);
+    
+    // Create template programmatically first
+    const template = try createTemplate(doc);
+    const template_elt = templateToElement(template);
+    _ = z.setAttribute(template_elt, "id", "test");
+    
+    // Add content to template
+    const template_content = templateContent(template);
+    const content_node = fragmentToNode(template_content);
+    const p = try z.createElement(doc, "p");
+    try z.setContentAsText(z.elementToNode(p), "Content");
+    z.appendChild(content_node, z.elementToNode(p));
+    
+    // Add template to body for getElementById to work
+    const body = z.bodyElement(doc).?;
+    z.appendChild(z.elementToNode(body), z.templateToNode(template));
+    
+    const template_node = z.elementToNode(template_elt);
+    
+    // Test isTemplate
+    try testing.expect(isTemplate(template_node));
+    
+    // Test nodeToTemplate and elementToTemplate
+    const template_from_node = nodeToTemplate(template_node);
+    const template_from_element = elementToTemplate(template_elt);
+    try testing.expect(template_from_node != null);
+    try testing.expect(template_from_element != null);
+    try testing.expect(template_from_node.? == template);
+    try testing.expect(template_from_element.? == template);
+    
+    // Test fragmentToNode with template content (already created above)
+    try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(content_node));
+    
+    // Test that we can work with the fragment node
+    const children = try z.childNodes(allocator, content_node);
+    defer allocator.free(children);
+    try testing.expect(children.len == 1); // Should have the <p> element
+    
+    // Clean up functions are tested implicitly through defer statements in other tests
+    destroyTemplate(template);
 }
 
 test "useTemplateElement with existing template - multiple uses" {

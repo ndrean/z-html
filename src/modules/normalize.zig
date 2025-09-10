@@ -11,10 +11,8 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
-// // Lexbor string comparison functions for zero-copy operations
-// extern "c" fn lexbor_str_data_ncmp(first: [*c]const u8, sec: [*c]const u8, size: usize) bool;
 
-/// Returns true if text contains ONLY whitespace characters (\n\t\r or " ")
+/// [normalize] Returns true if text contains ONLY whitespace characters (\n\t\r or " ")
 pub fn isWhitespaceOnly(text: []const u8) bool {
     if (text.len == 0) return true;
 
@@ -193,9 +191,9 @@ const Context = struct {
 
 /// [normalize] Normalize the DOM with options `NormalizeOptions`.
 ///
-/// - To remove comments, `skip_comments=true`.
-/// - Default to preserve whitespace in specific elements (`pre`, `textarea`, `script`, `style`). Use `preserve_special_elements=false` to disable this behavior.
-/// - Default to remove whitespace-only text nodes.
+/// - To remove comments, use `skip_comments=true`.
+/// - Always preserves whitespace in specific elements (`pre`, `textarea`, `script`, `style`, `code`).
+/// - Removes collapsible whitespace (\r, \n, \t) from other elements while preserving meaningful spaces.
 pub fn normalizeDOMwithOptions(
     allocator: std.mem.Allocator,
     root_elt: *z.HTMLElement,

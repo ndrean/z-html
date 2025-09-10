@@ -68,15 +68,15 @@ test "scrap example.com" {
   const style_by_css = try css_engine.querySelector(html, "style");
 
   if (style_by_css) |style| {
-      const css_content_css = z.textContent_zc(style);
+      css_content = z.textContent_zc(style);
       print("\n{s}\n", .{css_content}); // see below
   }
 
   // alternative search by DOM traverse
   const style_by_walker = z.getElementByTag(html, .style);
   if (style_by_walker) |style| {
-      css_content_walker = z.textContent_zc(z.elementToNode(style));
-      std.debug.assert(std.mem.eql(u8, css_content_css, css_content_walker));
+      const css_content_walker = z.textContent_zc(z.elementToNode(style));
+      std.debug.assert(std.mem.eql(u8, css_content, css_content_walker));
   }
 }
 ```
@@ -156,7 +156,7 @@ You parse this HTML string:
 
 ```cpp
 const doc = try z.createDocFromString(html_string);
-defer z.destryDocument(doc);
+defer z.destroyDocument(doc);
 
 const body = z.bodyNode(doc).?;
 try z.prettyPrint(allocator, body);
@@ -247,7 +247,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
     const html_node = z.documentRoot(html_doc).?;
 
     print("\n\n", .{});
-    try z.prettyPrint(html_node);
+    try z.prettyPrint(allocator, html_node);
     print("\n", .{});
     try z.printDocStruct(html_doc);
 }
@@ -289,9 +289,9 @@ const html =
         <article class="post main-post">Article content</article>
         </section>
         <aside class="sidebar">
-        <h2 class="subtitle">Sidebar Title</h2>
-        <p class="text sidebar-text">Sidebar paragraph</p>
-        <div class="widget">Widget content</div>
+            <h2 class="subtitle">Sidebar Title</h2>
+            <p class="text sidebar-text">Sidebar paragraph</p>
+            <div class="widget">Widget content</div>
         </aside>
         <footer class="main-footer" aria-label="foot">
         <p class="copyright">© 2024</p>
@@ -304,40 +304,115 @@ A CSS Selector search and some walker search and attributes:
 ```cpp
 const doc = try z.createDocFromString(html);
 defer z.destroyDocument(doc);
-const body = z.bodyNode(doc);
+const body = z.bodyNode(doc).?;
 
-var css_engine = try z.try z.createCssEngine(allocator);
+var css_engine = try z.createCssEngine(allocator);
 defer css_engine.deinit();
 
-const divs = css_engine.querySelectorAll(body, "div");
+const divs = try css_engine.querySelectorAll(body, "div");
 std.debug.assert(divs.len == 3);
 
-const p1 = try css_engine.querySelector(body,"p#1",);
+const p1 = try css_engine.querySelector(body, "p.text");
 const p_elt = z.nodeToElement(p1.?).?;
-const cl_p1 = z.classList_zc(p_elt)
+const cl_p1 = z.classList_zc(p_elt);
 
-std.debug.assert(std.mem.eql(u8, "text main-text",cl_p1 ))
+std.debug.assert(std.mem.eql(u8, "text main-text", cl_p1));
 
-const p2 = try z.getElementById("1").?;
+const p2 = z.getElementByClass(body, "text").?;
 const cl_p2 = z.classList_zc(p2);
-std.debug.asser(std.mem.eql(u8, cl_p1, cl_p2));
+std.debug.assert(std.mem.eql(u8, cl_p1, cl_p2));
 
-const footer = try z.getElementByDataAttribute( body,"aria","label",null);
-const aria_value = z.getAttribute_zc(footer.?, "aria-label");
+const footer = z.getElementByAttribute(body, "aria-label").?;
+const aria_value = z.getAttribute_zc(footer, "aria-label").?;
 std.debug.assert(std.mem.eql(u8, "foot", aria_value));
 ```
 
 Working the `classList` like a DOMTokenList
 
 ```cpp
-var footer_token_list = try z.ClassList.init(allocator,aria.?,);
+var footer_token_list = try z.ClassList.init(allocator, footer);
 defer footer_token_list.deinit();
 
-try footer_token_list.add("footer");
-std.debug.assert(footer_token_list.contains("footer"));
+try footer_token_list.add("new-footer");
+std.debug.assert(footer_token_list.contains("new-footer"));
 
-_ = try footer_token_list.toggle("footer");
-std.debug.assert(!footer_token_list.contains("footer"));
+_ = try footer_token_list.toggle("new-footer");
+std.debug.assert(!footer_token_list.contains("new-footer"));
+```
+
+<hr>
+
+## Example: HTML Normalization
+
+The library provides both DOM-based and string-based HTML normalization to clean up whitespace and comments.
+
+### DOM-based Normalization
+
+DOM-based normalization works on parsed documents and provides browser-like behavior:
+
+```cpp
+const html = 
+    \\<div>
+    \\  <!-- comment -->
+    \\  <p>Text with   spaces</p>
+    \\  <pre>  preserve  whitespace  </pre>
+    \\  
+    \\  <script>
+    \\    console.log('preserve script content');
+    \\  </script>
+    \\</div>
+;
+
+const doc = try z.createDocFromString(html);
+defer z.destroyDocument(doc);
+const body = z.bodyElement(doc).?;
+
+// Standard browser-like normalization (removes collapsible whitespace)
+try z.normalizeDOM(allocator, body);
+
+// Or with options to remove comments
+try z.normalizeDOMwithOptions(allocator, body, .{ .skip_comments = true });
+
+// For clean terminal output (aggressive - removes ALL whitespace-only nodes)
+try z.normalizeDOMForDisplay(allocator, body);
+
+const result = try z.innerHTML(allocator, body);
+defer allocator.free(result);
+// Result: clean HTML with normalized whitespace
+```
+
+### String-based Normalization
+
+For faster processing when you don't need full DOM parsing:
+
+```cpp
+const messy_html = 
+    \\<div>
+    \\  <!-- comment -->
+    \\  
+    \\  <p>Content</p>
+    \\  
+    \\  <pre>  preserve  this  </pre>
+    \\  
+    \\</div>
+;
+
+// Basic normalization (removes whitespace-only text nodes)
+const normalized = try z.normalizeHtmlString(allocator, messy_html);
+defer allocator.free(normalized);
+
+// With options for comment handling
+const clean = try z.normalizeHtmlStringWithOptions(allocator, messy_html, .{
+    .remove_comments = true,
+    .remove_whitespace_text_nodes = true,
+});
+defer allocator.free(clean);
+
+// Text normalization (collapses whitespace)
+const text = "  Hello   world!  \n\n  ";
+const normalized_text = try z.normalizeText(allocator, text);
+defer allocator.free(normalized_text);
+// Result: "Hello world!"
 ```
 
 <hr>
@@ -381,13 +456,13 @@ defer z.destroyDocument(doc);
 3. You have the parser engine as seen before
 
 ```cpp
-var parser = z.Parser.init(allocator);
+var parser = try z.Parser.init(allocator);
 defer parser.deinit();
 const doc = try parser.parse("<div><p></p></div>");
-defer z.detroyDocument(doc);
+defer z.destroyDocument(doc);
 ```
 
-The file _main.zig_ shows more use cases with parsing and serialization as well as the tests  (`setInnerHTML`, `setInenrSafeHTML`, `insertAdjacentElement` or `insertAdjacentHTML`...)
+The file _main.zig_ shows more use cases with parsing and serialization as well as the tests  (`setInnerHTML`, `setInnerSafeHTML`, `insertAdjacentElement` or `insertAdjacentHTML`...)
 
 <hr>
 
@@ -429,7 +504,7 @@ zig build --release=fast
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
-Once you build `mexbor`, you have the static object located at _/lexbor_src_2.5.0/build/liblexbor_static.a_.
+Once you build `lexbor`, you have the static object located at _/lexbor_src_2.5.0/build/liblexbor_static.a_.
 
 To check which primitives are exported, you can use:
 

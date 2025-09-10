@@ -1,3 +1,39 @@
+//! Terminal Colors and Security Validation for HTML Processing
+//!
+//! This module provides:
+//! 1. ANSI terminal styling for colored HTML pretty-printing
+//! 2. Security validation for detecting potentially malicious HTML attributes and values
+//!
+//! ## XSS Prevention Strategies
+//!
+//! The security functions in this module detect common XSS attack vectors:
+//!
+//! ### Dangerous Attribute Values (`isDangerousAttributeValue`):
+//! - **Script injection**: `<script>`, `javascript:`, `vbscript:` protocols
+//! - **Data URIs**: Base64-encoded content that browsers will decode and execute
+//! - **File protocols**: `file:`, `ftp:` for local file access attempts
+//! - **Protocol-relative URLs**: `//` that can bypass protocol restrictions
+//!
+//! ### Attribute Validation (`isKnownAttribute`):
+//! - **Allowlist approach**: Only known HTML, ARIA, data-*, and framework attributes
+//! - **Event handler rejection**: Blocks `onclick`, `onload`, and similar dangerous handlers
+//! - **Framework support**: Recognizes Alpine.js, Vue.js, Phoenix LiveView, HTMX patterns
+//!
+//! ### Security Philosophy:
+//! This module follows a defense-in-depth approach where:
+//! 1. Unknown attributes are flagged for visual inspection during pretty-printing
+//! 2. Dangerous values are highlighted in red to draw attention
+//! 3. The sanitizer module can then remove flagged content based on security policies
+//!
+//! ## Terminal Styling
+//!
+//! Provides semantic color mapping for HTML elements to improve readability:
+//! - Structure elements (html, body) get distinct background colors
+//! - Headings use bold red/magenta hierarchy
+//! - Interactive elements (forms, buttons) use green themes
+//! - Media elements use purple themes
+//! - Security risks are highlighted in red
+
 const std = @import("std");
 const z = @import("../root.zig");
 const html_spec = @import("html_spec.zig");

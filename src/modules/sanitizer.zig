@@ -83,7 +83,7 @@ pub fn isFrameworkAttribute(attr_name: []const u8) bool {
 }
 
 fn isDescendantOfSvg(tag: z.HtmlTag, parent: z.HtmlTag) bool {
-    return (tag == .svg or parent == .svg) or return false;
+    return tag == .svg or parent == .svg;
 }
 
 fn isDangerousSvgDescendant(tag_name: []const u8) bool {
@@ -342,10 +342,7 @@ fn handleKnownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element: 
         // Known tag but not in whitelist - check if it's a custom element
         if (context_ptr.options.allow_custom_elements and isCustomElement(tag_str)) {
             // Custom element - use permissive sanitization
-            collectCustomElementAttributes(context_ptr, element) catch |err| {
-                print("Error in collectCustomElementAttributes: {}\n", .{err});
-                return z._STOP;
-            };
+            collectCustomElementAttributes(context_ptr, element) catch return z._STOP;
         } else {
             // Known tag but not in whitelist: eg script elements
             return removeAndContinue(context_ptr, node);
@@ -367,10 +364,7 @@ fn handleUnknownElement(context_ptr: *SanitizeContext, node: *z.DomNode, element
     // custom element context
     if (context_ptr.options.allow_custom_elements and isCustomElement(tag_name)) {
         // Custom element - use permissive sanitization
-        collectCustomElementAttributes(context_ptr, element) catch |err| {
-            print("Error in collectCustomElementAttributes: {}\n", .{err});
-            return z._STOP;
-        };
+        collectCustomElementAttributes(context_ptr, element) catch return z._STOP;
     } else {
         // Unknown element and custom elements not allowed - remove
         return removeAndContinue(context_ptr, node);
@@ -385,7 +379,7 @@ fn handleTemplates(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
     context_ptr.addTemplate(node) catch return z._STOP;
     return z._CONTINUE;
 }
-/// Handle element nodes with a separate tratment for templates as we need to access its content.
+/// Handle element nodes with separate treatment for templates as we need to access their content.
 fn handleElement(context_ptr: *SanitizeContext, node: *z.DomNode) c_int {
     if (z.isTemplate(node)) {
         return handleTemplates(context_ptr, node);
@@ -583,6 +577,10 @@ fn sanitizeTemplateContent(allocator: std.mem.Allocator, template_node: *z.DomNo
     try sanitizePostWalkOperations(allocator, &template_context, options);
 }
 
+/// [sanitize] Sanitize DOM tree with configurable options
+///
+/// Main sanitization function that removes dangerous content based on the provided options.
+/// Supports .none, .minimum, .strict, .permissive, and .custom sanitization modes.
 pub fn sanitizeWithOptions(
     allocator: std.mem.Allocator,
     root_node: *z.DomNode,
@@ -608,15 +606,25 @@ pub fn sanitizeWithOptions(
     );
 }
 
+/// [sanitize] Sanitize DOM tree with specified options
+///
+/// Alias for sanitizeWithOptions for backward compatibility.
 pub fn sanitizeNode(allocator: std.mem.Allocator, root_node: *z.DomNode, options: SanitizeOptions) (std.mem.Allocator.Error || z.Err)!void {
     return sanitizeWithOptions(allocator, root_node, options);
 }
 
 // Convenience functions for common sanitization scenarios
+
+/// [sanitize] Sanitize DOM tree with strict security settings
+///
+/// Removes scripts, styles, comments, dangerous URIs, and disallows custom elements.
 pub fn sanitizeStrict(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
     return sanitizeWithOptions(allocator, root_node, .strict);
 }
 
+/// [sanitize] Sanitize DOM tree with permissive settings for modern web apps
+///
+/// Removes dangerous content but allows custom elements and framework attributes.
 pub fn sanitizePermissive(allocator: std.mem.Allocator, root_node: *z.DomNode) (std.mem.Allocator.Error || z.Err)!void {
     return sanitizeWithOptions(allocator, root_node, .permissive);
 }
@@ -647,16 +655,8 @@ test "iframe sandbox validation" {
     const expected = "<body><iframe sandbox src=\"https://example.com\">Safe iframe</iframe><iframe sandbox>Safe - empty sandbox, no src</iframe></body>";
     try testing.expectEqualStrings(expected, result);
 
-    // // Should keep safe sandboxed iframes
-    // try testing.expect(std.mem.indexOf(u8, result, "Safe iframe") != null);
-    // try testing.expect(std.mem.indexOf(u8, result, "Safe - empty sandbox") != null);
-
-    // // Should remove unsafe iframes
-    // try testing.expect(std.mem.indexOf(u8, result, "Unsafe - no sandbox") == null);
-    // try testing.expect(std.mem.indexOf(u8, result, "Unsafe - dangerous src") == null);
 }
 
-// -----------------[TODO] ----------------
 test "comprehensive sanitization modes" {
     const allocator = testing.allocator;
 
@@ -707,7 +707,6 @@ test "comprehensive sanitization modes" {
         \\<template><script>alert('XSS');</script><li id="{}">Item-"{}"</li></template>
     ;
 
-    // print("\n=== Comprehensive Sanitization Test ===\n", .{});
 
     // Test 1: .minimum mode (minimal sanitization - only truly dangerous content)
     {
@@ -720,7 +719,6 @@ test "comprehensive sanitization modes" {
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
 
-        // print("\n=== .minimum mode (minimal sanitization) ===\n", .{});
 
         // Should preserve most content including scripts and custom elements
         try testing.expect(std.mem.indexOf(u8, result, "script") != null);
@@ -753,7 +751,6 @@ test "comprehensive sanitization modes" {
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
 
-        // print("\n=== .strict mode (secure, no custom elements) ===\n", .{});
 
         // Should remove dangerous content
         try testing.expect(std.mem.indexOf(u8, result, "script") == null);
@@ -798,7 +795,6 @@ test "comprehensive sanitization modes" {
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
 
-        // print("\n=== .permissive mode (custom elements enabled) ===\n", .{});
 
         // Should still remove dangerous content
         try testing.expect(std.mem.indexOf(u8, result, "script") == null);
@@ -847,7 +843,6 @@ test "comprehensive sanitization modes" {
         const result = try z.outerNodeHTML(allocator, body);
         defer allocator.free(result);
 
-        // print("\n=== .custom mode (comments preserved, scripts allowed) ===\n", .{});
 
         // Should preserve comments and scripts
         try testing.expect(std.mem.indexOf(u8, result, "malicious comment") != null);

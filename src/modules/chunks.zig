@@ -26,7 +26,7 @@ extern "c" fn lxb_html_document_parse_chunk(document: *z.HTMLDocument, chunk: [*
 ///
 /// Process the chunks on-the-fly with `Stream.processChunk()`.
 ///
-/// You may want to
+/// Typical workflow: init → beginParsing → processChunk (multiple) → endParsing → getDocument
 ///
 /// Exposes:
 /// - `init`: create a new document
@@ -53,6 +53,10 @@ pub const Stream = struct {
     allocator: std.mem.Allocator,
     parsing_active: bool = false,
 
+    /// [chunks] Initialize a new stream parser
+    /// 
+    /// Creates a new HTML document and parser for streaming processing.
+    /// Call deinit() and destroyDocument() when done.
     pub fn init(allocator: std.mem.Allocator) !Stream {
         const doc = z.createDocument() catch return Err.DocCreateFailed;
         return .{
@@ -62,14 +66,20 @@ pub const Stream = struct {
         };
     }
 
+    /// [chunks] Clean up the stream parser resources
+    /// 
+    /// Ends parsing if active and destroys the parser.
+    /// Document must be destroyed separately using destroyDocument().
     pub fn deinit(self: *Stream) void {
         if (self.parsing_active) {
             _ = lxb_html_document_parse_chunk_end(self.doc);
             lxb_html_parser_destroy(self.parser);
         }
-        // z.destroyDocument(self.doc);
     }
 
+    /// [chunks] Begin parsing HTML chunks
+    /// 
+    /// Must be called before processChunk(). Fails if parsing is already active.
     pub fn beginParsing(self: *Stream) !void {
         if (self.parsing_active) {
             return Err.ChunkBeginFailed;
@@ -78,13 +88,18 @@ pub const Stream = struct {
         if (lxb_html_document_parse_chunk_begin(self.doc) != 0) {
             return Err.ChunkBeginFailed;
         }
-        self.parsing_active = true;
+        
         if (lxb_html_parser_init(self.parser) != z._OK) {
             return Err.ParserInitFailed;
         }
+        
         self.parsing_active = true;
     }
 
+    /// [chunks] Process a chunk of HTML
+    /// 
+    /// Parsing must be active (call beginParsing() first). 
+    /// Chunks can be any size and can split HTML tags/content.
     pub fn processChunk(self: *Stream, html_chunk: []const u8) !void {
         if (!self.parsing_active) {
             return Err.ChunkProcessFailed;
@@ -102,6 +117,10 @@ pub const Stream = struct {
         }
     }
 
+    /// [chunks] End parsing and finalize the document
+    /// 
+    /// Must be called after all chunks are processed to complete parsing.
+    /// Fails if parsing is not active.
     pub fn endParsing(self: *Stream) !void {
         if (!self.parsing_active) {
             return Err.ChunkEndFailed;
@@ -113,6 +132,10 @@ pub const Stream = struct {
         self.parsing_active = false;
     }
 
+    /// [chunks] Get the parsed HTML document
+    /// 
+    /// Returns the document containing all processed chunks.
+    /// Document must be destroyed with destroyDocument() when done.
     pub fn getDocument(self: *Stream) *z.HTMLDocument {
         return self.doc;
     }
@@ -163,7 +186,6 @@ test "chunks1" {
         "<body><h1>Hello</h1><p>World!</p></body>",
     );
 
-    // z.printDocumentStructure(doc);
 }
 
 test "chunk parsing comprehensive" {
@@ -280,7 +302,6 @@ test "parse interpolate" {
         "</tr></thead><tbody>",
     };
     for (streams) |chunk| {
-        // print("chunk:  {s}\n", .{chunk});
         try streamer.processChunk(chunk);
     }
 
@@ -291,12 +312,10 @@ test "parse interpolate" {
             .{ i, i, i },
         );
         defer allocator.free(li);
-        // print("chunk:  {s}\n", .{li});
 
         try streamer.processChunk(li);
     }
     const end_chunk = "</tbody></table></body></html>";
-    // print("chunk:  {s}\n", .{end_chunk});
     try streamer.processChunk(end_chunk);
     try streamer.endParsing();
 
