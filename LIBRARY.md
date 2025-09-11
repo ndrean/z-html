@@ -1,4 +1,4 @@
-# Z-HTML Library Usage
+# Zexplorer Library Usage
 
 ## Build Library
 ```bash
@@ -14,17 +14,17 @@ git submodule add https://github.com/your-repo/z-html.git deps/z-html
 
 ### 2. In your `build.zig`
 ```zig
-const zhtml_dep = b.dependency("z-html", .{
+const zhtml_dep = b.dependency("zexplorer", .{
     .target = target,
     .optimize = optimize,
 });
 
-exe.root_module.addImport("zhtml", zhtml_dep.module("zhtml"));
+exe.root_module.addImport("zexplorer", zhtml_dep.module("zexplorer"));
 ```
 
 ### 3. In your code
 ```zig
-const z = @import("zhtml");
+const z = @import("zexplorer");
 
 const doc = try z.createDocFromString("<div>Hello</div>");
 defer z.destroyDocument(doc);
