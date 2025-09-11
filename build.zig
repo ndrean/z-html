@@ -32,6 +32,9 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         },
     );
+    
+    // Link the module to the wrapper library so consumers get C dependencies
+    zhtml_module.linkLibrary(wrapper_lib);
     b.installArtifact(wrapper_lib);
 
     // Main executable
