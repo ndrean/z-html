@@ -402,5 +402,5 @@ pub fn get(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
 // Simple conditional print - always use debug print for reliability
 pub const print = switch (builtin.mode) {
     .Debug => std.debug.print,
-    else => std.debug.print, // to be improved later
+    else => std.debug.print,
 };
