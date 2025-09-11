@@ -5,5 +5,3 @@
 .DS_Store
 /kcov-output/
 /.lexical/
-.gitignore
-CLAUDE.md
