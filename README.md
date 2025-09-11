@@ -14,7 +14,7 @@ The primitives exposed here stay as close as possible to `JavaScript` semantics.
 
 This project exposes a significant / essential subset of all available `lexbor` functions:
 
-- Direct parsing or  with a parser engine (document or fragment context-aware)
+- Direct parsing or parsing with a parser engine (document or fragment context-aware)
 - streaming and chunk processing
 - Serialization
 - Sanitization
@@ -38,6 +38,58 @@ When a node is NOT attached to any document, you must manually destroy it.
 Some functions borrow memory from `lexbor` for zero-copy operations: their result is consumed immediately.
 
 We opted for the following convention: add `_zc` (for _zero_copy_) to the **non allocated** version of a function. For example, you can get the qualifiedName of an HTMLElement with the allocated version `qualifiedName(allocator, node)` or by mapping to `lexbor` memory with `qualifiedName_zc(node)`. The non-allocated must be consumed immediately whilst the allocated result can outlive the calling function.
+
+<hr>
+
+## Example: Create document and parse
+
+You have two methods available.
+
+1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+
+```cpp
+const z = @import("zexplorer");
+
+const doc: *HTMLDocument = try z.createDocument();
+defer z.destroyDocument(doc);
+
+try z.parseString(doc, "<div></div>");
+const body: *DomNode = z.bodyNode(doc).?;
+
+// you can create programmatically and append elements to a node
+const p: *HTMLElement = try z.createElement(doc, "p");
+z.appendChild(body, z.elementToNode(p));
+```
+
+Your document now contains this HTML:
+
+```html
+<head></head>
+<body>
+  <div></div>
+  <p></p>
+</body>
+```
+
+You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
+
+```cpp
+const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
+defer z.destroyDocument(doc);
+```
+
+2. You have the _parser engine_ 
+
+```cpp
+var parser = try z.Parser.init(allocator);
+defer parser.deinit();
+const doc = try parser.parse("<div><p></p></div>");
+defer z.destroyDocument(doc);
+```
+
+With `lexbor_2.5.0`, prefer to `createDocument` and `parseString(doc, html)`.
+
+If you target a specific node, use `setInnerHTML(element, new_html_String_content)`.
 
 <hr>
 
@@ -135,7 +187,7 @@ a:link, a:visited {
 
 ## Example: scan a page for potential malicious content
 
-The intent is to highlight potential XSS threats. It works by parsing the string into a fragment. When a HTMLElement gets an unknow attribute, its colour is white and the attribute value is highlighted in RED.
+The intent is to highlight potential XSS threats. It works by parsing the string into a fragment. When a HTMLElement gets an unknown attribute, its colour is white and the attribute value is highlighted in RED.
 
 Let's parse and print the following HTML string:
 
@@ -191,7 +243,7 @@ You can create a sanitized document with the parser (a ready-to-use parsing engi
 var parser = try z.Parser.init(testing.allocator);
 defer parser.deinit();
 
-const doc = try parser.parse(body, html, .body, .permissive);
+const doc = try parser.parse(html, .none);
 defer z.destroyDocument(doc);
 ```
 
@@ -346,134 +398,81 @@ std.debug.assert(!footer_token_list.contains("new-footer"));
 
 The library provides both DOM-based and string-based HTML normalization to clean up whitespace and comments.
 
-Some results:
+DOM-based normalization works on parsed documents and provides browser-like behavior. It is the best choice.
+
+We take the example below:
+
+```cpp
+const doc = try z.createDocument();
+defer z.destroyDocument(doc);
+
+const messy_html = 
+    \\<div>
+    \\<!-- comment -->
+    \\
+    \\<p>Content</p>
+    \\
+    \\<pre>  preserve  this  </pre>
+    \\
+    \\</div>
+;
+```
+
+```cpp
+const expected = "<div><!-- comment --><p>Content</p><pre>  preserve  this  </pre></div>";
+```
+
+Dom-base normalization:
+
+```cpp
+try z.parseString(doc, messy_html);
+
+const body_elt1 = z.bodyElement(doc).?;
+try z.normalizeDOM(gpa, body_elt1);
+
+const result1 = try z.innerHTML(gpa, body_elt1);
+defer gpa.free(result1);
+
+std.debug.assert(std.mem.eql(u8, expected, result1));
+```
+
+String-based "pre-normalization":
+
+```cpp
+const cleaned = try z.normalizeHtmlStringWithOptions(
+    gpa,
+    messy_html,
+    .{ .remove_comments = false },
+);
+defer gpa.free(cleaned);
+
+std.debug.assert(std.mem.eql(u8, cleaned, result1));
+
+try z.parseString(doc, cleaned);
+const body_elt2 = z.bodyElement(doc).?;
+const result2 = try z.innerHTML(gpa, body_elt2);
+defer gpa.free(result2);
+
+std.debug.assert(std.mem.eql(u8, result2, result1));
+```
+
+Some results shown in the _ main.zig_  file of parsing a 38kB HTML string (average 500 iterations using `std.heap.c_allocator` and `-release=fast`).
+
+To parse a 38kB string, it takes 50µs on average.
+
+The overhead of normalization:
 
 ```txt
 --- Speed Results ---
-new doc:           normString    -> parseString :       0.41 ms/op, 1110.7 MB/s
-parser, new doc:   normString    -> parser.append:      0.50 ms/op, 1364.2 MB/s
-parser:  (new doc: parser.parse  -> DOMnorm:            0.08 ms/op,  218.7 MB/s
-```
-
-### DOM-based Normalization
-
-DOM-based normalization works on parsed documents and provides browser-like behavior:
-
-```cpp
-const html = 
-    \\<div>
-    \\  <!-- comment -->
-    \\  <p>Text with   spaces</p>
-    \\  <pre>  preserve  whitespace  </pre>
-    \\  
-    \\  <script>
-    \\    console.log('preserve script content');
-    \\  </script>
-    \\</div>
-;
-
-const doc = try z.createDocFromString(html);
-defer z.destroyDocument(doc);
-const body = z.bodyElement(doc).?;
-
-// Standard browser-like normalization (removes collapsible whitespace)
-try z.normalizeDOM(allocator, body);
-
-// Or with options to remove comments
-try z.normalizeDOMwithOptions(allocator, body, .{ .skip_comments = true });
-
-// For clean terminal output (aggressive - removes ALL whitespace-only nodes)
-try z.normalizeDOMForDisplay(allocator, body);
-
-const result = try z.innerHTML(allocator, body);
-defer allocator.free(result);
-// Result: clean HTML with normalized whitespace
-```
-
-### String-based Normalization
-
-For faster processing when you don't need full DOM parsing:
-
-```cpp
-const messy_html = 
-    \\<div>
-    \\  <!-- comment -->
-    \\  
-    \\  <p>Content</p>
-    \\  
-    \\  <pre>  preserve  this  </pre>
-    \\  
-    \\</div>
-;
-
-// Basic normalization (removes whitespace-only text nodes)
-const normalized = try z.normalizeHtmlString(allocator, messy_html);
-defer allocator.free(normalized);
-
-// With options for comment handling
-const clean = try z.normalizeHtmlStringWithOptions(allocator, messy_html, .{
-    .remove_comments = true,
-    .remove_whitespace_text_nodes = true,
-});
-defer allocator.free(clean);
-```
-
-You can also "clean" text node content:
-
-```cpp
-// Text normalization (collapses whitespace)
-const text = "  Hello   world!  \n\n  ";
-const normalized_text = try z.normalizeText(allocator, text);
-defer allocator.free(normalized_text);
-// Result: "Hello world!"
+createDoc -> parseString:                        0.05 ms/op, 830 kB/s
+new parser -> new doc = parser.parse -> DOMnorm:     0.06 ms/op, 660 kB/s
+createDoc -> normString -> parseString:   0.08 ms/op, 470 kB/s
 ```
 
 <hr>
 
-## Other examples
 
-You have several methods available.
-
-1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
-
-```cpp
-const z = @import("zexplorer");
-
-const doc: *HTMLDocument = try z.createDocument();
-defer z.destroyDocument(doc);
-try z.parseString(doc, "<div></div>");
-const body: *DomNode = z.bodyNode(doc).?;
-
-// you can create programmatically and append elemments to a node
-const p: *HTMLElement = try z.createElement(doc, "p");
-z.appendChild(body, z.elementToNode(p));
-```
-
-Your document now contains this HTML:
-
-```html
-<head></head>
-<body>
-  <div></div>
-  <p></p>
-</body>
-```
-
-2. You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
-
-```cpp
-const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
-defer z.destroyDocument(doc);
-```
-
-3. You have the parser engine as seen before
-
-```cpp
-var parser = try z.Parser.init(allocator);
-defer parser.deinit();
-const doc = try parser.parse("<div><p></p></div>");
-defer z.destroyDocument(doc);
-```
+## Other examples in _main.zig_
 
 The file _main.zig_ shows more use cases with parsing and serialization as well as the tests  (`setInnerHTML`, `setInnerSafeHTML`, `insertAdjacentElement` or `insertAdjacentHTML`...)
 

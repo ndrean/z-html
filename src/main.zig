@@ -2,16 +2,28 @@ const std = @import("std");
 const builtin = @import("builtin");
 const z = @import("root.zig");
 const native_os = builtin.os.tag;
-const print = std.debug.print;
+// const print = std.debug.print;
 
+const W = std.Io.Writer;
+// const print = switch (builtin.mode) {
+//     .Debug => std.debug.print,
+//     else => std.Io.Writer.print,
+// };
+const print = std.debug.print;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
 pub fn main() !void {
+    // Arena allocator setup for benchmarking
+    // var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    // defer arena.deinit();
+    // const gpa = arena.allocator();
+
+    // Original allocator logic (commented out for arena test)
     const gpa, const is_debug = gpa: {
         if (native_os == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.c_allocator, false },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.page_allocator, false },
         };
     };
     defer if (is_debug) {
@@ -29,6 +41,7 @@ pub fn main() !void {
     // try demoSearchComparison(gpa);
     // try demoSuspiciousAttributes(gpa);
     try normalizeString_DOM_parsing_bencharmark(gpa);
+    try demoNormalizer(gpa);
 }
 
 /// use `parseString` or `createDocFromString` to create a document with a BODY element populated by the input string
@@ -54,6 +67,57 @@ fn demoSimpleParsing(_: std.mem.Allocator) !void {
         const tag_name = z.nodeName_zc(div);
         std.debug.assert(std.mem.eql(u8, tag_name, "DIV"));
     }
+}
+
+fn demoNormalizer(gpa: std.mem.Allocator) !void {
+    const messy_html =
+        \\<div>
+        \\<!-- comment -->
+        \\
+        \\<p>Content</p>
+        \\
+        \\<pre>  preserve  this  </pre>
+        \\
+        \\</div>
+    ;
+
+    // const expected = "<div><!-- comment --><p>Content</p><pre>  preserve  this  </pre></div>";
+    const expected_noc = "<div><p>Content</p><pre>  preserve  this  </pre></div>";
+
+    const doc = try z.createDocument();
+    defer z.destroyDocument(doc);
+
+    // -- DOM-based normalization
+    try z.parseString(doc, messy_html);
+
+    const body_elt1 = z.bodyElement(doc).?;
+    try z.normalizeDOMwithOptions(
+        gpa,
+        body_elt1,
+        .{ .skip_comments = true },
+    );
+
+    const result1 = try z.innerHTML(gpa, body_elt1);
+    defer gpa.free(result1);
+
+    std.debug.assert(std.mem.eql(u8, expected_noc, result1));
+
+    // -- string normalization
+    const cleaned = try z.normalizeHtmlStringWithOptions(
+        gpa,
+        messy_html,
+        .{ .remove_comments = true },
+    );
+    defer gpa.free(cleaned);
+    print("\n\n Normalized sring: {s}\n\n", .{cleaned});
+    std.debug.assert(std.mem.eql(u8, cleaned, result1));
+
+    try z.parseString(doc, cleaned);
+    const body_elt2 = z.bodyElement(doc).?;
+    const result2 = try z.innerHTML(gpa, body_elt2);
+    defer gpa.free(result2);
+
+    std.debug.assert(std.mem.eql(u8, result2, result1));
 }
 
 /// use the `Parser` engine to parse HTML with template support
@@ -517,450 +581,6 @@ fn zexplore_example_com(allocator: std.mem.Allocator, url: []const u8) !void {
     }
 }
 
-// fn runPerformanceBenchmark(allocator: std.mem.Allocator) !void {
-//     // Create ~300KB HTML document by building it dynamically
-//     var html_builder: std.ArrayList(u8) = .empty;
-//     defer html_builder.deinit(allocator);
-
-//     try html_builder.appendSlice(allocator,
-//         \\<html>
-//         \\  <head>
-//         \\    <title>Large Performance Test Document</title>
-//         \\    <meta charset="UTF-8">
-//         \\    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-//         \\    <link rel="stylesheet" href="styles.css">
-//         \\    <script src="app.js"></scrip>
-//         \\  </head>
-//         \\  <body class="main-body">
-//         \\    <header id="main-header" class="sticky-header">
-//         \\      <nav class="navbar">
-//         \\        <ul class="nav-list">
-//         \\          <li><a href="/" class="nav-link active">Home</a></li>
-//         \\          <li><a href="/about" class="nav-link">About</a></li>
-//         \\          <li><a href="/contact" class="nav-link">Contact</a></li>
-//         \\          <li><a href="/products" class="nav-link">Products</a></li>
-//         \\          <li><a href="/services" class="nav-link">Services</a></li>
-//         \\        </ul>
-//         \\      </nav>
-//         \\    </header>
-//     );
-
-//     // Duplicate main content sections to reach ~100KB
-//     const section_template =
-//         \\    <main class="content-wrapper">
-//         \\      <article class="blog-post">
-//         \\        <h1>Performance Test Section</h1>
-//         \\        <p class="intro">This is a section of our <strong>large-scale</strong> HTML document
-//         \\           designed to test <em>performance</em> of our tuple serialization system with
-//         \\           substantial content that simulates real-world usage patterns.</p>
-//         \\        <!-- Performance test comment -->
-//         \\        <div class="content-section">
-//         \\          <h2>Features We're Testing</h2>
-//         \\          <ul class="feature-list">
-//         \\            <li data-feature="speed">Ultra-fast serialization</li>
-//         \\            <li data-feature="memory">Memory-efficient processing</li>
-//         \\            <li data-feature="accuracy">Accurate round-trip conversion</li>
-//         \\            <li data-feature="scalability">Scalability under load</li>
-//         \\            <li data-feature="reliability">Reliable error handling</li>
-//         \\          </ul>
-//         \\        </div>
-//         \\        <div class="data-table">
-//         \\          <table class="performance-table">
-//         \\            <thead>
-//         \\              <tr><th>Metric</th><th>Value</th><th>Benchmark</th></tr>
-//         \\            </thead>
-//         \\            <tbody>
-//         \\              <tr><td>Latency</td><td>0.5ms</td><td>Excellent</td></tr>
-//         \\              <tr><td>Throughput</td><td>1000k ops/sec</td><td>Outstanding</td></tr>
-//         \\              <tr><td>Memory</td><td>256KB</td><td>Optimal</td></tr>
-//         \\            </tbody>
-//         \\          </table>
-//         \\        </div>
-//         \\        <form class="feedback-form" method="post" action="/feedback">
-//         \\          <fieldset>
-//         \\            <legend>Section Feedback</legend>
-//         \\            <div class="form-group">
-//         \\              <label for="name">Name:</label>
-//         \\              <input type="text" id="name" name="name" required placeholder="Your name">
-//         \\            </div>
-//         \\            <div class="form-group">
-//         \\              <label for="email">Email:</label>
-//         \\              <input type="email" id="email" name="email" required placeholder="your@email.com">
-//         \\            </div>
-//         \\            <div class="form-group">
-//         \\              <label for="rating">Rating:</label>
-//         \\              <select id="rating" name="rating">
-//         \\                <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
-//         \\                <option value="4">⭐⭐⭐⭐ Very Good</option>
-//         \\                <option value="3">⭐⭐⭐ Good</option>
-//         \\                <option value="2">⭐⭐ Fair</option>
-//         \\                <option value="1">⭐ Poor</option>
-//         \\              </select>
-//         \\            </div>
-//         \\            <div class="form-group">
-//         \\              <textarea name="comments" rows="4" cols="50"
-//         \\                        placeholder="Your detailed feedback..."></textarea>
-//         \\            </div>
-//         \\            <button type="submit" class="btn-primary">Submit Feedback</button>
-//         \\          </fieldset>
-//         \\        </form>
-//         \\      </article>
-//         \\      <aside class="sidebar">
-//         \\        <div class="widget news">
-//         \\          <h3>Latest News</h3>
-//         \\          <ul>
-//         \\            <li><a href="/news/1">Performance improvements</a></li>
-//         \\            <li><a href="/news/2">Memory optimization</a></li>
-//         \\            <li><a href="/news/3">Better DOM handling</a></li>
-//         \\            <li><a href="/news/4">Enhanced error reporting</a></li>
-//         \\          </ul>
-//         \\        </div>
-//         \\        <div class="widget tags">
-//         \\          <h3>Tags</h3>
-//         \\          <span class="tag">performance</span>
-//         \\          <span class="tag">html</span>
-//         \\          <span class="tag">parsing</span>
-//         \\          <span class="tag">optimization</span>
-//         \\          <span class="tag">benchmarks</span>
-//         \\        </div>
-//         \\      </aside>
-//         \\    </main>
-//     ;
-
-//     // Add 100 sections to reach ~100KB
-//     for (1..101) |_| {
-//         try html_builder.appendSlice(allocator, section_template);
-//     }
-
-//     try html_builder.appendSlice(allocator,
-//         \\    <footer class="site-footer">
-//         \\      <div class="footer-content">
-//         \\        <p>&copy; 2024 Comprehensive Performance Test Suite. All rights reserved.</p>
-//         \\        <div class="footer-links">
-//         \\          <a href="/privacy">Privacy Policy</a> |
-//         \\          <a href="/terms">Terms of Service</a> |
-//         \\          <a href="/api">API Documentation</a> |
-//         \\          <a href="/support">Technical Support</a> |
-//         \\          <a href="/docs">Documentation</a>
-//         \\        </div>
-//         \\        <div class="footer-stats">
-//         \\          <span>Total operations tested: 1M+</span>
-//         \\          <span>Average response time: 0.3ms</span>
-//         \\          <span>Memory usage: <128KB</span>
-//         \\        </div>
-//         \\      </div>
-//         \\    </footer>
-//         \\  </body>
-//         \\</html>
-//     );
-
-//     const large_html = try html_builder.toOwnedSlice(allocator);
-//     defer allocator.free(large_html);
-
-//     const iterations = 100;
-//     print("\n=====================================================================\n", .{});
-//     print("\nLarge HTML conversions:  HTML<->DOM, DOM->Tuple, Tuple->HTML\n", .{});
-//     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-//     print("Iterations: {d}\n", .{iterations});
-
-//     var timer = try std.time.Timer.start();
-
-//     // Test 1: [HTMLstring → DOM]
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         const doc = try z.createDocFromString(large_html);
-//         z.destroyDocument(doc);
-//     }
-//     const html_to_dom_time = timer.read();
-
-//     // === Test 1.b: [Normalize-HTMLstring → DOM]
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
-//             .remove_comments = true,
-//             .remove_whitespace_text_nodes = true,
-//         });
-//         const doc = try z.createDocFromString(normalized);
-//         allocator.free(normalized);
-//         z.destroyDocument(doc);
-//     }
-//     _ = timer.read(); // norm_html_to_dom_time unused
-
-//     // Parse once for other tests
-//     const doc = try z.createDocFromString(large_html);
-//     defer z.destroyDocument(doc);
-//     const body_element = z.bodyElement(doc).?;
-
-//     // Test 2.b: [DOM -> Tuple]
-//     var tuple_v2_result: []u8 = undefined;
-//     timer.reset();
-//     for (0..iterations) |i| {
-//         if (i > 0) allocator.free(tuple_v2_result);
-
-//         tuple_v2_result = try tree.domToTupleString(allocator, doc);
-//     }
-//     const dom_to_tuple_time = timer.read();
-
-//     // === Test 2: [DOM-Normalize → Tuple]
-//     var tuple_v21_result: []u8 = undefined;
-//     timer.reset();
-//     for (0..iterations) |i| {
-//         if (i > 0) allocator.free(tuple_v21_result);
-//         const temp_doc = try z.createDocFromString(large_html);
-//         const temp_body_element = try z.bodyElement(temp_doc);
-
-//         try z.normalizeDOMwithOptions(
-//             allocator,
-//             temp_body_element,
-//             .{
-//                 .remove_whitespace_text_nodes = true,
-//                 .skip_comments = true,
-//             },
-//         );
-//         tuple_v21_result = try tree.domToTupleString(allocator, temp_doc);
-//         z.destroyDocument(temp_doc);
-//     }
-//     const norm_dom_to_tuple_time = timer.read();
-
-//     // === Test2.b : [normalized-DOM -> Tuple]
-//     var tuple_v22_result: []u8 = undefined;
-//     timer.reset();
-//     for (0..iterations) |i| {
-//         if (i > 0) allocator.free(tuple_v22_result);
-
-//         const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
-//             .remove_comments = true,
-//             .remove_whitespace_text_nodes = true,
-//         });
-//         const temp_doc = try z.createDocFromString(normalized);
-//         allocator.free(normalized);
-
-//         tuple_v22_result = try tree.domToTupleString(allocator, temp_doc);
-//         z.destroyDocument(temp_doc);
-//     }
-//     const pre_norm_dom_to_tuple_time = timer.read();
-
-//     // === Test 3: [Tuple → HTMLstring]
-//     timer.reset();
-//     var html_result: []u8 = undefined;
-//     for (0..iterations) |i| {
-//         if (i > 0) allocator.free(html_result);
-//         html_result = try tree.tupleStringToHtml(allocator, tuple_v22_result);
-//     }
-//     const tuple_to_html_time = timer.read();
-
-//     // === Test 4: [DOM -> HTML] - Isolated innerHTML performance
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         const serialized_html = try z.innerHTML(allocator, body_element);
-//         allocator.free(serialized_html);
-//     }
-//     const pure_dom_to_html_time = timer.read();
-
-//     // === Test 4.b: [DOM -> HTML] with parsing overhead (original test)
-//     const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
-//         .remove_comments = true,
-//         .remove_whitespace_text_nodes = true,
-//     });
-
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         const temp_doc = try z.createDocFromString(normalized);
-//         const temp_body_element = try z.bodyElement(temp_doc);
-//         const serialized_html = try z.innerHTML(allocator, temp_body_element);
-//         allocator.free(serialized_html);
-//         z.destroyDocument(temp_doc);
-//     }
-//     const dom_to_html_time = timer.read();
-
-//     const tuple_len = tuple_v2_result.len;
-//     const norm_tuple_len = tuple_v22_result.len;
-//     allocator.free(normalized);
-//     allocator.free(tuple_v2_result);
-//     allocator.free(tuple_v22_result);
-//     allocator.free(html_result);
-
-//     // === Results ===
-//     const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
-
-//     print("\n--- Performance Results (100 iterations) ---\n", .{});
-
-//     const html2domlxb = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / 1000.0);
-//     print("HTML → DOM (lexbor):       {d:.2} ms/op, {d:.3} MB/s\n", .{ @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), html2domlxb });
-
-//     const pre_norm_dom_tuple = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(pre_norm_dom_to_tuple_time)) / ns_to_ms / 1000.0);
-//     print("pre-norm-DOM -> Tuple.     {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(pre_norm_dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), pre_norm_dom_tuple });
-
-//     const pure_dom2html = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(pure_dom_to_html_time)) / ns_to_ms / 1000.0);
-//     print("DOM → HTML (pure innerHTML): {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(pure_dom_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), pure_dom2html });
-
-//     const dom2html = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(dom_to_html_time)) / ns_to_ms / 1000.0);
-//     print("DOM → HTML (with parsing):   {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(dom_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), dom2html });
-
-//     const norm_dom2tuple = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(norm_dom_to_tuple_time)) / ns_to_ms / 1000.0);
-//     print("DOM-Norm → Tuple:           {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(norm_dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), norm_dom2tuple });
-
-//     const dom2tuple = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / 1000.0);
-//     print("DOM → Tuple:               {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), dom2tuple });
-
-//     print("Tuple size: without norm {d} bytes, with norm {d} bytes\n", .{ tuple_len, norm_tuple_len });
-
-//     const tuple2Html = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0 * @as(f64, @floatFromInt(iterations))) / (@as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / 1000.0);
-//     print("Tuple → HTML:             {d:.2} ms/op, {d:.1} MB/s\n", .{ @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)), tuple2Html });
-
-//     // print("\n--- BEAM Scheduler Compliance ---\n", .{});
-//     // const dom_to_tuple_ms = @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
-//     // const tuple_to_html_ms = @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
-
-//     // print("DOM → Tuple: {s} (limit: 1ms)\n", .{if (dom_to_tuple_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
-//     // print("Tuple → HTML: {s} (limit: 1ms)\n", .{if (tuple_to_html_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
-
-//     // print("\n--- Memory Usage ---\n", .{});
-//     // print("Original HTML:      {d} bytes ({d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-//     // print("Tuple string:       {d} bytes ({d:.1}KB)\n", .{ tuple_result.len, @as(f64, @floatFromInt(tuple_result.len)) / 1024.0 });
-//     // print("Reconstructed HTML: {d} bytes ({d:.1}KB)\n", .{ html_result.len, @as(f64, @floatFromInt(html_result.len)) / 1024.0 });
-
-//     // const expansion_ratio = @as(f64, @floatFromInt(tuple_result.len)) / @as(f64, @floatFromInt(large_html.len));
-//     // print("Tuple size ratio:   {d:.2}x original HTML size\n", .{expansion_ratio});
-
-//     // // Calculate throughput for key operation
-//     // const tuple_to_html_throughput = (@as(f64, @floatFromInt(large_html.len)) / 1024.0 / 1024.0) / (tuple_to_html_ms / 1000.0);
-//     // print("\n--- Throughput Analysis ---\n", .{});
-//     // print("Tuple → HTML Throughput: {d:.1} MB/s\n", .{tuple_to_html_throughput});
-// }
-
-// fn runNormalizeBenchmark(allocator: std.mem.Allocator) !void {
-//     // var html_builder: std.ArrayList(u8) = .empty;
-//     const initBuffer = try allocator.alloc(u8, 25_000);
-//     var html_builder: std.mem.Allocating = .initOwnedSlice(allocator, initBuffer);
-//     defer html_builder.deinit();
-
-//     // Pre-allocate capacity for the HTML builder (estimate ~25KB for this test)
-//     // try html_builder.ensureTotalCapacity(allocator, 25_000);
-
-//     try html_builder.writer.writeAll(
-//         \\<html>
-//         \\<body>
-//         \\  <div class="container">
-//         \\    <header>
-//         \\      <h1>   Performance Test Document   </h1>
-//         \\      <nav>
-//         \\        <ul>
-//     );
-
-//     // Add many elements with whitespace
-//     for (0..100) |i| {
-//         try html_builder.appendSlice(allocator,
-//             \\          <li>
-//             \\            <a href="/page
-//         );
-
-//         const num_str = try std.fmt.allocPrint(allocator, "{d}", .{i});
-//         defer allocator.free(num_str);
-//         try html_builder.appendSlice(allocator, num_str);
-
-//         try html_builder.appendSlice(allocator,
-//             \\">   Link
-//         );
-//         try html_builder.appendSlice(allocator, num_str);
-//         try html_builder.appendSlice(allocator,
-//             \\   </a>
-//             \\            <span>   Some text with    whitespace   </span>
-//             \\            <!-- comment with whitespace -->
-//             \\            <em>     emphasized text     </em>
-//             \\          </li>
-//         );
-//     }
-
-//     try html_builder.appendSlice(allocator,
-//         \\        </ul>
-//         \\      </nav>
-//         \\    </header>
-//         \\    <main>
-//         \\      <section>
-//         \\        <p>   This is a paragraph with    lots of    whitespace   </p>
-//         \\        <div>
-//         \\          <pre>   Preserve   this   whitespace   </pre>
-//         \\          <textarea>   Also preserve   this   </textarea>
-//         \\        </div>
-//         \\      </section>
-//         \\    </main>
-//         \\  </div>
-//         \\</body>
-//         \\</html>
-//     );
-
-//     const large_html = try html_builder.toOwnedSlice(allocator);
-//     defer allocator.free(large_html);
-
-//     const iterations = 100;
-//     const kb_size = (@as(f64, @floatFromInt(large_html.len)) / 1024.0);
-//     print("\n NORMALIZE PERFORMANCE BENCHMARK\n", .{});
-//     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, kb_size });
-//     print("Iterations: {d}\n", .{iterations});
-
-//     // var  doc = try z.createDocFromString(large_html);
-//     var doc: *z.HTMLDocument = undefined;
-//     defer z.destroyDocument(doc);
-
-//     var timer = try std.time.Timer.start();
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         doc = try z.createDocFromString(large_html);
-//         const body_elt = z.bodyElement(doc).?;
-//         _ = body_elt;
-//     }
-//     const parsing_time = @as(f64, @floatFromInt(timer.read()));
-
-//     // Test DOM-based normalization
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         doc = try z.createDocFromString(large_html);
-//         const body_elt = z.bodyElement(doc).?;
-
-//         try z.normalizeDOMwithOptions(
-//             allocator,
-//             body_elt,
-//             .{
-//                 .remove_whitespace_text_nodes = true,
-//                 .skip_comments = true,
-//             },
-//         );
-//     }
-//     const dom_total_time = @as(f64, @floatFromInt(timer.read()));
-
-//     // Test string-based normalization (no parsing needed)
-//     timer.reset();
-//     for (0..iterations) |_| {
-//         const normalized = try z.normalize.normalizeHtmlStringWithOptions(allocator, large_html, .{
-//             .remove_comments = true,
-//             .remove_whitespace_text_nodes = true,
-//         });
-//         allocator.free(normalized);
-//     }
-//     const string_time = @as(f64, @floatFromInt(timer.read()));
-
-//     const dom_normalize_time = dom_total_time - parsing_time;
-
-//     // Calculate MB/s properly
-//     const total_mb = (kb_size * @as(f64, @floatFromInt(iterations))) / 1024.0;
-//     const parsing_time_s = parsing_time / 1_000_000_000.0;
-//     const dom_normalize_time_s = dom_normalize_time / 1_000_000_000.0;
-//     const string_time_s = string_time / 1_000_000_000.0;
-
-//     const parsing_speed = total_mb / parsing_time_s;
-//     const dom_normalize_speed = total_mb / dom_normalize_time_s;
-//     const string_speed = total_mb / string_time_s;
-
-//     const speedup = dom_normalize_time_s / string_time_s;
-
-//     print("\n--- Results (Release Mode) ---\n", .{});
-//     print("Parsing processing speed:         {d:.1} MB/s ({d:.2} ms/op)\n", .{ parsing_speed, (parsing_time / @as(f64, @floatFromInt(iterations))) / 1_000_000.0 });
-//     print("Normalize via DOM processing:     {d:.1} MB/s ({d:.2} ms/op)\n", .{ dom_normalize_speed, (dom_normalize_time / @as(f64, @floatFromInt(iterations))) / 1_000_000.0 });
-//     print("String Normalize processing:      {d:.1} MB/s ({d:.2} ms/op)\n", .{ string_speed, (string_time / @as(f64, @floatFromInt(iterations))) / 1_000_000.0 });
-//     print("String vs DOM speedup:            {d:.1}x faster\n", .{speedup});
-// }
-
 fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
 
     // Create a medium-sized realistic page with lots of whitespace and comments
@@ -1103,7 +723,7 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     const medium_html = try html_builder.toOwnedSlice(allocator);
     defer allocator.free(medium_html);
 
-    const iterations = 100;
+    const iterations = 500;
     print("\n=== HTML parsing / normalization string vs DOM BENCHMARK----------------\n\n", .{});
     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ medium_html.len, @as(f64, @floatFromInt(medium_html.len)) / 1024.0 });
     print("Iterations: {d}\n", .{iterations});
@@ -1117,12 +737,12 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     for (0..iterations) |_| {
         // 1: Normalize HTML string (remove comments + whitespace)
         const normalized = try z.normalizeHtmlStringWithOptions(allocator, medium_html, .{
-            .remove_comments = true,
+            .remove_comments = false,
             .remove_whitespace_text_nodes = true,
         });
-        defer allocator.free(normalized);
         try z.parseString(doc0, normalized);
         try z.parseString(doc0, ""); // reset
+        allocator.free(normalized);
     }
     const html_normString_parse_into_a_doc = timer.read();
 
@@ -1138,7 +758,7 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
             .remove_comments = true,
             .remove_whitespace_text_nodes = true,
         });
-        defer allocator.free(normalized);
+        // defer allocator.free(normalized);
 
         try parser1.parseAndAppend(
             body_elt1.?,
@@ -1147,6 +767,7 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
             .none,
         );
         _ = try z.setInnerHTML(body_elt1.?, ""); // reset
+        allocator.free(normalized);
     }
     const html_normString_parser_append = timer.read();
 
@@ -1169,20 +790,164 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     }
     const html_parser_parse_into_new_DOM_norm_DOM = timer.read();
 
+    // Test 4: Fair comparison - fresh createDocFromString each iteration + DOMnorm
+    timer.reset();
+    for (0..iterations) |_| {
+        const doc4 = try z.createDocFromString(medium_html);
+        defer z.destroyDocument(doc4);
+        const body_elt4 = z.bodyElement(doc4);
+
+        try z.normalizeDOMwithOptions(
+            allocator,
+            body_elt4.?,
+            .{
+                .skip_comments = true,
+            },
+        );
+    }
+    const fresh_doc_DOMnorm = timer.read();
+
+    // Test 5: String normalization with fresh parsing each iteration
+    timer.reset();
+    // const doc5 = try z.createDocument();
+    // defer z.destroyDocument(doc5);
+    for (0..iterations) |_| {
+        const normalized = try z.normalizeHtmlStringWithOptions(allocator, medium_html, .{
+            .remove_comments = true,
+            .remove_whitespace_text_nodes = true,
+        });
+        defer allocator.free(normalized);
+        // try z.parseString(doc5, normalized);
+
+        const doc5 = try z.createDocFromString(normalized);
+        defer z.destroyDocument(doc5);
+    }
+    const fresh_normString_fresh_doc = timer.read();
+
+    // test 5b : reuse document for parsing normalized string
+    timer.reset();
+    const doc5 = try z.createDocument();
+    defer z.destroyDocument(doc5);
+    for (0..iterations) |_| {
+        const normalized = try z.normalizeHtmlStringWithOptions(allocator, medium_html, .{
+            .remove_comments = false,
+            .remove_whitespace_text_nodes = true,
+        });
+        defer allocator.free(normalized);
+        try z.parseString(doc5, normalized);
+
+        // const doc5 = try z.createDocFromString(normalized);
+        // defer z.destroyDocument(doc5);
+    }
+    const reuse_doc_normString_parse = timer.read();
+
     // Calculate performance metrics
     const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
-    const mb_size = @as(f64, @floatFromInt(medium_html.len)) / 1024.0 / 1024.0;
+    const kb_size = @as(f64, @floatFromInt(medium_html.len)) / 1024.0;
     const iter = @as(f64, @floatFromInt(iterations));
 
     const html_normString_parse_into_a_doc_ms = @as(f64, @floatFromInt(html_normString_parse_into_a_doc)) / ns_to_ms;
     const html_normString_parser_append_ms = @as(f64, @floatFromInt(html_normString_parser_append)) / ns_to_ms;
     const html_parser_parse_into_new_DOM_norm_DOM_ms = @as(f64, @floatFromInt(html_parser_parse_into_new_DOM_norm_DOM)) / ns_to_ms;
+    const fresh_doc_DOMnorm_ms = @as(f64, @floatFromInt(fresh_doc_DOMnorm)) / ns_to_ms;
+    const fresh_normString_fresh_doc_ms = @as(f64, @floatFromInt(fresh_normString_fresh_doc)) / ns_to_ms;
+    const reuse_doc_normString_parse_ms = @as(f64, @floatFromInt(reuse_doc_normString_parse)) / ns_to_ms;
 
     print("\n--- Speed Results ---\n", .{});
+    print("REUSED DOCS:\n", .{});
+    print("1. reused doc:     normString    -> parseString :       {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parse_into_a_doc_ms / iter, kb_size * iter / html_normString_parse_into_a_doc_ms });
 
-    print("new doc:           normString    -> parseString :       {d:.2} ms/op, {d:.1} MB/s\n", .{ html_normString_parse_into_a_doc_ms / iter, html_normString_parse_into_a_doc_ms / mb_size });
+    print("2. reused doc:     normString    -> parser.append:      {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parser_append_ms / iter, kb_size * iter / html_normString_parser_append_ms });
 
-    print("parser, new doc:   normString    -> parser.append:      {d:.2} ms/op, {d:.1} MB/s\n", .{ html_normString_parser_append_ms / iter, html_normString_parser_append_ms / mb_size });
+    print("3. fresh doc:      parser.parse  -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ html_parser_parse_into_new_DOM_norm_DOM_ms / iter, kb_size * iter / html_parser_parse_into_new_DOM_norm_DOM_ms });
 
-    print("parser:  (new doc: parser.parse  -> DOMnorm:            {d:.2} ms/op,  {d:.1} MB/s\n", .{ html_parser_parse_into_new_DOM_norm_DOM_ms / iter, html_parser_parse_into_new_DOM_norm_DOM_ms / mb_size });
+    print("\nFRESH DOCS (fair comparison):\n", .{});
+    print("4. fresh doc:      createDoc     -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_doc_DOMnorm_ms / iter, kb_size * iter / fresh_doc_DOMnorm_ms });
+
+    print("5. fresh doc:      normString    -> createDoc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_normString_fresh_doc_ms / iter, kb_size * iter / fresh_normString_fresh_doc_ms });
+
+    print("5b. reuse doc:  normString  -> parse:                   {d:.2} ms/op,  {d:.1} kB/s\n", .{ reuse_doc_normString_parse_ms / iter, kb_size * iter / reuse_doc_normString_parse_ms });
+
+    // Test 6: setInnerHTML with string normalization on fresh document
+    timer.reset();
+    for (0..iterations) |_| {
+        const doc6 = try z.createDocument();
+        defer z.destroyDocument(doc6);
+        try z.parseString(doc6, "<div id='target'></div>");
+
+        const target_elt = z.getElementById(z.bodyNode(doc6).?, "target").?;
+
+        const normalized = try z.normalizeHtmlStringWithOptions(allocator, medium_html, .{
+            .remove_comments = true,
+            .remove_whitespace_text_nodes = true,
+        });
+        defer allocator.free(normalized);
+
+        _ = try z.setInnerHTML(target_elt, normalized);
+    }
+    const setInnerHTML_normString_fresh_doc = timer.read();
+
+    // Test 7: setInnerHTML with DOM normalization on fresh document
+    timer.reset();
+    for (0..iterations) |_| {
+        const doc7 = try z.createDocument();
+        defer z.destroyDocument(doc7);
+        try z.parseString(doc7, "<div id='target'></div>");
+
+        const target_elt = z.getElementById(z.bodyNode(doc7).?, "target").?;
+        const new_elt = try z.setInnerHTML(target_elt, medium_html);
+
+        try z.normalizeDOMwithOptions(
+            allocator,
+            new_elt,
+            .{
+                .skip_comments = true,
+            },
+        );
+    }
+    const setInnerHTML_DOMnorm_fresh_doc = timer.read();
+
+    const setInnerHTML_normString_fresh_doc_ms = @as(f64, @floatFromInt(setInnerHTML_normString_fresh_doc)) / ns_to_ms;
+    const setInnerHTML_DOMnorm_fresh_doc_ms = @as(f64, @floatFromInt(setInnerHTML_DOMnorm_fresh_doc)) / ns_to_ms;
+
+    print("\nsetInnerHTML (fresh document):\n", .{});
+    print("6. setInnerHTML:   normString    -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_normString_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_normString_fresh_doc_ms });
+    print("7. setInnerHTML:   DOMnorm       -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_DOMnorm_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_DOMnorm_fresh_doc_ms });
+
+    // Test 8: Reused document + parseString (clear document each time)
+    timer.reset();
+    const reused_doc = try z.createDocument();
+    defer z.destroyDocument(reused_doc);
+    for (0..iterations) |_| {
+        try z.parseString(reused_doc, medium_html);
+    }
+    const reused_doc_parseString = timer.read();
+
+    // Test 9: Parser + parser.parse (new doc each time)
+    timer.reset();
+    var parser_reused = try z.Parser.init(allocator);
+    defer parser_reused.deinit();
+    for (0..iterations) |_| {
+        const doc9 = try parser_reused.parse(medium_html, .none);
+        defer z.destroyDocument(doc9);
+    }
+    const parser_parse_new_doc = timer.read();
+
+    // Test 10: createDocument + parseString each time
+    timer.reset();
+    for (0..iterations) |_| {
+        const doc10 = try z.createDocument();
+        defer z.destroyDocument(doc10);
+        try z.parseString(doc10, medium_html);
+    }
+    const createDoc_parseString = timer.read();
+
+    const reused_doc_parseString_ms = @as(f64, @floatFromInt(reused_doc_parseString)) / ns_to_ms;
+    const parser_parse_new_doc_ms = @as(f64, @floatFromInt(parser_parse_new_doc)) / ns_to_ms;
+    const createDoc_parseString_ms = @as(f64, @floatFromInt(createDoc_parseString)) / ns_to_ms;
+
+    print("\nPARSING COMPARISON:\n", .{});
+    print("8. reused doc:     parseString   (clear each time):     {d:.2} ms/op,  {d:.1} kB/s\n", .{ reused_doc_parseString_ms / iter, kb_size * iter / reused_doc_parseString_ms });
+    print("9. parser.parse:   new doc       (each time):          {d:.2} ms/op,  {d:.1} kB/s\n", .{ parser_parse_new_doc_ms / iter, kb_size * iter / parser_parse_new_doc_ms });
+    print("10. createDoc:     parseString   (fresh each time):    {d:.2} ms/op,  {d:.1} kB/s\n", .{ createDoc_parseString_ms / iter, kb_size * iter / createDoc_parseString_ms });
 }

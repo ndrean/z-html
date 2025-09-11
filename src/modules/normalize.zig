@@ -11,7 +11,6 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
-
 /// [normalize] Returns true if text contains ONLY whitespace characters (\n\t\r or " ")
 pub fn isWhitespaceOnly(text: []const u8) bool {
     if (text.len == 0) return true;
@@ -517,4 +516,51 @@ test "template normalize" {
     ;
 
     try testing.expectEqualStrings(expected, serialized);
+}
+
+test "string vs DOM" {
+    const allocator = testing.allocator;
+    const messy_html =
+        \\<div>
+        \\<!-- comment -->
+        \\
+        \\<p>Content</p>
+        \\
+        \\<pre>  preserve  this  </pre>
+        \\
+        \\</div>
+    ;
+    {
+        const doc = try z.createDocFromString(messy_html);
+        defer z.destroyDocument(doc);
+        const body_elt = z.bodyElement(doc).?;
+        try z.normalizeDOM(allocator, body_elt);
+        const result = try z.innerHTML(allocator, body_elt);
+        defer allocator.free(result);
+        const expected = "<div><!-- comment --><p>Content</p><pre>  preserve  this  </pre></div>";
+        try testing.expectEqualStrings(expected, result);
+    }
+    {
+        const cleaned = try z.normalizeHtmlStringWithOptions(allocator, messy_html, .{ .remove_comments = false });
+        defer allocator.free(cleaned);
+
+        const expected = "<div><!-- comment --><p>Content</p><pre>  preserve  this  </pre></div>";
+        try testing.expectEqualStrings(expected, cleaned);
+
+        const doc = try z.createDocument();
+        defer z.destroyDocument(doc);
+
+        try z.parseString(doc, cleaned);
+        const body_elt = z.bodyElement(doc).?;
+        const result = try z.innerHTML(allocator, body_elt);
+        defer allocator.free(result);
+        try testing.expectEqualStrings(expected, result);
+
+        try z.parseString(doc, messy_html);
+        const body_elt2 = z.bodyElement(doc).?;
+        try z.normalizeDOM(allocator, body_elt2);
+        const result2 = try z.innerHTML(allocator, body_elt2);
+        defer allocator.free(result2);
+        try testing.expectEqualStrings(expected, result2);
+    }
 }
