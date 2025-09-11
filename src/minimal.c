@@ -6,8 +6,8 @@
 
 /**
  * Minimal C wrappers for lexbor functions that require access to
- * opaque struct internals. These enable Zig to work with lexbor
- * without exposing complex internal structures.
+ * opaque struct internals. This enables Zig to work with lexbor
+ * without accessing internal structures.
  */
 
 // Get the node from a generic object
@@ -77,23 +77,6 @@ lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template
 // {
 //   return lxb_dom_interface_node(template_element);
 // }
-
-// / Get the tag ID of a node for debugging
-lxb_tag_id_t lxb_html_tree_node_tag_id_wrapper(lxb_dom_node_t *node)
-{
-  if (node == NULL)
-  {
-    return LXB_TAG__UNDEF;
-  }
-
-  lxb_dom_element_t *element = lxb_dom_interface_element(node);
-  if (element == NULL)
-  {
-    return LXB_TAG__UNDEF;
-  }
-
-  return element->node.local_name;
-}
 
 // Create a template element using the standard document interface which creates the Tag_id and content access.
 lxb_html_template_element_t *lxb_html_create_template_element_wrapper(lxb_html_document_t *document)
