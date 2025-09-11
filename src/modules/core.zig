@@ -29,7 +29,7 @@ extern "c" fn lxb_dom_comment_interface_destroy(doc: *z.Comment) *z.Comment;
 extern "c" fn lxb_dom_node_insert_child(parent: *z.DomNode, child: *z.DomNode) void;
 extern "c" fn lxb_html_document_body_element_noi(doc: *z.HTMLDocument) ?*z.HTMLElement;
 extern "c" fn lxb_dom_document_root(doc: *z.HTMLDocument) ?*z.DomNode;
-extern "c" fn lexbor_node_owner_document(node: *z.DomNode) *z.HTMLDocument;
+extern "c" fn lexbor_node_owner_document_wrapper(node: *z.DomNode) *z.HTMLDocument;
 extern "c" fn lxb_dom_node_parent_noi(node: *z.DomNode) ?*z.DomNode;
 extern "c" fn lxb_dom_node_replace_all(parent: *z.DomNode, node: *z.DomNode) c_int;
 
@@ -43,7 +43,6 @@ extern "c" fn lxb_dom_node_remove_wo_events(node: *z.DomNode) void;
 extern "c" fn lxb_dom_node_destroy(node: *z.DomNode) void;
 extern "c" fn lxb_dom_document_destroy_text_noi(node: *z.DomNode, text: []const u8) void;
 
-// extern "c" fn lexbor_clone_node_deep(node: *z.DomNode, target_doc: *z.HTMLDocument) ?*z.DomNode;
 extern "c" fn lxb_dom_node_clone(node: *z.DomNode, deep: bool) ?*z.DomNode;
 extern "c" fn lxb_dom_document_import_node(doc: *z.HTMLDocument, node: *z.DomNode, deep: bool) *z.DomNode;
 
@@ -243,7 +242,7 @@ test "documentRoot is HTML" {
 ///
 /// Useful with fragments/templates
 pub fn ownerDocument(node: *z.DomNode) *z.HTMLDocument {
-    return lexbor_node_owner_document(node);
+    return lexbor_node_owner_document_wrapper(node);
 }
 
 test "ownerDocument" {

@@ -23,16 +23,16 @@ const testing = std.testing;
 const print = std.debug.print;
 
 // ===
-extern "c" fn lxb_html_create_template_element_wrapper(doc: *z.HTMLDocument) ?*z.HTMLTemplateElement;
+extern "c" fn lexbor_html_create_template_element_wrapper(doc: *z.HTMLDocument) ?*z.HTMLTemplateElement;
 extern "c" fn lxb_html_template_element_interface_destroy(template_elt: *z.HTMLTemplateElement) *z.HTMLTemplateElement;
 
-extern "c" fn lxb_html_template_to_element(template: *z.HTMLTemplateElement) *z.HTMLElement;
-extern "c" fn lxb_node_to_template_wrapper(node: *z.DomNode) ?*z.HTMLTemplateElement;
-extern "c" fn lxb_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLTemplateElement;
+extern "c" fn lexbor_html_template_to_element_wrapper(template: *z.HTMLTemplateElement) *z.HTMLElement;
+extern "c" fn lexbor_node_to_template_wrapper(node: *z.DomNode) ?*z.HTMLTemplateElement;
+extern "c" fn lexbor_element_to_template_wrapper(element: *z.HTMLElement) ?*z.HTMLTemplateElement;
 
-extern "c" fn lxb_html_template_content_wrapper(template: *z.HTMLTemplateElement) *z.DocumentFragment;
-extern "c" fn lxb_html_template_to_node(template: *z.HTMLTemplateElement) *z.DomNode;
-extern "c" fn lxb_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
+extern "c" fn lexbor_html_template_content_wrapper(template: *z.HTMLTemplateElement) *z.DocumentFragment;
+extern "c" fn lexbor_html_template_to_node_wrapper(template: *z.HTMLTemplateElement) *z.DomNode;
+extern "c" fn lexbor_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bool;
 
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
@@ -104,15 +104,15 @@ test "FragmentContext" {
 test "fragment creation and destruction" {
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
-    
+
     // Test createDocumentFragment and fragmentToNode
     const fragment = try createDocumentFragment(doc);
     const fragment_node = fragmentToNode(fragment);
-    
+
     try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(fragment_node));
     try testing.expect(z.nodeType(fragment_node) == .fragment);
     try testing.expect(z.isNodeEmpty(fragment_node));
-    
+
     // Test destroyDocumentFragment
     destroyDocumentFragment(fragment);
     // Note: After destruction, we can't safely test the fragment anymore
@@ -216,7 +216,7 @@ test "DocumentFragment  - append programmatically only" {
 
 /// [template] Create a template
 pub fn createTemplate(doc: *z.HTMLDocument) !*z.HTMLTemplateElement {
-    return lxb_html_create_template_element_wrapper(doc) orelse Err.CreateTemplateFailed;
+    return lexbor_html_create_template_element_wrapper(doc) orelse Err.CreateTemplateFailed;
 }
 
 /// [template] Destroy a template in the document
@@ -226,7 +226,7 @@ pub fn destroyTemplate(template: *z.HTMLTemplateElement) void {
 
 /// [template] Check if a node is a template element
 pub fn isTemplate(node: *z.DomNode) bool {
-    return lxb_html_tree_node_is_wrapper(node, z.LXB_TAG_TEMPLATE);
+    return lexbor_html_tree_node_is_wrapper(node, z.LXB_TAG_TEMPLATE);
 }
 
 /// [template] Cast template to node
@@ -235,29 +235,29 @@ pub fn isTemplate(node: *z.DomNode) bool {
 ///
 /// check test "create templates programmatically"
 pub fn templateToNode(template: *z.HTMLTemplateElement) *z.DomNode {
-    return lxb_html_template_to_node(template);
+    return lexbor_html_template_to_node_wrapper(template);
 }
 
 /// [template] Cast template to element
 pub fn templateToElement(template: *z.HTMLTemplateElement) *z.HTMLElement {
-    return lxb_html_template_to_element(template);
+    return lexbor_html_template_to_element_wrapper(template);
 }
 
 /// [template] Get the template element from a node that is a template
 pub fn nodeToTemplate(node: *z.DomNode) ?*z.HTMLTemplateElement {
-    return lxb_node_to_template_wrapper(node);
+    return lexbor_node_to_template_wrapper(node);
 }
 
 /// [template] Get the template element from an element that is a template
 pub fn elementToTemplate(element: *z.HTMLElement) ?*z.HTMLTemplateElement {
-    return lxb_element_to_template_wrapper(element);
+    return lexbor_element_to_template_wrapper(element);
 }
 
 /// [template] Get the content of a template as a #document-fragment
 ///
 /// You can append nodes to `z.fragmentNode(template_content)`
 pub fn templateContent(template: *z.HTMLTemplateElement) *z.DocumentFragment {
-    return lxb_html_template_content_wrapper(template);
+    return lexbor_html_template_content_wrapper(template);
 }
 
 /// [template] Clone the content of a template element into a target node with optional sanitization
@@ -445,31 +445,31 @@ test "use template element" {
 
 test "fragment and template utility functions" {
     const allocator = testing.allocator;
-    
+
     const doc = try z.createDocFromString("<html><body></body></html>");
     defer z.destroyDocument(doc);
-    
+
     // Create template programmatically first
     const template = try createTemplate(doc);
     const template_elt = templateToElement(template);
     _ = z.setAttribute(template_elt, "id", "test");
-    
+
     // Add content to template
     const template_content = templateContent(template);
     const content_node = fragmentToNode(template_content);
     const p = try z.createElement(doc, "p");
     try z.setContentAsText(z.elementToNode(p), "Content");
     z.appendChild(content_node, z.elementToNode(p));
-    
+
     // Add template to body for getElementById to work
     const body = z.bodyElement(doc).?;
     z.appendChild(z.elementToNode(body), z.templateToNode(template));
-    
+
     const template_node = z.elementToNode(template_elt);
-    
+
     // Test isTemplate
     try testing.expect(isTemplate(template_node));
-    
+
     // Test nodeToTemplate and elementToTemplate
     const template_from_node = nodeToTemplate(template_node);
     const template_from_element = elementToTemplate(template_elt);
@@ -477,15 +477,15 @@ test "fragment and template utility functions" {
     try testing.expect(template_from_element != null);
     try testing.expect(template_from_node.? == template);
     try testing.expect(template_from_element.? == template);
-    
+
     // Test fragmentToNode with template content (already created above)
     try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(content_node));
-    
+
     // Test that we can work with the fragment node
     const children = try z.childNodes(allocator, content_node);
     defer allocator.free(children);
     try testing.expect(children.len == 1); // Should have the <p> element
-    
+
     // Clean up functions are tested implicitly through defer statements in other tests
     destroyTemplate(template);
 }

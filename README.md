@@ -346,6 +346,15 @@ std.debug.assert(!footer_token_list.contains("new-footer"));
 
 The library provides both DOM-based and string-based HTML normalization to clean up whitespace and comments.
 
+Some results:
+
+```txt
+--- Speed Results ---
+new doc:           normString    -> parseString :       0.41 ms/op, 1110.7 MB/s
+parser, new doc:   normString    -> parser.append:      0.50 ms/op, 1364.2 MB/s
+parser:  (new doc: parser.parse  -> DOMnorm:            0.08 ms/op,  218.7 MB/s
+```
+
 ### DOM-based Normalization
 
 DOM-based normalization works on parsed documents and provides browser-like behavior:
@@ -407,7 +416,11 @@ const clean = try z.normalizeHtmlStringWithOptions(allocator, messy_html, .{
     .remove_whitespace_text_nodes = true,
 });
 defer allocator.free(clean);
+```
 
+You can also "clean" text node content:
+
+```cpp
 // Text normalization (collapses whitespace)
 const text = "  Hello   world!  \n\n  ";
 const normalized_text = try z.normalizeText(allocator, text);

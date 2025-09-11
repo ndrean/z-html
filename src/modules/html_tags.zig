@@ -503,7 +503,7 @@ pub const NoEscapeTagSet = struct {
 /// <style>body { color: red; }</style>     ← Must NOT escape
 /// <iframe src="..."></iframe>             ← Must NOT escape
 ///---
-pub fn isNoEscapeElement(element: *z.HTMLElement) bool {
+fn isNoEscapeElement(element: *z.HTMLElement) bool {
     const tag = tagFromElement(element) orelse return false;
     return NoEscapeTagSet.contains(tag);
 }
@@ -521,7 +521,7 @@ test "custom elements security validation" {
     try testing.expect(z.tagFromQualifiedName("custom-widget") == null);
 
     // Custom elements should not be treated as no-escape elements
-    try testing.expect(!z.isNoEscapeElement(widget_elt));
+    try testing.expect(!isNoEscapeElement(widget_elt));
 
     const widget_content = z.textContent_zc(z.elementToNode(widget_elt));
 

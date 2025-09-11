@@ -23,31 +23,25 @@ lxb_dom_element_t *lexbor_dom_interface_element_wrapper(lxb_dom_node_t *node)
 }
 
 // template -> element
-lxb_dom_element_t *lxb_html_template_to_element(lxb_html_template_element_t *template_element)
+lxb_dom_element_t *lexbor_html_template_to_element_wrapper(lxb_html_template_element_t *template_element)
 {
   return lxb_dom_interface_element(template_element);
 }
 
 // template -> node
-lxb_dom_node_t *lxb_html_template_to_node(lxb_html_template_element_t *template_element)
+lxb_dom_node_t *lexbor_html_template_to_node_wrapper(lxb_html_template_element_t *template_element)
 {
   return lxb_dom_interface_node(template_element);
 }
 
 // Wrapper for checking if a node has a specific tag ID
-bool lxb_html_tree_node_is_wrapper(lxb_dom_node_t *node, lxb_tag_id_t tag_id)
+bool lexbor_html_tree_node_is_wrapper(lxb_dom_node_t *node, lxb_tag_id_t tag_id)
 {
   return lxb_html_tree_node_is(node, tag_id);
 }
 
-// Cross-document node cloning wrapper
-lxb_dom_node_t *lexbor_clone_node_deep(lxb_dom_node_t *node, lxb_html_document_t *target_doc)
-{
-  return lxb_dom_document_import_node(lxb_dom_interface_document(target_doc), node, true);
-}
-
 // Wrapper for field access to get the owner document from a node
-lxb_html_document_t *lexbor_node_owner_document(lxb_dom_node_t *node)
+lxb_html_document_t *lexbor_node_owner_document_wrapper(lxb_dom_node_t *node)
 {
   return lxb_html_interface_document(node->owner_document);
 }
@@ -61,7 +55,7 @@ void lexbor_destroy_text_wrapper(lxb_dom_node_t *node, lxb_char_t *text)
 }
 
 // TEMPLATE content access
-lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template_element_t *template_element)
+lxb_dom_document_fragment_t *lexbor_html_template_content_wrapper(lxb_html_template_element_t *template_element)
 {
   if (template_element == NULL)
   {
@@ -79,7 +73,7 @@ lxb_dom_document_fragment_t *lxb_html_template_content_wrapper(lxb_html_template
 // }
 
 // Create a template element using the standard document interface which creates the Tag_id and content access.
-lxb_html_template_element_t *lxb_html_create_template_element_wrapper(lxb_html_document_t *document)
+lxb_html_template_element_t *lexbor_html_create_template_element_wrapper(lxb_html_document_t *document)
 {
   // Create template element using the standard element creation method
   lxb_dom_element_t *element = lxb_dom_document_create_element(
@@ -98,7 +92,7 @@ lxb_html_template_element_t *lxb_html_create_template_element_wrapper(lxb_html_d
 }
 
 // Cast a DOM element to template interface (if it's a template)
-lxb_html_template_element_t *lxb_element_to_template_wrapper(lxb_dom_element_t *element)
+lxb_html_template_element_t *lexbor_element_to_template_wrapper(lxb_dom_element_t *element)
 {
   if (element == NULL)
   {
@@ -116,7 +110,7 @@ lxb_html_template_element_t *lxb_element_to_template_wrapper(lxb_dom_element_t *
 }
 
 // Cast a DOM node to template interface (if it's a template)
-lxb_html_template_element_t *lxb_node_to_template_wrapper(lxb_dom_node_t *node)
+lxb_html_template_element_t *lexbor_node_to_template_wrapper(lxb_dom_node_t *node)
 {
   if (node == NULL)
   {
