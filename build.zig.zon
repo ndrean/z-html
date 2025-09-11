@@ -79,8 +79,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "lexbor_src_2.5.0/source", // Headers needed for compilation
-        "lexbor_src_2.5.0/build", // Pre-built static library
+        "lexbor_2.5.0_dist", // Distribution with lib/ and include/
         "README.md",
     },
 }
