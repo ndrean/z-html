@@ -1,11 +1,14 @@
 # Lexbor - ignore build artifacts except essential distribution files
-/lexbor_src_2.5.0/build/*
-!/lexbor_src_2.5.0/build/liblexbor_static.a
-/lexbor_src_2.5.0/test/
-/lexbor_src_2.5.0/examples/
-/lexbor_src_2.5.0/benchmarks/
-/lexbor_src_2.5.0/utils/
-/lexbor_src_2.5.0/.github/
+# /lexbor_src_2.5.0/build/*
+# !/lexbor_src_2.5.0/build/liblexbor_static.a
+# /lexbor_src_2.5.0/test/
+# /lexbor_src_2.5.0/examples/
+# /lexbor_src_2.5.0/benchmarks/
+# /lexbor_src_2.5.0/utils/
+# /lexbor_src_2.5.0/.github/
+# /lexbor_src_2.5.0/packaging/
+# /lexbor_src_2.5.0/source/
+/lexbor_src_2.5.0/
 /.zig-cache
 /zig-out/
 /.vscode/
