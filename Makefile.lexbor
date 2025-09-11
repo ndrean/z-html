@@ -1,13 +1,16 @@
-LEXBOR_VERSION = 2.5.0
+LEXBOR_VERSION = master
 LEXBOR_DIR = lexbor_src_${LEXBOR_VERSION}
-LEXBOR_LIB = $(LEXBOR_DIR)/build/liblexbor.a
+LEXBOR_LIB = $(LEXBOR_DIR)/build/liblexbor_static.a
 
 all: $(LEXBOR_LIB)
 
 $(LEXBOR_LIB):
 	@mkdir -p $(LEXBOR_DIR)
-	curl -L https://github.com/lexbor/lexbor/archive/refs/tags/v$(LEXBOR_VERSION).tar.gz | tar xz -C $(LEXBOR_DIR) --strip-components=1
-	cd $(LEXBOR_DIR) && cmake -B build -DLEXBOR_BUILD_SHARED=OFF
+	curl -L https://github.com/lexbor/lexbor/archive/refs/heads/master.zip -o master.zip
+	unzip -q master.zip
+	cp -r lexbor-master/* $(LEXBOR_DIR)/
+	rm -rf lexbor-master master.zip
+	cd $(LEXBOR_DIR) && cmake -B build -DLEXBOR_BUILD_SHARED=OFF -DLEXBOR_BUILD_STATIC=ON
 	$(MAKE) -C $(LEXBOR_DIR)/build
 
 clean:

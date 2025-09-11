@@ -54,11 +54,11 @@ If you want to build the library locally:
 make -f Makefile.lexbor
 
 # Create distribution structure
-mkdir -p lexbor_2.5.0_dist/{lib,include}
+mkdir -p lexbor_master_dist/{lib,include}
 
 # Copy static library and headers
-cp lexbor_src_2.5.0/build/liblexbor_static.a lexbor_2.5.0_dist/lib/
-cp -r lexbor_src_2.5.0/source/lexbor lexbor_2.5.0_dist/include/
+cp lexbor_src_master/build/liblexbor_static.a lexbor_master_dist/lib/
+cp -r lexbor_src_master/source/lexbor lexbor_master_dist/include/
 
 # Build the Zig library
 zig build

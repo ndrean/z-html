@@ -216,6 +216,7 @@ pub const InsertPosition = lxb.InsertPosition;
 pub const insertAdjacentElement = lxb.insertAdjacentElement;
 pub const insertAdjacentHTML = lxb.insertAdjacentHTML;
 pub const appendChild = lxb.appendChild;
+pub const appendChildDomSpec = frag_temp.appendChildDomSpec;
 pub const appendChildren = lxb.appendChildren;
 
 pub const childNodes = lxb.childNodes;
@@ -249,6 +250,7 @@ pub const fragmentToNode = frag_temp.fragmentToNode;
 pub const createDocumentFragment = frag_temp.createDocumentFragment;
 pub const destroyDocumentFragment = frag_temp.destroyDocumentFragment;
 pub const appendFragment = frag_temp.appendFragment;
+pub const appendChildDOM = frag_temp.appendChildDOM;
 // templates
 pub const isTemplate = frag_temp.isTemplate;
 pub const createTemplate = frag_temp.createTemplate;

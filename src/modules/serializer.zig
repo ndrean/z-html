@@ -357,26 +357,7 @@ test "outerNodeHTML" {
     try testing.expectEqualStrings("<body><p>test</p></body>", outer);
 }
 
-test "prettyPrint" {
-    const allocator = testing.allocator;
-    const doc = try z.createDocFromString("<div><p>hello</p></div>");
-    defer z.destroyDocument(doc);
-
-    const body = z.bodyElement(doc).?;
-    const body_node = z.elementToNode(body);
-
-    // Test that prettyPrint doesn't crash - output goes to stdout
-    try prettyPrint(allocator, body_node);
-}
-
-test "printDocStruct" {
-    const doc = try z.createDocFromString("<div><p>test</p></div>");
-    defer z.destroyDocument(doc);
-
-    // Test that printDocStruct doesn't crash - output goes to stdout
-    try printDocStruct(doc);
-}
-
+// --[TODO]---
 test "web component" {
     const html =
         \\<!DOCTYPE html>

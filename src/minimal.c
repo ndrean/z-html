@@ -129,3 +129,4 @@ lxb_html_template_element_t *lexbor_node_to_template_wrapper(lxb_dom_node_t *nod
 
   return NULL;
 }
+

@@ -4,8 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lexbor_static_lib_path = b.path("lexbor_2.5.0_dist/lib/liblexbor_static.a");
-    const lexbor_src_path = b.path("lexbor_2.5.0_dist/include");
+    const lexbor_static_lib_path = b.path("lexbor_master_dist/lib/liblexbor_static.a");
+    const lexbor_src_path = b.path("lexbor_master_dist/include");
 
     // Wrapper library
     const wrapper_lib = b.addLibrary(.{
@@ -32,7 +32,17 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         },
     );
-    
+
+    // const install_docs = b.addInstallDirectory(.{
+    //     .source_dir = wrapper_lib.getEmittedDocs(),
+    //     .install_dir = .{
+    //         .custom = ".",
+    //     },
+    //     .install_subdir = "docs",
+    // });
+    // const docs_step = b.step("docs", "Generate documentation");
+    // docs_step.dependOn(&install_docs.step);
+
     // Link the module to the wrapper library so consumers get C dependencies
     zhtml_module.linkLibrary(wrapper_lib);
     b.installArtifact(wrapper_lib);

@@ -1068,6 +1068,7 @@ pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
     lxb_dom_node_insert_child(parent, child);
 }
 
+
 test "appendChild" {
     const doc = try createDocument();
     defer destroyDocument(doc);

@@ -51,4 +51,5 @@ pub const LexborError = error{
     ImportNodeFailed,
     SerializationFailed,
     DocumentRootNotFound,
+    DomException,
 };

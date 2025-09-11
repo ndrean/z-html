@@ -79,7 +79,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "lexbor_2.5.0_dist", // Distribution with lib/ and include/
+        "lexbor_master_dist", // Distribution with lib/ and include/
         "README.md",
     },
 }

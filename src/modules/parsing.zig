@@ -378,6 +378,7 @@ pub const Parser = struct {
         return fragment_root;
     }
 
+
     /// Parse a template string and return the template element (with DocumentFragment content)
     ///
     /// ## Example
@@ -485,7 +486,15 @@ pub const Parser = struct {
             sanitizer,
         );
         defer z.destroyNode(fragment_root);
-        z.appendFragment(node, fragment_root);
+
+        // Check if this is a true DocumentFragment first
+        if (z.isTypeFragment(fragment_root)) {
+            // Use the lexbor function for true DocumentFragments
+            try z.appendChildDomSpec(node, fragment_root);
+        } else {
+            // For parsed fragments (not true DocumentFragments), use manual method
+            z.appendFragment(node, fragment_root);
+        }
     }
 
     /// [parser] Parse and append template content (private helper)
@@ -648,7 +657,7 @@ test "parser.parse" {
     }
 }
 
-test "parser.setInnerSafeHTML flavours" {
+test "parser.parseAndAppendFragment with improved logic" {
     const allocator = testing.allocator;
 
     const doc = try z.createDocument();
