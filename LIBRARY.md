@@ -1,28 +1,28 @@
 # Zexplorer Library Usage
 
-## Build Library
-```bash
-zig build
-```
+A Zig wrapper for the lexbor HTML parsing library.
 
-## Use in Your Project
+## Installation via Zig Package Manager
 
-### 1. Add as Git Submodule
+### 1. Add to your project
+
 ```bash
-git submodule add https://github.com/your-repo/z-html.git deps/z-html
+zig fetch --save https://github.com/ndrean/z-html/archive/main.tar.gz
 ```
 
 ### 2. In your `build.zig`
+
 ```zig
-const zhtml_dep = b.dependency("zexplorer", .{
+const zexplorer = b.dependency("zexplorer", .{
     .target = target,
     .optimize = optimize,
 });
 
-exe.root_module.addImport("zexplorer", zhtml_dep.module("zexplorer"));
+exe.root_module.addImport("zexplorer", zexplorer.module("zexplorer"));
 ```
 
 ### 3. In your code
+
 ```zig
 const z = @import("zexplorer");
 
@@ -30,12 +30,51 @@ const doc = try z.createDocFromString("<div>Hello</div>");
 defer z.destroyDocument(doc);
 ```
 
-## Local Development
+## Alternative: Git Submodule (for development)
+
 ```bash
-# Add to build.zig
-const zhtml_module = b.addModule("zhtml", .{
-    .root_source_file = b.path("path/to/z-html/src/root.zig"),
+git submodule add https://github.com/ndrean/z-html.git deps/zexplorer
+```
+
+```zig
+// In build.zig for local development
+const zexplorer_module = b.addModule("zexplorer", .{
+    .root_source_file = b.path("deps/zexplorer/src/root.zig"),
 });
 
-exe.root_module.addImport("zhtml", zhtml_module);
+exe.root_module.addImport("zexplorer", zexplorer_module);
 ```
+
+## Building from Source
+
+If you want to build the library locally:
+
+```bash
+# Build lexbor dependency first
+make -f Makefile.lexbor
+
+# Build the Zig library
+zig build
+
+# Run tests
+zig build test --summary all
+
+# Run demo
+zig build run --release=fast
+```
+
+## Requirements
+
+- Zig 0.15.1 or later
+- The library includes pre-built lexbor static library for common platforms
+- For custom builds, you can rebuild lexbor using the included Makefile
+
+## Features
+
+- HTML parsing with lexbor backend
+- DOM manipulation
+- CSS selector support
+- HTML normalization (string and DOM-based)
+- Sanitization with multiple security levels
+- Template element support
+- Stream parsing for large documents

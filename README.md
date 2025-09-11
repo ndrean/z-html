@@ -41,6 +41,10 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 <hr>
 
+## Library usage
+
+Check _LIBRARY.md_.
+
 ## Example: Create document and parse
 
 You have two methods available.
