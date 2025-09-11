@@ -26,9 +26,9 @@ test "lexbor escaping behavior" {
     defer testing.allocator.free(result);
     try testing.expectEqualStrings("<div>Raw &lt; and &gt; characters</div><script>if (x < 5) alert('test');</script>", result);
 
-    // std.debug.print("\n=== LEXBOR ESCAPING TEST ===\n", .{});
-    // std.debug.print("Input:  {s}\n", .{test_html});
-    // std.debug.print("Output: {s}\n\n", .{result});
+    // std.debug.z.print("\n=== LEXBOR ESCAPING TEST ===\n", .{});
+    // std.debug.z.print("Input:  {s}\n", .{test_html});
+    // std.debug.z.print("Output: {s}\n\n", .{result});
 
     // Basic assertion - just ensure we got some output
     // try testing.expect(result.len > 0);
@@ -618,7 +618,7 @@ pub const Parser = struct {
         context: z.FragmentContext,
         sanitizer: z.SanitizeOptions,
     ) ![]*z.DomNode {
-        // Parse using Parser's method 
+        // Parse using Parser's method
         const fragment_root = try self.parseStringInContext(
             html,
             doc,

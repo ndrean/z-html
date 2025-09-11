@@ -2,14 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const z = @import("root.zig");
 const native_os = builtin.os.tag;
-// const print = std.debug.print;
 
-const W = std.Io.Writer;
-// const print = switch (builtin.mode) {
-//     .Debug => std.debug.print,
-//     else => std.Io.Writer.print,
-// };
-const print = std.debug.print;
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
 pub fn main() !void {
@@ -18,28 +11,27 @@ pub fn main() !void {
     // defer arena.deinit();
     // const gpa = arena.allocator();
 
-    // Original allocator logic (commented out for arena test)
     const gpa, const is_debug = gpa: {
         if (native_os == .wasi) break :gpa .{ std.heap.wasm_allocator, false };
         break :gpa switch (builtin.mode) {
             .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.page_allocator, false },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.c_allocator, false },
         };
     };
     defer if (is_debug) {
         _ = debug_allocator.deinit();
     };
 
-    // try zexplore_example_com(gpa, "https://www.example.com");
-    // try demoSimpleParsing(gpa);
-    // try demoTemplateWithParser(gpa);
-    // try demoParserReUse(gpa);
-    // try demoStreamParser(gpa);
-    // try demoInsertAdjacentElement(gpa);
-    // try demoInsertAdjacentHTML(gpa);
-    // try demoSetInnerHTML(gpa);
-    // try demoSearchComparison(gpa);
-    // try demoSuspiciousAttributes(gpa);
+    try zexplore_example_com(gpa, "https://www.example.com");
+    try demoSimpleParsing(gpa);
+    try demoTemplate(gpa);
+    try demoParserReUse(gpa);
+    try demoStreamParser(gpa);
+    try demoInsertAdjacentElement(gpa);
+    try demoInsertAdjacentHTML(gpa);
+    try demoSetInnerHTML(gpa);
+    try demoSearchComparison(gpa);
+    try demoSuspiciousAttributes(gpa);
     try normalizeString_DOM_parsing_bencharmark(gpa);
     try demoNormalizer(gpa);
 }
@@ -109,7 +101,7 @@ fn demoNormalizer(gpa: std.mem.Allocator) !void {
         .{ .remove_comments = true },
     );
     defer gpa.free(cleaned);
-    print("\n\n Normalized sring: {s}\n\n", .{cleaned});
+    z.print("\n\n Normalized sring: {s}\n\n", .{cleaned});
     std.debug.assert(std.mem.eql(u8, cleaned, result1));
 
     try z.parseString(doc, cleaned);
@@ -121,7 +113,7 @@ fn demoNormalizer(gpa: std.mem.Allocator) !void {
 }
 
 /// use the `Parser` engine to parse HTML with template support
-fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
+fn demoTemplate(allocator: std.mem.Allocator) !void {
     const html =
         \\<table id="producttable">
         \\  <thead>
@@ -147,9 +139,9 @@ fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
     const normed_html = try z.normalizeText(allocator, html);
     defer allocator.free(normed_html);
 
-    var parser = try z.Parser.init(allocator);
-    defer parser.deinit();
-    const doc = try parser.parse(normed_html, .none);
+    // var parser = try z.Parser.init(allocator);
+    // defer parser.deinit();
+    const doc = try z.createDocFromString(html);
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
@@ -163,8 +155,18 @@ fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
     const tbody_node = z.elementToNode(tbody_elt.?);
 
     // add twice the template
-    try parser.useTemplateElement(template_elt, tbody_node, .none);
-    try parser.useTemplateElement(template_elt, tbody_node, .none);
+    try z.useTemplateElement(
+        allocator,
+        template_elt,
+        tbody_node,
+        .none,
+    );
+    try z.useTemplateElement(
+        allocator,
+        template_elt,
+        tbody_node,
+        .none,
+    );
 
     try z.normalizeDOM(allocator, z.nodeToElement(body).?);
 
@@ -172,7 +174,14 @@ fn demoTemplateWithParser(allocator: std.mem.Allocator) !void {
     defer allocator.free(resulting_html);
 
     const expected = "<table id=\"producttable\"><thead><tr><td>Code</td><td>Product_Name</td></tr></thead><tbody><!-- existing data could optionally be included here --><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr></tbody></table><template id=\"productrow\"><tr><td class=\"record\">Code: 1</td><td>Name: 1</td></tr></template>";
-    try std.testing.expectEqualStrings(expected, resulting_html);
+
+    z.print("=== DEMO TEMPLATE-----------\n", .{});
+
+    const normed = try z.normalizeText(allocator, resulting_html);
+    defer allocator.free(normed);
+
+    try z.prettyPrint(allocator, tbody_node);
+    try std.testing.expectEqualStrings(expected, normed);
 }
 
 fn demoParserReUse(allocator: std.mem.Allocator) !void {
@@ -184,7 +193,6 @@ fn demoParserReUse(allocator: std.mem.Allocator) !void {
 
     const body = z.bodyNode(doc).?;
     const ul_elt = z.getElementByTag(body, .ul).?;
-    const ul = z.elementToNode(ul_elt);
 
     for (0..3) |i| {
         const li = try std.fmt.allocPrint(
@@ -194,18 +202,23 @@ fn demoParserReUse(allocator: std.mem.Allocator) !void {
         );
         defer allocator.free(li);
 
-        try parser.insertFragment(ul, li, .ul, .none);
+        try parser.parseAndAppend(
+            ul_elt,
+            li,
+            .ul,
+            .none,
+        );
     }
-    // print("\n === Demonstrate parser engine reuse ===\n\n", .{});
-    // print("\n Insert interpolated <li id=\"item-X\"> Item X</li>\n\n", .{});
+    // z.print("\n === Demonstrate parser engine reuse ===\n\n", .{});
+    // z.print("\n Insert interpolated <li id=\"item-X\"> Item X</li>\n\n", .{});
 
     // try z.prettyPrint(allocator, body);
-    // print("\n\n", .{});
+    // z.print("\n\n", .{});
 }
 
 /// use Stream engine
 fn demoStreamParser(allocator: std.mem.Allocator) !void {
-    print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
+    z.print("\n === Demonstrate parsing streams on-the-fly ===\n\n", .{});
     var streamer = try z.Stream.init(allocator);
     defer streamer.deinit();
 
@@ -221,7 +234,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
         "</tr></thead><tbody>",
     };
     for (streams) |chunk| {
-        print("chunk:  {s}\n", .{chunk});
+        z.print("chunk:  {s}\n", .{chunk});
         try streamer.processChunk(chunk);
     }
 
@@ -232,12 +245,12 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
             .{ i, i, i },
         );
         defer allocator.free(li);
-        print("chunk:  {s}\n", .{li});
+        z.print("chunk:  {s}\n", .{li});
 
         try streamer.processChunk(li);
     }
     const end_chunk = "</tbody></table></body></html>";
-    print("chunk:  {s}\n", .{end_chunk});
+    z.print("chunk:  {s}\n", .{end_chunk});
     try streamer.processChunk(end_chunk);
     try streamer.endParsing();
 
@@ -245,11 +258,11 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
     defer z.destroyDocument(html_doc);
     // const html_node = z.documentRoot(html_doc).?;
 
-    // print("\n\n", .{});
+    // z.print("\n\n", .{});
     // try z.prettyPrint(allocator, html_node);
-    // print("\n\n", .{});
+    // z.print("\n\n", .{});
     // try z.printDocStruct(html_doc);
-    // print("\n\n", .{});
+    // z.print("\n\n", .{});
 }
 
 fn demoInsertAdjacentElement(allocator: std.mem.Allocator) !void {
@@ -313,7 +326,7 @@ fn demoInsertAdjacentElement(allocator: std.mem.Allocator) !void {
 
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
-    // print("\n=== Demonstrate insertAdjacentElement ===\n\n", .{});
+    // z.print("\n=== Demonstrate insertAdjacentElement ===\n\n", .{});
     // try z.prettyPrint(allocator, body);
 
     // Normalize whitespace for clean comparison
@@ -373,7 +386,7 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
     // Show result after insertAdjacentElement
     const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
     defer allocator.free(html);
-    // print("\n=== Demonstrate insertAdjacentHTML ===\n\n", .{});
+    // z.print("\n=== Demonstrate insertAdjacentHTML ===\n\n", .{});
     // try z.prettyPrint(allocator, body);
 
     // Normalize whitespace for clean comparison
@@ -384,13 +397,13 @@ fn demoInsertAdjacentHTML(allocator: std.mem.Allocator) !void {
 
     std.debug.assert(std.mem.eql(u8, expected, clean_html) == true);
 
-    // print("\n--- Normalized HTML --- \n\n{s}\n", .{clean_html});
-    // print("\n\n", .{});
+    // z.print("\n--- Normalized HTML --- \n\n{s}\n", .{clean_html});
+    // z.print("\n\n", .{});
 }
 
 /// `setInnerHTML` and `innerHTML` with `normalize` for easy comparison (remove whitespace only text nodes)
 fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
-    // print("\n=== Demonstrate setInnerHTML & innerHTML ===\n\n", .{});
+    // z.print("\n=== Demonstrate setInnerHTML & innerHTML ===\n\n", .{});
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
     try z.parseString(doc, "<div id=\"target\"></div>");
@@ -417,7 +430,7 @@ fn demoSetInnerHTML(allocator: std.mem.Allocator) !void {
 }
 
 fn demoSearchComparison(allocator: std.mem.Allocator) !void {
-    print("\n=== Search Comparison --------------------------\n\n", .{});
+    z.print("\n=== Search Comparison --------------------------\n\n", .{});
 
     // Create test HTML with diverse elements
     const test_html =
@@ -450,12 +463,12 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     const walker_results = try z.getElementsByClassName(allocator, doc, "main");
     defer allocator.free(walker_results);
     const walker_count = walker_results.len;
-    print("\n1. Walker-based attribute [class = 'main']:     Found {} elements\n", .{walker_count});
+    z.print("\n1. Walker-based attribute [class = 'main']:     Found {} elements\n", .{walker_count});
 
     for (walker_results, 0..) |element, i| {
         const tag = z.tagName_zc(element);
         const class_attr = z.getAttribute_zc(element, "class") orelse "none";
-        print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
+        z.print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
     }
 
     // 2. CSS Selector search (case-insensitive, token-based)
@@ -463,12 +476,12 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     const css_results = try z.querySelectorAll(allocator, doc, ".main");
     defer allocator.free(css_results);
     const css_count = css_results.len;
-    print("\n2. CSS Selector search [class = 'main']:        Found {} elements (case-insensitive)\n", .{css_count});
+    z.print("\n2. CSS Selector search [class = 'main']:        Found {} elements (case-insensitive)\n", .{css_count});
 
     for (css_results, 0..) |element, i| {
         const tag = z.tagName_zc(element);
         const class_attr = z.getAttribute_zc(element, "class") orelse "none";
-        print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
+        z.print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
     }
 
     const footer = try z.getElementByDataAttribute(
@@ -481,15 +494,15 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
         const i = 0;
         const tag = z.tagName_zc(foot);
         const class_attr = z.getAttribute_zc(foot, "class") orelse "none";
-        print("\n3. Walker ByDataAttribute 'aria-label':         Found  1 element\n", .{});
-        print("{s}\n", .{z.getAttribute_zc(foot, "aria-label").?});
-        print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
+        z.print("\n3. Walker ByDataAttribute 'aria-label':         Found  1 element\n", .{});
+        z.print("{s}\n", .{z.getAttribute_zc(foot, "aria-label").?});
+        z.print("   [{}]: <{s}> class=\"{s}\"\n", .{ i, tag, class_attr });
         var footer_token_list = try z.ClassList.init(
             allocator,
             foot,
         );
         defer footer_token_list.deinit();
-        print("   nb classes: {d}\n", .{footer_token_list.length()});
+        z.print("   nb classes: {d}\n", .{footer_token_list.length()});
         try footer_token_list.add("footer");
         std.debug.assert(footer_token_list.contains("footer"));
         _ = try footer_token_list.toggle("footer");
@@ -509,11 +522,11 @@ fn demoSearchComparison(allocator: std.mem.Allocator) !void {
     defer allocator.free(updated_css_results);
     const updated_css_count = updated_css_results.len;
 
-    print("\nAdd a new element <span class=\"main new-element\"> with class 'main' and rerun the search:\n\n", .{});
-    print("1. Walker-based: {} -> {} elements\n", .{ walker_count, updated_walker_count });
-    print("2. CSS Selectors: {} -> {} elements\n", .{ css_count, updated_css_count });
+    z.print("\nAdd a new element <span class=\"main new-element\"> with class 'main' and rerun the search:\n\n", .{});
+    z.print("1. Walker-based: {} -> {} elements\n", .{ walker_count, updated_walker_count });
+    z.print("2. CSS Selectors: {} -> {} elements\n", .{ css_count, updated_css_count });
 
-    print("\n", .{});
+    z.print("\n", .{});
 }
 
 fn demoSuspiciousAttributes(allocator: std.mem.Allocator) !void {
@@ -537,19 +550,21 @@ fn demoSuspiciousAttributes(allocator: std.mem.Allocator) !void {
     defer z.destroyDocument(doc);
 
     const body = z.bodyNode(doc).?;
-    const div = z.firstChild(body).?;
-    const text = z.firstChild(div).?;
-    const com = z.nextSibling(text).?;
-    print("{s}\n", .{z.nodeTypeName(com)});
+    // const div = z.firstChild(body).?;
+    // const text = z.firstChild(div).?;
+    // const com = z.nextSibling(text).?;
+    z.print("\n=== Demo visualiazing DOM and sanitization ------\n", .{});
     try z.prettyPrint(allocator, body);
-    print("\n", .{});
+    z.print("\n", .{});
 
     try z.sanitizeNode(allocator, body, .permissive);
+    z.print("\nAfter sanitization (permissive mode):\n", .{});
     try z.prettyPrint(allocator, body);
-    print("\n", .{});
+    z.print("\n", .{});
 }
 
 fn zexplore_example_com(allocator: std.mem.Allocator, url: []const u8) !void {
+    z.print("\n=== Demo visiting the page {s} --------------\n\n", .{url});
     const page = try z.get(allocator, url);
     defer allocator.free(page);
     const doc = try z.createDocFromString(page);
@@ -563,20 +578,20 @@ fn zexplore_example_com(allocator: std.mem.Allocator, url: []const u8) !void {
     const a_link = try css_engine.querySelector(html, "a[href]");
 
     const href_value = z.getAttribute_zc(z.nodeToElement(a_link.?).?, "href").?;
-    std.debug.print("{s}\n", .{href_value});
+    z.print("{s}\n", .{href_value});
 
     const style_by_walker = z.getElementByTag(html, .style);
     var css_content: []const u8 = undefined;
     if (style_by_walker) |style| {
         css_content = z.textContent_zc(z.elementToNode(style));
-        print("{s}\n", .{css_content});
+        z.print("{s}\n", .{css_content});
     }
 
     const style_by_css = try css_engine.querySelector(html, "style");
 
     if (style_by_css) |style| {
         const css_content_2 = z.textContent_zc(style);
-        // print("{s}\n", .{css_content_2});
+        // z.print("{s}\n", .{css_content_2});
         std.debug.assert(std.mem.eql(u8, css_content, css_content_2));
     }
 }
@@ -724,9 +739,9 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     defer allocator.free(medium_html);
 
     const iterations = 500;
-    print("\n=== HTML parsing / normalization string vs DOM BENCHMARK----------------\n\n", .{});
-    print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ medium_html.len, @as(f64, @floatFromInt(medium_html.len)) / 1024.0 });
-    print("Iterations: {d}\n", .{iterations});
+    z.print("\n=== HTML parsing / normalization string vs DOM BENCHMARK----------------\n\n", .{});
+    z.print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ medium_html.len, @as(f64, @floatFromInt(medium_html.len)) / 1024.0 });
+    z.print("Iterations: {d}\n", .{iterations});
 
     var timer = try std.time.Timer.start();
 
@@ -853,20 +868,20 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     const fresh_normString_fresh_doc_ms = @as(f64, @floatFromInt(fresh_normString_fresh_doc)) / ns_to_ms;
     const reuse_doc_normString_parse_ms = @as(f64, @floatFromInt(reuse_doc_normString_parse)) / ns_to_ms;
 
-    print("\n--- Speed Results ---\n", .{});
-    print("REUSED DOCS:\n", .{});
-    print("1. reused doc:     normString    -> parseString :       {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parse_into_a_doc_ms / iter, kb_size * iter / html_normString_parse_into_a_doc_ms });
+    z.print("\n--- Speed Results ---\n", .{});
+    z.print("REUSED DOCS:\n", .{});
+    z.print("1. reused doc:     normString    -> parseString :       {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parse_into_a_doc_ms / iter, kb_size * iter / html_normString_parse_into_a_doc_ms });
 
-    print("2. reused doc:     normString    -> parser.append:      {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parser_append_ms / iter, kb_size * iter / html_normString_parser_append_ms });
+    z.print("2. reused doc:     normString    -> parser.append:      {d:.2} ms/op, {d:.1} kB/s\n", .{ html_normString_parser_append_ms / iter, kb_size * iter / html_normString_parser_append_ms });
 
-    print("3. fresh doc:      parser.parse  -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ html_parser_parse_into_new_DOM_norm_DOM_ms / iter, kb_size * iter / html_parser_parse_into_new_DOM_norm_DOM_ms });
+    z.print("3. fresh doc:      parser.parse  -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ html_parser_parse_into_new_DOM_norm_DOM_ms / iter, kb_size * iter / html_parser_parse_into_new_DOM_norm_DOM_ms });
 
-    print("\nFRESH DOCS (fair comparison):\n", .{});
-    print("4. fresh doc:      createDoc     -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_doc_DOMnorm_ms / iter, kb_size * iter / fresh_doc_DOMnorm_ms });
+    z.print("\nFRESH DOCS (fair comparison):\n", .{});
+    z.print("4. fresh doc:      createDoc     -> DOMnorm:            {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_doc_DOMnorm_ms / iter, kb_size * iter / fresh_doc_DOMnorm_ms });
 
-    print("5. fresh doc:      normString    -> createDoc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_normString_fresh_doc_ms / iter, kb_size * iter / fresh_normString_fresh_doc_ms });
+    z.print("5. fresh doc:      normString    -> createDoc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ fresh_normString_fresh_doc_ms / iter, kb_size * iter / fresh_normString_fresh_doc_ms });
 
-    print("5b. reuse doc:  normString  -> parse:                   {d:.2} ms/op,  {d:.1} kB/s\n", .{ reuse_doc_normString_parse_ms / iter, kb_size * iter / reuse_doc_normString_parse_ms });
+    z.print("5b. reuse doc:  normString  -> parse:                   {d:.2} ms/op,  {d:.1} kB/s\n", .{ reuse_doc_normString_parse_ms / iter, kb_size * iter / reuse_doc_normString_parse_ms });
 
     // Test 6: setInnerHTML with string normalization on fresh document
     timer.reset();
@@ -910,9 +925,9 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     const setInnerHTML_normString_fresh_doc_ms = @as(f64, @floatFromInt(setInnerHTML_normString_fresh_doc)) / ns_to_ms;
     const setInnerHTML_DOMnorm_fresh_doc_ms = @as(f64, @floatFromInt(setInnerHTML_DOMnorm_fresh_doc)) / ns_to_ms;
 
-    print("\nsetInnerHTML (fresh document):\n", .{});
-    print("6. setInnerHTML:   normString    -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_normString_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_normString_fresh_doc_ms });
-    print("7. setInnerHTML:   DOMnorm       -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_DOMnorm_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_DOMnorm_fresh_doc_ms });
+    z.print("\nsetInnerHTML (fresh document):\n", .{});
+    z.print("6. setInnerHTML:   normString    -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_normString_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_normString_fresh_doc_ms });
+    z.print("7. setInnerHTML:   DOMnorm       -> fresh doc:          {d:.2} ms/op,  {d:.1} kB/s\n", .{ setInnerHTML_DOMnorm_fresh_doc_ms / iter, kb_size * iter / setInnerHTML_DOMnorm_fresh_doc_ms });
 
     // Test 8: Reused document + parseString (clear document each time)
     timer.reset();
@@ -946,8 +961,8 @@ fn normalizeString_DOM_parsing_bencharmark(allocator: std.mem.Allocator) !void {
     const parser_parse_new_doc_ms = @as(f64, @floatFromInt(parser_parse_new_doc)) / ns_to_ms;
     const createDoc_parseString_ms = @as(f64, @floatFromInt(createDoc_parseString)) / ns_to_ms;
 
-    print("\nPARSING COMPARISON:\n", .{});
-    print("8. reused doc:     parseString   (clear each time):     {d:.2} ms/op,  {d:.1} kB/s\n", .{ reused_doc_parseString_ms / iter, kb_size * iter / reused_doc_parseString_ms });
-    print("9. parser.parse:   new doc       (each time):          {d:.2} ms/op,  {d:.1} kB/s\n", .{ parser_parse_new_doc_ms / iter, kb_size * iter / parser_parse_new_doc_ms });
-    print("10. createDoc:     parseString   (fresh each time):    {d:.2} ms/op,  {d:.1} kB/s\n", .{ createDoc_parseString_ms / iter, kb_size * iter / createDoc_parseString_ms });
+    z.print("\nPARSING COMPARISON:\n", .{});
+    z.print("8. reused doc:     parseString   (clear each time):     {d:.2} ms/op,  {d:.1} kB/s\n", .{ reused_doc_parseString_ms / iter, kb_size * iter / reused_doc_parseString_ms });
+    z.print("9. parser.parse:   new doc       (each time):          {d:.2} ms/op,  {d:.1} kB/s\n", .{ parser_parse_new_doc_ms / iter, kb_size * iter / parser_parse_new_doc_ms });
+    z.print("10. createDoc:     parseString   (fresh each time):    {d:.2} ms/op,  {d:.1} kB/s\n", .{ createDoc_parseString_ms / iter, kb_size * iter / createDoc_parseString_ms });
 }

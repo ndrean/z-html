@@ -1,5 +1,7 @@
 //! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
+const std = @import("std");
+const builtin = @import("builtin");
 const lxb = @import("modules/core.zig");
 const css = @import("modules/css_selectors.zig");
 const chunks = @import("modules/chunks.zig");
@@ -372,8 +374,6 @@ pub const stringEquals = search.stringEquals;
 // Test all imported modules
 // ****************************************************************************
 
-const std = @import("std");
-const print = std.debug.print;
 const testing = std.testing;
 
 test {
@@ -399,35 +399,8 @@ pub fn get(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
     return allocating.toOwnedSlice();
 }
 
-//=====================================
-// DOM Tree representation utilities
-//=====================================
-// pub const TupleNode = tree.TupleNode;
-// pub const nodeTuple = tree.nodeTuple;
-// pub const toTuple = tree.toTuple;
-// pub const freeTupleTree = tree.freeTupleTree;
-// pub const freeTupleNode = tree.freeTupleNode;
-// pub const tupleStringToHtml = tree.tupleStringToHtml;
-// pub const domToTupleString = tree.domToTupleString;
-
-// pub const DomTreeNode = tree.HtmlNode;
-// pub const DomTreeArray = tree.HtmlTree;
-// pub const JsonTreeNode = tree.JsonNode;
-// pub const JsonTreeArray = tree.JsonTree;
-// pub const JsonAttribute = tree.JsonAttribute;
-
-// conversion functions
-// pub const freeHtmlTree = tree.freeHtmlTree;
-// pub const freeJsonTree = tree.freeJsonTree;
-// pub const documentToJsonTree = tree.documentToJsonTree;
-// pub const documentToTupleTree = tree.documentToTupleTree;
-
-// pub const jsonNodeToString = tree.jsonNodeToString;
-// pub const jsonTreeToString = tree.jsonTreeToString;
-// pub const parseJsonString = tree.parseJsonString;
-// pub const parseJsonTreeString = tree.parseJsonTreeString;
-
-// pub const nodeToHtml = tree.nodeToHtml;
-// pub const treeToHtml = tree.treeToHtml;
-// pub const freeDomTreeArray = tree.freeHtmlTree;
-// pub const freeDomTreeNode = tree.freeHtmlNode;
+// Simple conditional print - always use debug print for reliability
+pub const print = switch (builtin.mode) {
+    .Debug => std.debug.print,
+    else => std.debug.print, // to be improved later
+};

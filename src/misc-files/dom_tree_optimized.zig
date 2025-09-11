@@ -11,7 +11,7 @@ fn serializeNodeToWriter(w: anytype, node: *z.DomNode) !void {
             const tag_name = z.qualifiedName_zc(element);
 
             // Use writer.print for efficient formatting - like C++ append()
-            try w.print("{{\"{s}\", [", .{tag_name});
+            try w.z.print("{{\"{s}\", [", .{tag_name});
 
             // Get attributes efficiently - still need temp allocator for this
             var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -29,7 +29,7 @@ fn serializeNodeToWriter(w: anytype, node: *z.DomNode) !void {
 
             for (attrs, 0..) |attr, i| {
                 if (i > 0) try w.writeAll(", ");
-                try w.print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
+                try w.z.print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
             }
 
             try w.writeAll("], [");

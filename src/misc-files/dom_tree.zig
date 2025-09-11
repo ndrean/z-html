@@ -143,25 +143,25 @@ pub fn toTuple(allocator: std.mem.Allocator, node: *z.DomNode) ![]TupleNode {
 pub fn printNode(node: TupleNode, indent: usize) void {
     switch (node) {
         .element => |elem| {
-            print("{{\"{s}\", [", .{elem.tag});
+            z.print("{{\"{s}\", [", .{elem.tag});
             for (elem.attributes, 0..) |attr, i| {
-                if (i > 0) print(", ", .{});
-                print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
+                if (i > 0) z.print(", ", .{});
+                z.print("{{\"{s}\", \"{s}\"}}", .{ attr.name, attr.value });
             }
-            print("], [", .{});
+            z.print("], [", .{});
             for (elem.children, 0..) |child, i| {
-                if (i > 0) print(", ", .{});
+                if (i > 0) z.print(", ", .{});
                 printNode(child, indent + 1);
             }
-            print("]}}", .{});
+            z.print("]}}", .{});
         },
-        .text => |text| print("\"{s}\"", .{text}),
-        .comment => |comment| print(
+        .text => |text| z.print("\"{s}\"", .{text}),
+        .comment => |comment| z.print(
             "{{\"comment\", \"{s}\"}}",
             .{comment},
         ),
     }
-    if (indent == 0) print("\n", .{});
+    if (indent == 0) z.print("\n", .{});
 }
 
 // test "HTML to tuple" {
@@ -342,7 +342,7 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
 //     // Using heap allocator now
 //     const result = try domToTupleString(std.heap.page_allocator, doc);
 
-//     print("\nFast serialization result:\n{s}\n", .{result});
+//     z.print("\nFast serialization result:\n{s}\n", .{result});
 
 //     // Should contain the expected elements (lowercase HTML standard)
 //     try testing.expect(std.mem.indexOf(u8, result, "\"body\"") != null);
@@ -364,7 +364,7 @@ fn serializeNodeToArrayList(arena_allocator: std.mem.Allocator, result: *std.Arr
 //     // Using heap allocator now
 //     const result = try nodeToTupleString(std.heap.page_allocator, div_node);
 
-//     print("\nSingle node result:\n{s}\n", .{result});
+//     z.print("\nSingle node result:\n{s}\n", .{result});
 
 //     try testing.expect(std.mem.indexOf(u8, result, "\"div\"") != null);
 //     try testing.expect(std.mem.indexOf(u8, result, "\"class\", \"test\"") != null);
@@ -570,9 +570,9 @@ const TupleParser = struct {
 //     const html1 = try tupleStringToHtml(allocator, tuple1);
 //     defer allocator.free(html1);
 
-//     print("\nTuple to HTML test 1:\n", .{});
-//     print("Input:  {s}\n", .{tuple1});
-//     print("Output: {s}\n", .{html1});
+//     z.print("\nTuple to HTML test 1:\n", .{});
+//     z.print("Input:  {s}\n", .{tuple1});
+//     z.print("Output: {s}\n", .{html1});
 
 //     try testing.expectEqualStrings("<div class=\"test\">Hello World</div>", html1);
 
@@ -581,9 +581,9 @@ const TupleParser = struct {
 //     const html2 = try tupleStringToHtml(allocator, tuple2);
 //     defer allocator.free(html2);
 
-//     print("\nTuple to HTML test 2:\n", .{});
-//     print("Input:  {s}\n", .{tuple2});
-//     print("Output: {s}\n", .{html2});
+//     z.print("\nTuple to HTML test 2:\n", .{});
+//     z.print("Input:  {s}\n", .{tuple2});
+//     z.print("Output: {s}\n", .{html2});
 
 //     try testing.expectEqualStrings("<div>Hello <strong>world</strong>!</div>", html2);
 
@@ -592,9 +592,9 @@ const TupleParser = struct {
 //     const html3 = try tupleStringToHtml(allocator, tuple3);
 //     defer allocator.free(html3);
 
-//     print("\nTuple to HTML test 3:\n", .{});
-//     print("Input:  {s}\n", .{tuple3});
-//     print("Output: {s}\n", .{html3});
+//     z.print("\nTuple to HTML test 3:\n", .{});
+//     z.print("Input:  {s}\n", .{tuple3});
+//     z.print("Output: {s}\n", .{html3});
 
 //     try testing.expectEqualStrings("<p>Text</p><!-- A comment -->", html3);
 // }
@@ -799,9 +799,9 @@ test "simplified API functions" {
 
 //     const iterations = 100;
 
-//     print("\n=== COMPREHENSIVE DOM PERFORMANCE BENCHMARK ===\n", .{});
-//     print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-//     print("Iterations: {d}\n", .{iterations});
+//     z.print("\n=== COMPREHENSIVE DOM PERFORMANCE BENCHMARK ===\n", .{});
+//     z.print("HTML size: {d} bytes (~{d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
+//     z.print("Iterations: {d}\n", .{iterations});
 
 //     var timer = try std.time.Timer.start();
 
@@ -867,40 +867,40 @@ test "simplified API functions" {
 //     const ns_to_us = @as(f64, @floatFromInt(std.time.ns_per_us));
 //     const ns_to_ms = @as(f64, @floatFromInt(std.time.ns_per_ms));
 
-//     print("\n--- Performance Results (100 iterations) ---\n", .{});
+//     z.print("\n--- Performance Results (100 iterations) ---\n", .{});
 
-//     print("HTML → DOM (lexbor):     {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms, @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     z.print("HTML → DOM (lexbor):     {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms, @as(f64, @floatFromInt(html_to_dom_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-//     print("DOM → Tuple:             {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms, @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     z.print("DOM → Tuple:             {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms, @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-//     print("Tuple → HTML:            {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms, @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     z.print("Tuple → HTML:            {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms, @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-//     print("Lexbor Round-trip:       {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms, @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
+//     z.print("Lexbor Round-trip:       {d:.2} ms total, {d:.3} ms/op\n", .{ @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms, @as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations)) });
 
-//     print("Single Node → Tuple:     {d:.2} μs total, {d:.2} μs/op\n", .{ @as(f64, @floatFromInt(single_node_time)) / ns_to_us, @as(f64, @floatFromInt(single_node_time)) / ns_to_us / @as(f64, @floatFromInt(iterations)) });
+//     z.print("Single Node → Tuple:     {d:.2} μs total, {d:.2} μs/op\n", .{ @as(f64, @floatFromInt(single_node_time)) / ns_to_us, @as(f64, @floatFromInt(single_node_time)) / ns_to_us / @as(f64, @floatFromInt(iterations)) });
 
-//     print("\n--- Full Pipeline Analysis ---\n", .{});
+//     z.print("\n--- Full Pipeline Analysis ---\n", .{});
 //     const total_tuple_pipeline = dom_to_tuple_time + tuple_to_html_time;
-//     print("Tuple Pipeline (DOM→Tuple→HTML): {d:.3} ms/op\n", .{@as(f64, @floatFromInt(total_tuple_pipeline)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
-//     print("Lexbor Pipeline (HTML→DOM→HTML):  {d:.3} ms/op\n", .{@as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
+//     z.print("Tuple Pipeline (DOM→Tuple→HTML): {d:.3} ms/op\n", .{@as(f64, @floatFromInt(total_tuple_pipeline)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
+//     z.print("Lexbor Pipeline (HTML→DOM→HTML):  {d:.3} ms/op\n", .{@as(f64, @floatFromInt(lexbor_roundtrip_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations))});
 
 //     const pipeline_comparison = @as(f64, @floatFromInt(lexbor_roundtrip_time)) / @as(f64, @floatFromInt(total_tuple_pipeline));
-//     print("Pipeline Comparison: Lexbor is {d:.2}x {s} than tuple pipeline\n", .{ if (pipeline_comparison > 1) pipeline_comparison else 1.0 / pipeline_comparison, if (pipeline_comparison > 1) "slower" else "faster" });
+//     z.print("Pipeline Comparison: Lexbor is {d:.2}x {s} than tuple pipeline\n", .{ if (pipeline_comparison > 1) pipeline_comparison else 1.0 / pipeline_comparison, if (pipeline_comparison > 1) "slower" else "faster" });
 
-//     print("\n--- BEAM Scheduler Compliance ---\n", .{});
+//     z.print("\n--- BEAM Scheduler Compliance ---\n", .{});
 //     const dom_to_tuple_ms = @as(f64, @floatFromInt(dom_to_tuple_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
 //     const tuple_to_html_ms = @as(f64, @floatFromInt(tuple_to_html_time)) / ns_to_ms / @as(f64, @floatFromInt(iterations));
 
-//     print("DOM → Tuple: {s} (limit: 1ms)\n", .{if (dom_to_tuple_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
-//     print("Tuple → HTML: {s} (limit: 1ms)\n", .{if (tuple_to_html_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+//     z.print("DOM → Tuple: {s} (limit: 1ms)\n", .{if (dom_to_tuple_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
+//     z.print("Tuple → HTML: {s} (limit: 1ms)\n", .{if (tuple_to_html_ms < 1.0) "✅ SAFE" else "❌ DIRTY SCHEDULER"});
 
-//     print("\n--- Memory Usage ---\n", .{});
-//     print("Original HTML:      {d} bytes ({d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
-//     print("Tuple string:       {d} bytes ({d:.1}KB)\n", .{ tuple_result.len, @as(f64, @floatFromInt(tuple_result.len)) / 1024.0 });
-//     print("Reconstructed HTML: {d} bytes ({d:.1}KB)\n", .{ html_result.len, @as(f64, @floatFromInt(html_result.len)) / 1024.0 });
+//     z.print("\n--- Memory Usage ---\n", .{});
+//     z.print("Original HTML:      {d} bytes ({d:.1}KB)\n", .{ large_html.len, @as(f64, @floatFromInt(large_html.len)) / 1024.0 });
+//     z.print("Tuple string:       {d} bytes ({d:.1}KB)\n", .{ tuple_result.len, @as(f64, @floatFromInt(tuple_result.len)) / 1024.0 });
+//     z.print("Reconstructed HTML: {d} bytes ({d:.1}KB)\n", .{ html_result.len, @as(f64, @floatFromInt(html_result.len)) / 1024.0 });
 
 //     const expansion_ratio = @as(f64, @floatFromInt(tuple_result.len)) / @as(f64, @floatFromInt(large_html.len));
-//     print("Tuple size ratio:   {d:.2}x original HTML size\n", .{expansion_ratio});
+//     z.print("Tuple size ratio:   {d:.2}x original HTML size\n", .{expansion_ratio});
 
 //     // Verify correctness
 //     try testing.expect(tuple_result.len > 0);
@@ -909,5 +909,5 @@ test "simplified API functions" {
 //     // try testing.expect(std.mem.indexOf(u8, tuple_result, "\"body\"") != null);
 //     // try testing.expect(std.mem.indexOf(u8, html_result, "Performance Test") != null);
 
-//     print("\n✅ All comprehensive benchmarks completed successfully!\n", .{});
+//     z.print("\n✅ All comprehensive benchmarks completed successfully!\n", .{});
 // }

@@ -118,14 +118,14 @@ test "scrap example.com" {
   const a_link = try css_engine.querySelector(html, "a[href]");
 
   const href_value = z.getAttribute_zc(z.nodeToElement(a_link.?).?, "href").?;
-  std.debug.print("\n{s}\n", .{href_value}); // result below
+  std.debug.z.print("\n{s}\n", .{href_value}); // result below
 
   var css_content: []const u8 = undefined;
   const style_by_css = try css_engine.querySelector(html, "style");
 
   if (style_by_css) |style| {
       css_content = z.textContent_zc(style);
-      print("\n{s}\n", .{css_content}); // see below
+      z.print("\n{s}\n", .{css_content}); // see below
   }
 
   // alternative search by DOM traverse
@@ -278,7 +278,7 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
         "</tr></thead><tbody>",
     };
     for (streams) |chunk| {
-        print("chunk:  {s}\n", .{chunk});
+        z.print("chunk:  {s}\n", .{chunk});
         try streamer.processChunk(chunk);
     }
 
@@ -289,12 +289,12 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
             .{ i, i, i },
         );
         defer allocator.free(li);
-        print("chunk:  {s}\n", .{li});
+        z.print("chunk:  {s}\n", .{li});
 
         try streamer.processChunk(li);
     }
     const end_chunk = "</tbody></table></body></html>";
-    print("chunk:  {s}\n", .{end_chunk});
+    z.print("chunk:  {s}\n", .{end_chunk});
     try streamer.processChunk(end_chunk);
     try streamer.endParsing();
 
@@ -302,9 +302,9 @@ fn demoStreamParser(allocator: std.mem.Allocator) !void {
     defer z.destroyDocument(html_doc);
     const html_node = z.documentRoot(html_doc).?;
 
-    print("\n\n", .{});
+    z.print("\n\n", .{});
     try z.prettyPrint(allocator, html_node);
-    print("\n", .{});
+    z.print("\n", .{});
     try z.printDocStruct(html_doc);
 }
 ```

@@ -158,7 +158,7 @@ const ProcessCtx = struct {
 ///
 /// The styling is defined in the "colours.zig" module.
 ///
-/// It defaults to print to the TTY with `z.Writer.print()`. You can also `log()` into a file.
+/// It defaults to print to the TTY with `z.Writer.z.print()`. You can also `log()` into a file.
 /// ```
 /// try z.Writer.initLog("logfile.log");
 /// defer z.Writer.deinitLog();
@@ -206,7 +206,7 @@ fn prettyPrintOpt(
 fn debugTabber(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv(.c) c_int {
     _ = context;
     _ = len;
-    print("{s}|\t", .{data});
+    z.print("{s}|\t", .{data});
     return 0;
 }
 
@@ -218,7 +218,7 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
     const text = data[0..len];
 
     if (z.isWhitespaceOnlyText(text)) {
-        print("{s}", .{text});
+        z.print("{s}", .{text});
         return 0;
     }
     if (len == 1 and std.mem.eql(u8, text, "\"")) {
@@ -331,9 +331,9 @@ fn defaultStyler(data: [*:0]const u8, len: usize, context: ?*anyopaque) callconv
 }
 
 fn applyStyle(style: []const u8, text: []const u8) void {
-    print("{s}", .{style});
-    print("{s}", .{text});
-    print("{s}", .{z.Style.RESET});
+    z.print("{s}", .{style});
+    z.print("{s}", .{text});
+    z.print("{s}", .{z.Style.RESET});
 }
 
 test "what does std.mem.endsWith, std.mem.eql find?" {
@@ -347,13 +347,13 @@ test "outerNodeHTML" {
     const allocator = testing.allocator;
     const doc = try z.createDocFromString("<p>test</p>");
     defer z.destroyDocument(doc);
-    
+
     const body = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body);
-    
+
     const outer = try outerNodeHTML(allocator, body_node);
     defer allocator.free(outer);
-    
+
     try testing.expectEqualStrings("<body><p>test</p></body>", outer);
 }
 
@@ -361,10 +361,10 @@ test "prettyPrint" {
     const allocator = testing.allocator;
     const doc = try z.createDocFromString("<div><p>hello</p></div>");
     defer z.destroyDocument(doc);
-    
+
     const body = z.bodyElement(doc).?;
     const body_node = z.elementToNode(body);
-    
+
     // Test that prettyPrint doesn't crash - output goes to stdout
     try prettyPrint(allocator, body_node);
 }
@@ -372,8 +372,8 @@ test "prettyPrint" {
 test "printDocStruct" {
     const doc = try z.createDocFromString("<div><p>test</p></div>");
     defer z.destroyDocument(doc);
-    
-    // Test that printDocStruct doesn't crash - output goes to stdout  
+
+    // Test that printDocStruct doesn't crash - output goes to stdout
     try printDocStruct(doc);
 }
 
@@ -466,7 +466,7 @@ fn walkTree(node: *z.DomNode, depth: u8) void {
             5 => "          ",
             else => "            ",
         };
-        print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
+        z.print("{s}{s}{s}{s}\n", .{ indent, ansi_colour, name, ansi_reset });
 
         walkTree(child.?, depth + 1);
         child = z.nextSibling(child.?);
