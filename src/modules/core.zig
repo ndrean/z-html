@@ -1068,7 +1068,6 @@ pub fn appendChild(parent: *z.DomNode, child: *z.DomNode) void {
     lxb_dom_node_insert_child(parent, child);
 }
 
-
 test "appendChild" {
     const doc = try createDocument();
     defer destroyDocument(doc);
@@ -1125,6 +1124,8 @@ test "appendChild/dren" {
 }
 
 /// [core] Replace all children of a node with a new node
+///
+/// Does not work as expected: check test "replaceAll"
 pub fn replaceAll(parent: *z.DomNode, node: *z.DomNode) !void {
     if (lxb_dom_node_replace_all(parent, node) != z._OK) {
         return Err.ReplaceAllFailed;
@@ -1134,25 +1135,46 @@ pub fn replaceAll(parent: *z.DomNode, node: *z.DomNode) !void {
 
 test "replaceAll" {
     const allocator = testing.allocator;
-    const doc = try z.createDocFromString("<html><body><ul><li id=\"1\">First</li><li id=\"2\">Second</li></ul></body></html>");
-    defer z.destroyDocument(doc);
+    {
+        const doc = try z.createDocFromString("<html><body><ul><li id=\"1\">First</li><li id=\"2\">Second</li></ul></body></html>");
+        defer z.destroyDocument(doc);
 
-    const body = z.bodyNode(doc).?;
+        const body = z.bodyNode(doc).?;
 
-    const new_li = try z.createElementWithAttrs(
-        doc,
-        "li",
-        &.{.{ .name = "id", .value = "0" }},
-    );
-    const ul = z.getElementByTag(body, .ul).?;
+        const new_li = try z.createElementWithAttrs(
+            doc,
+            "li",
+            &.{.{ .name = "id", .value = "0" }},
+        );
+        const ul = z.getElementByTag(body, .ul).?;
 
-    try replaceAll(elementToNode(ul), elementToNode(new_li));
-    const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
-    defer allocator.free(html);
-    try testing.expectEqualStrings(
-        "<body><ul><li id=\"0\"></li></ul></body>",
-        html,
-    );
+        try replaceAll(elementToNode(ul), elementToNode(new_li));
+        const html = try z.outerHTML(allocator, z.nodeToElement(body).?);
+        defer allocator.free(html);
+        try testing.expectEqualStrings(
+            "<body><ul><li id=\"0\"></li></ul></body>",
+            html,
+        );
+    }
+    // {
+    //     const doc = try z.createDocFromString("<div><span>my div</span></div><article><span>my article</span><span>my article 2</span></article>");
+    //     defer z.destroyDocument(doc);
+    //     const body = z.bodyNode(doc).?;
+    //     const div_elt = z.getElementByTag(body, .div).?;
+    //     const article_elt = z.getElementByTag(body, .article).?;
+    //     try replaceAll(
+    //         elementToNode(div_elt),
+    //         elementToNode(article_elt),
+    //     );
+    //     const div = z.firstChild(body).?;
+    //     try testing.expectEqualStrings("DIV", z.tagName_zc(z.nodeToElement(div).?));
+    //     try z.printDocStruct(doc);
+    //     std.debug.assert(!z.isNodeEmpty(body));
+    //     try z.prettyPrint(allocator, body);
+    //     // const html = try z.innerHTML(allocator, z.nodeToElement(body).?);
+    //     // defer allocator.free(html);
+    //     // try testing.expectEqualStrings("<body><div><span>my article</span></div><article><span>my article</span></article></body>", html);
+    // }
 }
 
 /// [core] Insert a node after a reference node.
@@ -1508,11 +1530,11 @@ pub fn insertAdjacentHTML(
                 insertChildNodesBefore(first, fragment_root);
             } else {
                 // Target is empty, just append all
-                z.appendFragment(target_node, fragment_root);
+                try z.appendFragment(target_node, fragment_root);
             }
         },
         .beforeend => {
-            z.appendFragment(target_node, fragment_root);
+            try z.appendFragment(target_node, fragment_root);
         },
         .afterend => {
             _ = parentNode(target_node) orelse return Err.NoParentNode;

@@ -37,6 +37,9 @@ extern "c" fn lexbor_html_tree_node_is_wrapper(node: *z.DomNode, tag_id: u32) bo
 extern "c" fn lxb_dom_document_create_document_fragment(doc: *z.HTMLDocument) ?*z.DocumentFragment;
 extern "c" fn lxb_dom_document_fragment_interface_destroy(document_fragment: *z.DocumentFragment) *z.DocumentFragment;
 
+// Extern declaration for lexbor master function
+extern "c" fn lxb_dom_node_append_child(parent: *z.DomNode, child: *z.DomNode) c_int;
+
 // === FragmentContext Html tags
 
 /// [fragment] Fragment parsing context - defines how the fragment should be interpreted
@@ -142,50 +145,35 @@ pub fn destroyDocumentFragment(fragment: *z.DocumentFragment) void {
     return;
 }
 
-/// [fragment] Append all children from a document fragment to a parent node
+/// [fragment] Append DocumentFragment children to parent (DOM-spec compliant)
 ///
 /// The fragment is emptied: the fragment children are moved into the DOM, not copied.
-///
-/// Note: The new lexbor master `lxb_dom_node_append_child` function exists but currently
-/// produces unexpected behavior with DocumentFragments (inserting extra html elements).
-/// Using manual iteration for now until the lexbor behavior is better understood.
-pub fn appendFragment(parent: *z.DomNode, fragment: ?*z.DomNode) void {
+/// This uses the new `lxb_dom_node_append_child` from lexbor master which handles
+/// DocumentFragments according to DOM specification. For true DocumentFragments,
+/// it moves all children and empties the fragment. For other nodes, falls back
+/// to manual method.
+pub fn appendFragment(parent: *z.DomNode, fragment: ?*z.DomNode) !void {
     if (fragment == null) return;
 
-    // Manual method - iterate and move each child individually
-    // This ensures correct behavior and order preservation
-    var fragment_child = z.firstChild(fragment.?);
-    while (fragment_child != null) {
-        const next_sibling = z.nextSibling(fragment_child.?);
-        z.removeNode(fragment_child.?);
-        z.appendChild(parent, fragment_child.?);
-        fragment_child = next_sibling;
+    // Check if this is a true DocumentFragment
+    if (z.isTypeFragment(fragment.?)) {
+        // Use the lexbor DOM-spec function for true DocumentFragments
+        const result = lxb_dom_node_append_child(parent, fragment.?);
+        // LXB_DOM_EXCEPTION_OK = -1, all other values are errors
+        if (result != -1) {
+            return Err.DomException;
+        }
+    } else {
+        print("OLD-----\n", .{});
+        // Manual method for non-DocumentFragment nodes - iterate and move each child individually
+        var fragment_child = z.firstChild(fragment.?);
+        while (fragment_child != null) {
+            const next_sibling = z.nextSibling(fragment_child.?);
+            z.removeNode(fragment_child.?);
+            z.appendChild(parent, fragment_child.?);
+            fragment_child = next_sibling;
+        }
     }
-}
-
-// Extern declaration for lexbor master function
-extern "c" fn lxb_dom_node_append_child(parent: *z.DomNode, child: *z.DomNode) c_int;
-
-/// [fragment] DOM-spec compliant append child using lexbor master function
-///
-/// This uses the new `lxb_dom_node_append_child` from lexbor master which should
-/// handle DocumentFragments according to DOM specification.
-/// Returns error if lexbor reports an exception code.
-pub fn appendChildDomSpec(parent: *z.DomNode, child: *z.DomNode) !void {
-    const result = lxb_dom_node_append_child(parent, child);
-    // LXB_DOM_EXCEPTION_OK = -1, all other values are errors
-    if (result != -1) {
-        return Err.DomException;
-    }
-}
-
-/// [fragment] Test function using new lexbor DOM-spec append method
-///
-/// This function uses the new `lxb_dom_node_append_child` from lexbor master
-/// to see exactly what it does with DocumentFragments.
-pub fn appendChildDOM(parent: *z.DomNode, fragment: ?*z.DomNode) !void {
-    if (fragment == null) return;
-    try appendChildDomSpec(parent, fragment.?);
 }
 
 test "DocumentFragment  - append programmatically only" {
@@ -215,7 +203,7 @@ test "DocumentFragment  - append programmatically only" {
     try testing.expect(z.firstChild(fragment_root) == p);
 
     // move (not copy) the document-fragment children to the body element of the document
-    z.appendFragment(body, fragment_root);
+    try z.appendFragment(body, fragment_root);
 
     // fragment is now empty
     try testing.expect(z.isNodeEmpty(fragment_root));
@@ -229,7 +217,7 @@ test "DocumentFragment  - append programmatically only" {
     try testing.expect(z.nextSibling(p) == z.elementToNode(div_elt));
 
     // Second call to appendFragment should be safe (fragment is now empty)
-    z.appendFragment(body, fragment_root);
+    try z.appendFragment(body, fragment_root);
 
     // Verify body still has the same 2 nodes after the second (no-op) call
     const nodes_after = try z.childNodes(allocator, body);
@@ -239,7 +227,7 @@ test "DocumentFragment  - append programmatically only" {
     z.destroyNode(fragment_root);
 
     // no-op handled gracefully
-    z.appendFragment(body, fragment_root);
+    try z.appendFragment(body, fragment_root);
 }
 
 test "appendFragment - regular DocumentFragment (createDocumentFragment)" {
@@ -283,7 +271,7 @@ test "appendFragment - regular DocumentFragment (createDocumentFragment)" {
     try testing.expect(container_children_before.len == 0);
 
     // Use appendFragment to move children from fragment to container
-    z.appendFragment(container_node, fragment_root);
+    try z.appendFragment(container_node, fragment_root);
 
     // Verify fragment is now empty (children were moved)
     try testing.expect(z.isNodeEmpty(fragment_root));
@@ -326,10 +314,10 @@ test "appendFragment - regular DocumentFragment (createDocumentFragment)" {
     z.destroyNode(fragment_root);
 }
 
-test "appendChildDOM vs appendFragment - compare new lexbor function behavior" {
+test "appendFragment - unified fragment handling" {
     const allocator = testing.allocator;
 
-    // Test 1: Using new lexbor DOM-spec method (appendChildDOM)
+    // Test 1: Using unified appendFragment method
     {
         const doc = try z.createDocument();
         defer z.destroyDocument(doc);
@@ -357,7 +345,7 @@ test "appendChildDOM vs appendFragment - compare new lexbor function behavior" {
         defer allocator.free(children);
 
         // Test the new lexbor function
-        try z.appendChildDOM(body, fragment_root1);
+        try z.appendFragment(body, fragment_root1);
 
         const children_after = try z.childNodes(allocator, fragment_root1);
         defer allocator.free(children_after);
@@ -397,7 +385,7 @@ test "appendChildDOM vs appendFragment - compare new lexbor function behavior" {
         defer allocator.free(children);
 
         // Test the manual method
-        z.appendFragment(body, fragment_root2);
+        try z.appendFragment(body, fragment_root2);
 
         const children_after2 = try z.childNodes(allocator, fragment_root2);
         defer allocator.free(children_after2);
@@ -410,63 +398,63 @@ test "appendChildDOM vs appendFragment - compare new lexbor function behavior" {
     }
 }
 
-test "appendChildDomSpec with template DocumentFragment" {
+test "appendFragment with template DocumentFragment" {
     const allocator = testing.allocator;
     const doc = try z.createDocument();
     defer z.destroyDocument(doc);
-    
+
     // Create a template with content
     const template = try createTemplate(doc);
     const template_content = templateContent(template);
-    
+
     // Add some elements to template content
     const template_content_node = fragmentToNode(template_content);
     const p_elt = try z.createElement(doc, "p");
     const text = try z.createTextNode(doc, "Template content");
     z.appendChild(z.elementToNode(p_elt), text);
     z.appendChild(template_content_node, z.elementToNode(p_elt));
-    
+
     const div_elt = try z.createElement(doc, "div");
     const div_text = try z.createTextNode(doc, "More content");
     z.appendChild(z.elementToNode(div_elt), div_text);
     z.appendChild(template_content_node, z.elementToNode(div_elt));
-    
+
     // Verify template content is a true DocumentFragment
     try testing.expect(z.isTypeFragment(template_content_node));
-    
+
     const children_before = try z.childNodes(allocator, template_content_node);
     defer allocator.free(children_before);
     try testing.expectEqual(@as(usize, 2), children_before.len);
-    
+
     // Clone the template content (as per DOM spec)
     const cloned_content = z.cloneNode(template_content_node) orelse return error.CloneFailed;
     defer z.destroyNode(cloned_content);
-    
+
     // Verify clone is also a DocumentFragment
     try testing.expect(z.isTypeFragment(cloned_content));
-    
+
     // Create target element
     try z.parseString(doc, "<div id='target'></div>");
     const target = z.getElementById(z.bodyNode(doc).?, "target").?;
     const target_node = z.elementToNode(target);
-    
-    // Test appendChildDomSpec with true DocumentFragment
-    try appendChildDomSpec(target_node, cloned_content);
-    
+
+    // Test appendFragment with true DocumentFragment
+    try appendFragment(target_node, cloned_content);
+
     // Verify fragment was emptied and target got the content
     const cloned_children_after = try z.childNodes(allocator, cloned_content);
     defer allocator.free(cloned_children_after);
     try testing.expectEqual(@as(usize, 0), cloned_children_after.len);
-    
+
     const target_children_after = try z.childNodes(allocator, target_node);
     defer allocator.free(target_children_after);
     try testing.expectEqual(@as(usize, 2), target_children_after.len);
-    
+
     // Verify the content
     const result_html = try z.innerHTML(allocator, target);
     defer allocator.free(result_html);
     try testing.expectEqualStrings("<p>Template content</p><div>More content</div>", result_html);
-    
+
     z.destroyTemplate(template);
 }
 
@@ -547,7 +535,7 @@ pub fn useTemplateElement(
             .custom => |opts| try z.sanitizeWithOptions(allocator, content, .{ .custom = opts }),
         }
         // z.appendFragment(target, content);
-        try appendChildDomSpec(target, content);
+        try appendFragment(target, content);
     } else {
         return Err.FragmentCloneFailed;
     }

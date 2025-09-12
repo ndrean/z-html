@@ -82,7 +82,7 @@ const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
 defer z.destroyDocument(doc);
 ```
 
-2. You have the _parser engine_ 
+2. You have the _parser engine_:
 
 ```cpp
 var parser = try z.Parser.init(allocator);
@@ -186,6 +186,202 @@ a:link, a:visited {
 ```
 
 </details>
+
+<hr>
+
+## HTMX Server-Side Rendering with Template Interpolation
+
+This example demonstrates high-performance server-side rendering with `HTMX` integration and template interpolation, achieving 280K+ operations per second.
+
+The rendering is _stateless_. The state is server-side driven, maintained in a database.
+
+<details><summary>Fake HTML page</summary>
+
+```cpp
+const blog_html =
+    \\<!DOCTYPE html>
+    \\<html lang="en">
+    \\  <head>
+    \\    <meta charset="UTF-8"/>
+    \\    <title>HTMX Blog - High Performance Server Rendering</title>
+    \\    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    \\    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    \\    <style>
+    \\      .blog-post { margin: 2rem 0; padding: 1.5rem; border: 1px solid #ddd; 
+}
+    \\      .post-title { color: #333; font-size: 1.5rem; cursor: pointer; }
+    \\      .post-title:hover { color: #0066cc; }
+    \\      .post-meta { color: #666; font-size: 0.9rem; margin: 0.5rem 0; }
+    \\      .post-actions { margin-top: 1rem; }
+    \\      .post-actions button { margin-right: 0.5rem; padding: 0.25rem 0.5rem; 
+}
+    \\    </style>
+    \\  </head>
+    \\  <body>
+    \\    <main class="content">
+    \\      <article class="blog-post" data-post-id="{post_id}">
+    \\        <header class="post-header">
+    \\          <h2 class="post-title" hx-get="/posts/{post_id}/edit" 
+hx-target="#edit-modal">
+    \\            {title_template}
+    \\          </h2>
+    \\          <div class="post-meta">
+    \\            <span class="author">{author_name}</span>
+    \\            <time datetime="2024-01-01">{publish_date}</time>
+    \\            <span class="views" hx-get="/posts/{post_id}/views"
+hx-trigger="revealed">
+    \\              {view_count} views
+    \\            </span>
+    \\          </div>
+    \\        </header>
+    \\
+    \\        <div class="post-content">
+    \\          <p>Welcome {user_name}! This demonstrates high-performance HTMX
+server-side rendering with Zig.</p>
+    \\          <p>Current user: <strong>{user_name}</strong>, Post ID:
+<strong>{post_id}</strong></p>
+    \\        </div>
+    \\
+    \\        <footer class="post-actions">
+    \\          <button hx-post="/posts/{post_id}/like" hx-swap="innerHTML">
+    \\            ❤️ {like_count}
+    \\          </button>
+    \\          <button hx-get="/posts/{post_id}/comments"
+hx-target="#comments-{post_id}">
+    \\            💬 {comment_count}
+    \\          </button>
+    \\          <button hx-delete="/posts/{post_id}" hx-confirm="Delete this
+post?" hx-target="closest .blog-post">
+    \\            🗑️ Delete
+    \\          </button>
+    \\        </footer>
+    \\      </article>
+    \\    </main>
+    \\  </body>
+    \\</html>
+;
+```
+</details>
+<br>
+
+The code below parses the whole HTML delivered when the client connects, and starts the parser and css engine.
+
+When the webserver receives an HTMX request, the server returns a serialized updated HTML string.
+
+```cpp
+const std = @import("std");
+const z = @import("zexplorer");
+
+pub fn main() !void {
+    const gpa = std.heap.c_allocator;
+
+    // One-time setup (server startup)
+    const doc = try z.createDocFromString(blog_html);
+    defer z.destroyDocument(doc);
+
+    var css_engine = try z.createCssEngine(allocator);
+    defer css_engine.deinit();
+
+    var parser = try z.Parser.init(allocator);
+    defer parser.deinit();
+
+    // 1. start the webserver: not implemented
+    // 2. Simulate handling requests received by the webserver
+    try requestHandler(gpa, doc, &css_engine, &parser);
+}
+
+// an example: tailored for each request
+fn requestHandler(
+    allocator: std.mem.Allocator,
+    doc: *z.HTMLDocument,
+    css_engine: *z.CssSelectorEngine,
+    parser: *z.Parser,
+) !void {
+
+    // 1. Target elements with CSS selectors
+    const title_elements = try css_engine.querySelectorAll(allocator, doc, ".post-title");
+    defer allocator.free(title_elements);
+
+    if (title_elements.len > 0) {
+        // 2. Clone element for modification (original DOM stays pristine)
+        const cloned_title = z.cloneNode(z.elementToNode(title_elements[0])).?;
+        defer z.destroyNode(cloned_title);
+
+        // 3. Template interpolation with curly brackets after reading the db or kv store
+        const template = "{user_name}'s Blog Post #{post_id}: {title}";
+        var content = try interpolateTemplate(allocator, template, "user_name",
+"Mr Magoo");
+        defer allocator.free(content);
+
+        const post_id_str = try std.fmt.allocPrint(allocator, "{}", .{42});
+        defer allocator.free(post_id_str);
+
+        const temp = try interpolateTemplate(allocator, content, "post_id",
+post_id_str);
+        defer allocator.free(temp);
+
+        const final_content = try interpolateTemplate(allocator, temp, "title",
+"HTMX Performance");
+        defer allocator.free(final_content);
+
+        // 4. Update element content and HTMX attributes
+        _ = try z.setInnerHTML(z.nodeToElement(cloned_title).?, final_content);
+
+        // Interpolate HTMX attributes dynamically
+        const hx_get_value = try interpolateTemplate(allocator,
+"/posts/{post_id}/edit", "post_id", post_id_str);
+        defer allocator.free(hx_get_value);
+        _ = z.setAttribute(z.nodeToElement(cloned_title).?, "hx-get",
+hx_get_value);
+
+        // 5. Serialize modified element (ready to send to client)
+        const response_html = try z.outerHTML(allocator,
+z.nodeToElement(cloned_title).?);
+        defer allocator.free(response_html);
+
+        // POST back to the client
+        std.debug.print("HTMX Response: {s}\n", .{response_html});
+        // Output: <h2 class="post-title" hx-get="/posts/42/edit">M. Magoo's Blog
+Post #42: HTMX Performance</h2>
+    }
+}
+
+// Template interpolation helper - replaces {key} with values
+fn interpolateTemplate(
+    allocator: std.mem.Allocator, 
+    template: []const u8, 
+    key: []const u8, 
+    value: []const u8) ![]u8 {
+    const placeholder = try std.fmt.allocPrint(allocator, "{{{s}}}", .{key});
+    defer allocator.free(placeholder);
+
+    // Count occurrences for efficient pre-allocation
+    var count: usize = 0;
+    var pos: usize = 0;
+    while (std.mem.indexOf(u8, template[pos..], placeholder)) |found| {
+        count += 1;
+        pos += found + placeholder.len;
+    }
+
+    if (count == 0) return try allocator.dupe(u8, template);
+
+    // Pre-allocate and replace all occurrences
+    const new_size = template.len + (value.len * count) - (placeholder.len *
+count);
+    var result = try std.ArrayList(u8).initCapacity(allocator, new_size);
+
+    pos = 0;
+    while (std.mem.indexOf(u8, template[pos..], placeholder)) |found| {
+        const actual_pos = pos + found;
+        try result.appendSlice(allocator, template[pos..actual_pos]);
+        try result.appendSlice(allocator, value);
+        pos = actual_pos + placeholder.len;
+    }
+    try result.appendSlice(allocator, template[pos..]);
+
+    return result.toOwnedSlice(allocator);
+}
+```
 
 <hr>
 

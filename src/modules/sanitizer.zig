@@ -60,23 +60,10 @@ pub fn isElementAttributeAllowedEnum(tag: HtmlTag, attr_name: []const u8) bool {
 
 /// [sanitize] Check if attribute is a framework directive or custom attribute
 pub fn isFrameworkAttribute(attr_name: []const u8) bool {
-    return std.mem.startsWith(u8, attr_name, "phx-") or // Phoenix LiveView events/bindings
-        std.mem.startsWith(u8, attr_name, ":") or // Phoenix LiveView directives (:if, :for, :let) + Vue.js/Alpine
-        std.mem.startsWith(u8, attr_name, "data-") or // Data attributes
-        std.mem.startsWith(u8, attr_name, "v-") or // Vue.js directives
-        std.mem.startsWith(u8, attr_name, "@") or // Vue.js events, Alpine events
-        std.mem.startsWith(u8, attr_name, "x-") or // Alpine.js directives
-        std.mem.startsWith(u8, attr_name, "*ng") or // Angular structural directives
-        std.mem.startsWith(u8, attr_name, "[") or // Angular property binding
-        std.mem.startsWith(u8, attr_name, "(") or // Angular event binding
-        std.mem.startsWith(u8, attr_name, "bind:") or // Svelte binding
-        std.mem.startsWith(u8, attr_name, "on:") or // Svelte events
-        std.mem.startsWith(u8, attr_name, "use:") or // Svelte actions
-        std.mem.startsWith(u8, attr_name, ".") or // Lit property binding
-        std.mem.startsWith(u8, attr_name, "?") or // Lit boolean attributes
-        std.mem.startsWith(u8, attr_name, "aria-") or // Accessibility
+    // Use the centralized framework specification from html_spec.zig
+    return z.isFrameworkAttribute(attr_name) or
+        // Additional sanitizer-specific exceptions
         std.mem.startsWith(u8, attr_name, "slot") or // Web Components slots
-        // Phoenix LiveView specific attributes that might not have prefixes
         std.mem.eql(u8, attr_name, "for") or // Phoenix :for loops (might appear as 'for')
         std.mem.eql(u8, attr_name, "if") or // Phoenix :if conditions (might appear as 'if')
         std.mem.eql(u8, attr_name, "let"); // Phoenix :let bindings (might appear as 'let')

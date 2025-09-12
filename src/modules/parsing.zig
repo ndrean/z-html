@@ -13,6 +13,17 @@ const Err = z.Err;
 const testing = std.testing;
 const print = std.debug.print;
 
+/// Apply sanitization to a node based on sanitization options
+fn applySanitization(allocator: std.mem.Allocator, node: *z.DomNode, sanitizer: z.SanitizeOptions) !void {
+    switch (sanitizer) {
+        .none => {},
+        .minimum => try z.sanitizeWithOptions(allocator, node, .minimum),
+        .strict => try z.sanitizeWithOptions(allocator, node, .strict),
+        .permissive => try z.sanitizeWithOptions(allocator, node, .permissive),
+        .custom => |opts| try z.sanitizeWithOptions(allocator, node, .{ .custom = opts }),
+    }
+}
+
 test "lexbor escaping behavior" {
     const test_html = "<div>Raw < and > characters</div><script>if (x < 5) alert('test');</script>";
 
@@ -25,13 +36,6 @@ test "lexbor escaping behavior" {
     const result = try z.innerHTML(testing.allocator, body);
     defer testing.allocator.free(result);
     try testing.expectEqualStrings("<div>Raw &lt; and &gt; characters</div><script>if (x < 5) alert('test');</script>", result);
-
-    // std.debug.z.print("\n=== LEXBOR ESCAPING TEST ===\n", .{});
-    // std.debug.z.print("Input:  {s}\n", .{test_html});
-    // std.debug.z.print("Output: {s}\n\n", .{result});
-
-    // Basic assertion - just ensure we got some output
-    // try testing.expect(result.len > 0);
 }
 
 const LXB_HTML_SERIALIZE_OPT_UNDEF: c_int = 0x00;
@@ -179,27 +183,47 @@ pub fn setInnerHTMLSafe(
     context_element: *z.HTMLElement,
     sanitizer: z.SanitizeOptions,
 ) !void {
-    const fragment_root = lxb_html_document_parse_fragment(
+    const template_html = try std.fmt.allocPrint(allocator, "<template>{s}</template>", .{html});
+    defer allocator.free(template_html);
+    // Parse without sanitization first - we'll sanitize the content afterward
+    const template_fragment = lxb_html_document_parse_fragment(
         doc,
         context_element,
-        html.ptr,
-        html.len,
+        template_html.ptr,
+        template_html.len,
     ) orelse return Err.ParseFailed;
 
-    switch (sanitizer) {
-        .none => {}, // No sanitization
-        .minimum => try z.sanitizeWithOptions(allocator, fragment_root, .minimum),
-        .strict => try z.sanitizeWithOptions(allocator, fragment_root, .strict),
-        .permissive => try z.sanitizeWithOptions(allocator, fragment_root, .permissive),
-        .custom => |opts| try z.sanitizeWithOptions(allocator, fragment_root, .{ .custom = opts }),
-    }
+    defer z.destroyNode(template_fragment);
 
-    if (z.firstChild(fragment_root) != null) {
-        _ = try setInnerHTML(context_element, "");
-        z.appendFragment(z.elementToNode(context_element), fragment_root);
-    } else {
-        return Err.FragmentParseFailed;
-    }
+    const template_node = z.firstChild(template_fragment) orelse return Err.ParseFailed;
+    const template_element = z.nodeToElement(template_node) orelse return Err.ParseFailed;
+    const template_template = z.elementToTemplate(template_element) orelse return Err.ParseFailed;
+    const template_content = z.templateContent(template_template);
+    const fragment_root = z.fragmentToNode(template_content);
+
+    // Apply sanitization to the template content (not the wrapper)
+    try applySanitization(allocator, fragment_root, sanitizer);
+
+    // const fragment_root = lxb_html_document_parse_fragment(
+    //     doc,
+    //     context_element,
+    //     html.ptr,
+    //     html.len,
+    // ) orelse return Err.ParseFailed;
+
+    // if (z.firstChild(fragment_root) != null) {
+    //     _ = try setInnerHTML(context_element, "");
+    //     try z.appendFragment(z.elementToNode(context_element), fragment_root);
+    // } else {
+    //     return Err.FragmentParseFailed;
+    // }
+
+    // Clear existing content and append the new fragment
+    _ = try setInnerHTML(context_element, "");
+    try z.appendFragment(
+        z.elementToNode(context_element),
+        fragment_root,
+    );
 }
 
 test "setInnerHTMLSafe" {
@@ -329,6 +353,9 @@ pub const Parser = struct {
         return doc;
     }
 
+    /// Parse HTML string in given context - returns original template content (no cloning)
+    /// WARNING: The returned DocumentFragment will be emptied when used with appendFragment!
+    /// Only use this when you know the fragment will be consumed immediately.
     pub fn parseStringInContext(
         self: *Parser,
         html: []const u8,
@@ -338,6 +365,43 @@ pub const Parser = struct {
     ) !*z.DomNode {
         if (!self.initialized) return Err.HtmlParserNotInitialized;
 
+        // Special template wrapping approach for true DocumentFragments
+        if (context != .template) {
+            // Wrap in template to get true DocumentFragment
+            const template_html = try std.fmt.allocPrint(self.allocator, "<template>{s}</template>", .{html});
+            defer self.allocator.free(template_html);
+
+            // Parse in template context to get template element
+            const template_fragment = try self.parseStringInContext(
+                template_html,
+                doc,
+                .template,
+                .none,
+            );
+            defer z.destroyNode(template_fragment);
+
+            // Extract template element and its content
+            const template_node = z.firstChild(template_fragment) orelse {
+                return Err.ParseFailed;
+            };
+            const template_element = z.nodeToElement(template_node) orelse {
+                return Err.ParseFailed;
+            };
+            const template_template = z.elementToTemplate(template_element) orelse {
+                return Err.ParseFailed;
+            };
+
+            // Get the true DocumentFragment content (NO CLONING)
+            const template_content = z.templateContent(template_template);
+            const content_node = z.fragmentToNode(template_content);
+
+            // Apply sanitization to original content
+            try applySanitization(self.allocator, content_node, sanitizer);
+
+            return content_node;
+        }
+
+        // Original method for template context (no wrapping needed)
         const context_tag = context.toTagName();
         const context_element = try z.createElement(doc, context_tag);
         defer z.destroyNode(z.elementToNode(context_element));
@@ -351,33 +415,34 @@ pub const Parser = struct {
             return Err.ParseFailed;
         };
 
-        switch (sanitizer) {
-            .none => {}, // No sanitization
-            .minimum => try z.sanitizeWithOptions(
-                self.allocator,
-                fragment_root,
-                .minimum,
-            ),
-            .strict => try z.sanitizeWithOptions(
-                self.allocator,
-                fragment_root,
-                .strict,
-            ),
-            .permissive => try z.sanitizeWithOptions(
-                self.allocator,
-                fragment_root,
-                .permissive,
-            ),
-            .custom => |opts| try z.sanitizeWithOptions(
-                self.allocator,
-                fragment_root,
-                .{ .custom = opts },
-            ),
-        }
+        try applySanitization(self.allocator, fragment_root, sanitizer);
 
         return fragment_root;
     }
 
+    /// Parse and append HTML fragments using parseStringInContext (no cloning)
+    /// [parser] Parse and append regular HTML fragments (private helper)
+    fn parseAndAppendFragment(
+        self: *Parser,
+        element: *z.HTMLElement,
+        content: []const u8,
+        context: z.FragmentContext,
+        sanitizer: z.SanitizeOptions,
+    ) !void {
+        const node = z.elementToNode(element);
+        const target_doc = z.ownerDocument(node);
+
+        const fragment_root = try self.parseStringInContext(
+            content,
+            target_doc,
+            context,
+            sanitizer,
+        );
+        // NOTE: No defer z.destroyNode(fragment_root) because it's original template content
+
+        // Use the unified appendFragment function
+        try z.appendFragment(node, fragment_root);
+    }
 
     /// Parse a template string and return the template element (with DocumentFragment content)
     ///
@@ -465,35 +530,6 @@ pub const Parser = struct {
                 context,
                 sanitizer,
             );
-        }
-    }
-
-    /// [parser] Parse and append regular HTML fragments (private helper)
-    fn parseAndAppendFragment(
-        self: *Parser,
-        element: *z.HTMLElement,
-        content: []const u8,
-        context: z.FragmentContext,
-        sanitizer: z.SanitizeOptions,
-    ) !void {
-        const node = z.elementToNode(element);
-        const target_doc = z.ownerDocument(node);
-
-        const fragment_root = try self.parseStringInContext(
-            content,
-            target_doc,
-            context,
-            sanitizer,
-        );
-        defer z.destroyNode(fragment_root);
-
-        // Check if this is a true DocumentFragment first
-        if (z.isTypeFragment(fragment_root)) {
-            // Use the lexbor function for true DocumentFragments
-            try z.appendChildDomSpec(node, fragment_root);
-        } else {
-            // For parsed fragments (not true DocumentFragments), use manual method
-            z.appendFragment(node, fragment_root);
         }
     }
 
@@ -743,10 +779,10 @@ test "parseStringInContext + appendFragment with options" {
     // append fragments and check the result
 
     const div: *z.DomNode = @ptrCast(div_elt);
-    z.appendFragment(div, frag_root1);
-    z.appendFragment(div, frag_root2);
-    z.appendFragment(div, frag_root3);
-    z.appendFragment(div, frag_root4);
+    try z.appendFragment(div, frag_root1);
+    try z.appendFragment(div, frag_root2);
+    try z.appendFragment(div, frag_root3);
+    try z.appendFragment(div, frag_root4);
 
     const result = try z.outerHTML(allocator, div_elt);
     defer allocator.free(result);

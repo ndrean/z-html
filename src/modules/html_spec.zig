@@ -9,6 +9,65 @@ const z = @import("../root.zig");
 const Err = z.Err;
 const print = std.debug.print;
 
+//=========================================================================================================
+// CENTRALIZED FRAMEWORK ATTRIBUTE SYSTEM
+//=========================================================================================================
+
+/// Framework specification for modern web frameworks
+pub const FrameworkSpec = struct {
+    prefix: []const u8,
+    name: []const u8,
+    safe: bool = true,
+    description: []const u8 = "",
+};
+
+/// Centralized list of supported web frameworks and their attribute prefixes
+/// This is the single source of truth for framework attribute validation
+pub const FRAMEWORK_SPECS = [_]FrameworkSpec{
+    .{ .prefix = "hx-", .name = "HTMX", .description = "HTMX attributes for server-side interactions" },
+    .{ .prefix = "phx-", .name = "Phoenix LiveView", .description = "Phoenix LiveView events and bindings" },
+    .{ .prefix = "x-", .name = "Alpine.js", .description = "Alpine.js directives" },
+    .{ .prefix = "v-", .name = "Vue.js", .description = "Vue.js directives" },
+    .{ .prefix = "@", .name = "Vue.js Events", .description = "Vue.js event handlers (@click, etc.)" },
+    .{ .prefix = ":", .name = "Vue.js/Phoenix Directives", .description = "Directive syntax (:if, :for, etc.)" },
+    .{ .prefix = "data-", .name = "HTML Data", .description = "Standard HTML data attributes" },
+    .{ .prefix = "aria-", .name = "ARIA", .description = "Accessibility attributes" },
+    .{ .prefix = "*ng", .name = "Angular", .description = "Angular structural directives (*ngFor, *ngIf)" },
+    .{ .prefix = "[", .name = "Angular Property", .description = "Angular property binding" },
+    .{ .prefix = "(", .name = "Angular Event", .description = "Angular event binding" },
+    .{ .prefix = "bind:", .name = "Svelte Bind", .description = "Svelte binding directives" },
+    .{ .prefix = "on:", .name = "Svelte Event", .description = "Svelte event handlers" },
+    .{ .prefix = "use:", .name = "Svelte Action", .description = "Svelte action directives" },
+};
+
+/// Check if an attribute name matches any supported framework pattern
+pub fn isFrameworkAttribute(attr_name: []const u8) bool {
+    inline for (FRAMEWORK_SPECS) |spec| {
+        if (std.mem.startsWith(u8, attr_name, spec.prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Get the framework specification for a given attribute name
+pub fn getFrameworkSpec(attr_name: []const u8) ?FrameworkSpec {
+    inline for (FRAMEWORK_SPECS) |spec| {
+        if (std.mem.startsWith(u8, attr_name, spec.prefix)) {
+            return spec;
+        }
+    }
+    return null;
+}
+
+/// Check if a framework attribute is safe (not dangerous)
+pub fn isFrameworkAttributeSafe(attr_name: []const u8) bool {
+    if (getFrameworkSpec(attr_name)) |spec| {
+        return spec.safe;
+    }
+    return false; // Unknown framework attributes are not safe
+}
+
 /// Specification for an HTML attribute
 pub const AttrSpec = struct {
     name: []const u8,
@@ -392,36 +451,16 @@ fn getElementSpec(tag: []const u8) ?*const ElementSpec {
 
 /// Check if an attribute is allowed for a given element
 pub fn isAttributeAllowed(element_tag: []const u8, attr_name: []const u8) bool {
+    // First check if it's a framework attribute (always allowed if safe)
+    if (isFrameworkAttribute(attr_name)) {
+        return isFrameworkAttributeSafe(attr_name);
+    }
+
+    // Then check element-specific attributes
     const spec = getElementSpec(element_tag) orelse return false;
 
     for (spec.allowed_attrs) |attr_spec| {
         if (std.mem.eql(u8, attr_spec.name, attr_name)) {
-            return attr_spec.safe;
-        }
-        // Handle aria-* attributes (prefix match)
-        if (std.mem.eql(u8, attr_spec.name, "aria") and std.mem.startsWith(u8, attr_name, "aria-")) {
-            return attr_spec.safe;
-        }
-        // Handle data-* attributes (prefix match)
-        if (std.mem.eql(u8, attr_spec.name, "data") and std.mem.startsWith(u8, attr_name, "data-")) {
-            return attr_spec.safe;
-        }
-        // Handle x-* attributes (Alpine.js prefix match)
-        if (std.mem.eql(u8, attr_spec.name, "x-on") and std.mem.startsWith(u8, attr_name, "x-on:")) {
-            return attr_spec.safe;
-        }
-        if (std.mem.eql(u8, attr_spec.name, "x-bind") and std.mem.startsWith(u8, attr_name, "x-bind:")) {
-            return attr_spec.safe;
-        }
-        // Handle phx-value-* attributes (Phoenix prefix match)
-        if (std.mem.eql(u8, attr_spec.name, "phx-value") and std.mem.startsWith(u8, attr_name, "phx-value-")) {
-            return attr_spec.safe;
-        }
-        // Handle v-* attributes (Vue.js prefix match)
-        if (std.mem.eql(u8, attr_spec.name, "v-on") and std.mem.startsWith(u8, attr_name, "v-on:")) {
-            return attr_spec.safe;
-        }
-        if (std.mem.eql(u8, attr_spec.name, "v-bind") and std.mem.startsWith(u8, attr_name, "v-bind:")) {
             return attr_spec.safe;
         }
     }
@@ -430,6 +469,12 @@ pub fn isAttributeAllowed(element_tag: []const u8, attr_name: []const u8) bool {
 
 /// Check if an attribute value is valid for a given element and attribute
 pub fn isAttributeValueValid(element_tag: []const u8, attr_name: []const u8, attr_value: []const u8) bool {
+    // Framework attributes generally allow any values
+    if (isFrameworkAttribute(attr_name)) {
+        return isFrameworkAttributeSafe(attr_name);
+    }
+
+    // Check element-specific attribute value restrictions
     const spec = getElementSpec(element_tag) orelse return false;
 
     for (spec.allowed_attrs) |attr_spec| {
@@ -443,18 +488,6 @@ pub fn isAttributeValueValid(element_tag: []const u8, attr_name: []const u8, att
                 return false; // Has restrictions but value doesn't match
             }
             return true; // No restrictions on values
-        }
-        // Handle prefix matches for aria-*, data-*, and framework attributes
-        if ((std.mem.eql(u8, attr_spec.name, "aria") and std.mem.startsWith(u8, attr_name, "aria-")) or
-            (std.mem.eql(u8, attr_spec.name, "data") and std.mem.startsWith(u8, attr_name, "data-")) or
-            (std.mem.eql(u8, attr_spec.name, "x-on") and std.mem.startsWith(u8, attr_name, "x-on:")) or
-            (std.mem.eql(u8, attr_spec.name, "x-bind") and std.mem.startsWith(u8, attr_name, "x-bind:")) or
-            (std.mem.eql(u8, attr_spec.name, "phx-value") and std.mem.startsWith(u8, attr_name, "phx-value-")) or
-            (std.mem.eql(u8, attr_spec.name, "v-on") and std.mem.startsWith(u8, attr_name, "v-on:")) or
-            (std.mem.eql(u8, attr_spec.name, "v-bind") and std.mem.startsWith(u8, attr_name, "v-bind:")))
-        {
-            // Prefix attributes generally allow any values
-            return true;
         }
     }
     return false; // Attribute not found
