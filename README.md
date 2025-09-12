@@ -195,6 +195,8 @@ This example demonstrates high-performance server-side rendering with `HTMX` int
 
 The rendering is _stateless_. The state is server-side driven, maintained in a database.
 
+There is no need for a templating langugage: using multiline strings and loops or conditionals is largely enough to build HTML strings, and faster.
+
 <details><summary>Fake HTML page</summary>
 
 ```cpp
@@ -695,37 +697,27 @@ zig build test --summary all
 - run the demo in the __main.zig_ demo with:
 
 ```sh
-zig build run -Doptimize=Debug
-# or
 zig build run -Doptimize=ReleaseFast
 ```
 
-- library:
+- Use the library: check _LIBRARY.md_.
 
-```sh
-zig build --release=fast
-```
 
-- fetch to include source code:
-
-```sh
-# to test
-```
 
 ### Notes on search in `lexbor` source/examples
 
 <https://github.com/lexbor/lexbor/tree/master/examples/lexbor>
 
-Once you build `lexbor`, you have the static object located at _/lexbor_src_2.5.0/build/liblexbor_static.a_.
+Once you build `lexbor`, you have the static object located at _/lexbor_src_master/build/liblexbor_static.a_.
 
 To check which primitives are exported, you can use:
 
 ```sh
-nm lexbor_src_2.5.0/build/liblexbor_static.a | grep -i "serialize"
+nm lexbor_src_master/build/liblexbor_static.a | grep -i "serialize"
 ```
 
 Directly in the source code:
 
 ```sh
-find lexbor_src_2.5.0/source -name "*.h" | xargs grep -l "lxb_selectors_opt_set_noi"
+find lexbor_src_master/source -name "*.h" | xargs grep -l "lxb_selectors_opt_set_noi"
 ```
