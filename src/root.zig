@@ -262,6 +262,7 @@ pub const elementToTemplate = frag_temp.elementToTemplate;
 // ---
 pub const templateContent = frag_temp.templateContent;
 pub const useTemplateElement = frag_temp.useTemplateElement;
+pub const innerTemplateHTML = frag_temp.innerTemplateHTML;
 
 //=========================================================================================================
 // Sanitation / Serialization / Inner / outer HTML manipulation

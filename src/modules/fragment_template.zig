@@ -796,3 +796,137 @@ test "useTemplateElement with existing template - multiple uses" {
     try testing.expect(std.mem.indexOf(u8, result, "Code: 1") != null);
     try testing.expect(std.mem.indexOf(u8, result, "Name: 1") != null);
 }
+
+test "HTMX template" {
+    const allocator = testing.allocator;
+
+    // This file contains the complete HTML template for the HTMX application,
+    // formatted as a Zig multiline string to use by the backend.
+
+    const index_html =
+        \\<!DOCTYPE html>
+        \\<html lang="en">
+        \\<head>
+        \\<meta charset="UTF-8" />
+        \\<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        \\<title>HTMX + TailwindCSS Demo App</title>
+        \\<script src="https://cdn.tailwindcss.com"></script>
+        \\<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        \\<link rel="preconnect" href="https://fonts.googleapis.com" />
+        \\<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        \\<link
+        \\  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+        \\</head>
+        \\<body class="bg-gray-50 min-h-screen flex flex-col items-center p-6 font-inter">
+        \\<header class="mb-8 text-center">
+        \\<h1 class="text-5xl font-extrabold text-blue-600">Welcome to Demo App</h1>
+        \\<p class="text-xl text-gray-700 mt-2">HTMX & TailwindCSS Frontend</p>
+        \\</header>
+        \\<main class="w-full max-w-6xl p-8 bg-white rounded-2xl shadow-xl">
+        \\<!-- Navigation -->
+        \\<nav class="flex justify-center mb-8 bg-gray-100 rounded-lg p-3 shadow-inner">
+        \\<a class="px-6 py-3 font-semibold text-blue-600 rounded-lg transition-colors duration-200 hover:bg-blue-100 mr-4"
+        \\          hx-get="/groceries"
+        \\          hx-target="#content"
+        \\          hx-push-url="true"
+        \\          hx-trigger="click"
+        \\          >Grocery List</a>
+        \\<a class="px-6 py-3 font-semibold text-blue-600 rounded-lg transition-colors duration-200 hover:bg-blue-100"
+        \\          hx-get="/shopping-list"
+        \\          hx-target="#content"
+        \\          hx-push-url="true"
+        \\          hx-trigger="click"
+        \\          >Shopping List</a>
+        \\</nav>
+        \\<!-- Main content area will be loaded here -->
+        \\<div id="content" class="min-h-[500px] p-6 bg-gray-50 rounded-lg shadow-inner">
+        \\<!-- Default content loads on initial page load -->
+        \\<div class="flex items-center justify-center h-full text-center text-gray-500">
+        \\<p class="text-2xl font-semibold">Select an option from the navigation menu to get started.</p>
+        \\</div>
+        \\</div>
+        \\</main>
+        \\<!-- The HTMX content for the grocery list and item details card. -->
+        \\<!-- This would normally be returned by the '/groceries' backend endpoint. -->
+        \\<template id="groceries-page-template">
+        \\<div class="flex flex-col md:flex-row gap-8 p-4">
+        \\<!-- Grocery Items List -->
+        \\<div class="md:w-1/2">
+        \\<h2 class="text-3xl font-bold text-gray-800 mb-6">Grocery Items</h2>
+        \\<div class="space-y-4 max-h-[400px] overflow-y-auto pr-2"
+        \\            hx-get="/api/items"
+        \\            hx-trigger="load, every 60s"
+        \\            hx-target="this"
+        \\            hx-swap="innerHTML">
+        \\<!-- HTMX will load the list of available items here -->
+        \\<p class="text-gray-500">Loading items...</p>
+        \\</div>
+        \\</div>
+        \\<!-- Item Details Card -->
+        \\<div id="item-details-card"
+        \\          class="md:w-1/2 bg-gray-100 rounded-xl p-6 shadow-lg min-h-[300px] flex items-center justify-center transition-all duration-300"
+        \\          hx-get="/item-details/default"
+        \\          hx-trigger="load"
+        \\          hx-target="this"
+        \\          hx-swap="innerHTML">
+        \\<!-- HTMX will load item details here when an item is clicked -->
+        \\</div>
+        \\</div>
+        \\</template>
+        \\<!-- The HTMX content for the dedicated shopping list page. -->
+        \\<!-- This would be returned by the '/shopping-list' backend endpoint. -->
+        \\<template id="shopping-list-template">
+        \\<div class="flex flex-col items-center">
+        \\<h2 class="text-3xl font-bold text-gray-800 mb-6">Shopping List</h2>
+        \\<div id="cart-content"
+        \\          class="w-full max-w-xl bg-white rounded-lg p-6 shadow-md max-h-[500px] overflow-y-auto"
+        \\          hx-get="/api/cart"
+        \\          hx-trigger="load, every 30s"
+        \\          hx-target="this"
+        \\          hx-swap="innerHTML">
+        \\<!-- HTMX will populate this area with the cart items -->
+        \\<p class="text-gray-600 text-center">Your cart is empty.</p>
+        \\</div>
+        \\</div>
+        \\</template>
+        \\<footer class="mt-8 text-gray-500 text-sm text-center">&copy; 2025 HTMX-Z</footer>
+        \\</body>
+        \\</html>
+    ;
+
+    var parser = try z.Parser.init(allocator);
+    defer parser.deinit();
+    const doc = try parser.parse(index_html, .none);
+    defer z.destroyDocument(doc);
+    const html_node = z.documentRoot(doc).?;
+    try z.normalizeDOMwithOptions(allocator, z.nodeToElement(html_node).?, .{ .skip_comments = true });
+    var css_engine = try z.CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+    const template_node = try css_engine.querySelector(html_node, "#groceries-page-template");
+    try testing.expect(template_node != null);
+    try testing.expect(isTemplate(template_node.?));
+    const template = z.elementToTemplate(z.nodeToElement(template_node.?).?).?;
+    const template_content = templateContent(template);
+    const content_node = fragmentToNode(template_content);
+    try testing.expectEqualStrings("#document-fragment", z.nodeName_zc(content_node));
+    const first_child = z.firstChild(content_node);
+    try testing.expect(first_child != null);
+    try testing.expectEqualStrings("DIV", z.nodeName_zc(first_child.?));
+    const txt = try z.innerHTML(allocator, z.nodeToElement(z.firstChild(content_node).?).?);
+    defer allocator.free(txt);
+    std.debug.print("Template inner HTML:\n{s}\n", .{txt});
+    const res = try innerTemplateHTML(allocator, template_node.?);
+    defer allocator.free(res);
+    std.debug.print("innerTemplateHTML result:\n{s}\n", .{res});
+}
+
+pub fn innerTemplateHTML(allocator: std.mem.Allocator, template_node: *z.DomNode) ![]const u8 {
+    const template = z.elementToTemplate(z.nodeToElement(template_node).?).?;
+    const template_content = templateContent(template);
+    const content_node = fragmentToNode(template_content);
+    const first_child = z.firstChild(content_node);
+    std.debug.assert(first_child != null);
+    if (first_child == null) return error.NoChildInTemplate;
+    const html = try z.innerHTML(allocator, z.nodeToElement(first_child.?).?);
+    return html;
+}
