@@ -99,7 +99,7 @@ defer z.destroyDocument(doc);
 
 2. You have the _parser engine_:
 
-```cpp
+```zig
 var parser = try z.Parser.init(allocator);
 defer parser.deinit();
 const doc = try parser.parse("<div><p></p></div>");
@@ -111,7 +111,7 @@ defer z.destroyDocument(doc);
 
 ## Example: scrap the web and explore a page
 
-```cpp
+```zig
 test "scrap example.com" {
   const allocator = std.testing.allocator;
 
@@ -211,7 +211,7 @@ There is no need for a templating langugage: using multiline strings and loops o
 
 <details><summary>Fake HTML page</summary>
 
-```cpp
+```zig
 const blog_html =
     \\<!DOCTYPE html>
     \\<html lang="en">
@@ -283,7 +283,7 @@ The code below parses the whole HTML delivered when the client connects, and sta
 
 When the webserver receives an HTMX request, the server returns a serialized updated HTML string.
 
-```cpp
+```zig
 const std = @import("std");
 const z = @import("zexplorer");
 
@@ -421,7 +421,7 @@ const html_string =
 
 You parse this HTML string:
 
-```cpp
+```zig
 const doc = try z.createDocFromString(html_string);
 defer z.destroyDocument(doc);
 
@@ -437,7 +437,7 @@ You get the following output in your terminal.
 
 We can then run a _sanitization_ process against the DOM, so you get a context where the attributes are whitelisted.
 
-```cpp
+```zig
 try z.sanitizeNode(allocator, body, .permissive);
 try z.prettyPrint(allocator, body);
 ```
@@ -468,7 +468,7 @@ defer z.destroyDocument(doc);
 
 You receive chunks and build a document.
 
-```cpp
+```zig
 const z = @import("zexplorer");
 const print = std.debug.print;
 
@@ -568,7 +568,7 @@ const html =
 
 A CSS Selector search and some walker search and attributes:
 
-```cpp
+```zig
 const doc = try z.createDocFromString(html);
 defer z.destroyDocument(doc);
 const body = z.bodyNode(doc).?;
@@ -596,7 +596,7 @@ std.debug.assert(std.mem.eql(u8, "foot", aria_value));
 
 Working the `classList` like a DOMTokenList
 
-```cpp
+```zig
 var footer_token_list = try z.ClassList.init(allocator, footer);
 defer footer_token_list.deinit();
 
@@ -635,13 +635,13 @@ const messy_html =
 ;
 ```
 
-```cpp
+```zig
 const expected = "<div><!-- comment --><p>Content</p><pre>  preserve  this  </pre></div>";
 ```
 
 Dom-base normalization:
 
-```cpp
+```zig
 try z.parseString(doc, messy_html);
 
 const body_elt1 = z.bodyElement(doc).?;
@@ -655,7 +655,7 @@ std.debug.assert(std.mem.eql(u8, expected, result1));
 
 String-based "pre-normalization":
 
-```cpp
+```zig
 const cleaned = try z.normalizeHtmlStringWithOptions(
     gpa,
     messy_html,
