@@ -7,8 +7,7 @@ pub fn build(b: *std.Build) void {
     const lexbor_static_lib_path = b.path("lexbor_master_dist/lib/liblexbor_static.a");
     const lexbor_src_path = b.path("lexbor_master_dist/include");
 
-    // Wrapper library
-    const wrapper_lib = b.addLibrary(.{
+    const zexplorer_lib = b.addLibrary(.{
         .name = "zexplorer",
         .linkage = .static,
         .root_module = b.createModule(.{
@@ -16,15 +15,15 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    wrapper_lib.addCSourceFile(.{
+    zexplorer_lib.addCSourceFile(.{
         .file = b.path("src/minimal.c"),
         .flags = &.{"-std=c99"},
     });
-    wrapper_lib.addIncludePath(lexbor_src_path);
-    wrapper_lib.addObjectFile(lexbor_static_lib_path);
-    wrapper_lib.linkLibC();
+    zexplorer_lib.addIncludePath(lexbor_src_path);
+    zexplorer_lib.addObjectFile(lexbor_static_lib_path);
+    zexplorer_lib.linkLibC();
 
-    const zhtml_module = b.addModule(
+    const zexplorer_module = b.addModule(
         "zexplorer",
         .{
             .root_source_file = b.path("src/root.zig"),
@@ -34,7 +33,7 @@ pub fn build(b: *std.Build) void {
     );
 
     // const install_docs = b.addInstallDirectory(.{
-    //     .source_dir = wrapper_lib.getEmittedDocs(),
+    //     .source_dir = zexplorer_lib.getEmittedDocs(),
     //     .install_dir = .{
     //         .custom = ".",
     //     },
@@ -43,13 +42,13 @@ pub fn build(b: *std.Build) void {
     // const docs_step = b.step("docs", "Generate documentation");
     // docs_step.dependOn(&install_docs.step);
 
-    // Link the module to the wrapper library so consumers get C dependencies
-    zhtml_module.linkLibrary(wrapper_lib);
-    b.installArtifact(wrapper_lib);
+    // Link the module to the wrapper library: get C dependencies
+    zexplorer_module.linkLibrary(zexplorer_lib);
+    b.installArtifact(zexplorer_lib);
 
-    // Main executable
+    // Examples executable
     const exe = b.addExecutable(.{
-        .name = "zhtml",
+        .name = "zhtml-examples",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -57,10 +56,10 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    exe.root_module.addImport("zhtml", zhtml_module);
+    exe.root_module.addImport("zhtml-examples", zexplorer_module);
     exe.addObjectFile(lexbor_static_lib_path);
     exe.linkLibC();
-    exe.linkLibrary(wrapper_lib);
+    exe.linkLibrary(zexplorer_lib);
     b.installArtifact(exe);
 
     // Run step
@@ -91,7 +90,7 @@ pub fn build(b: *std.Build) void {
     });
     unit_tests.addIncludePath(lexbor_src_path);
     unit_tests.addObjectFile(lexbor_static_lib_path);
-    unit_tests.linkLibrary(wrapper_lib);
+    unit_tests.linkLibrary(zexplorer_lib);
     unit_tests.linkLibC();
 
     if (coverage) {
