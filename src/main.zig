@@ -931,7 +931,7 @@ fn cleanBenchmark(allocator: std.mem.Allocator, medium_html: []const u8, iterati
     // ===================================================================
     z.print("\n=== KEY INSIGHTS ===\n", .{});
     z.print("🚀 FASTEST: D1 (raw parseString, reused doc)    = {d:.1} kB/s\n", .{kb_size * iter / msD1});
-    z.print("⭐ DOM NORM: B2 (createDocFromString + DOM norm) = {d:.1} kB/s\n", .{kb_size * iter / msB2});
+    z.print("⭐ DOM NORM: B1 (parser, new doc = parser.parse + DOM norm) = {d:.1} kB/s\n", .{kb_size * iter / msB1});
     z.print("\n\n", .{});
     z.print("- createDocFromString parses directly into fresh document\n", .{});
     z.print("- Reused documents have reset overhead (parseString(\"\"))\n", .{});

@@ -77,7 +77,6 @@ pub fn build(b: *std.Build) void {
     const coverage = b.option(bool, "test-coverage", "Generate test coverage") orelse false;
 
     var unit_tests = b.addTest(.{
-        // .name = "unit_tests",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/root.zig"),
             .target = target,
@@ -101,9 +100,7 @@ pub fn build(b: *std.Build) void {
             "kcov",
             "--clean",
             "--include-path=src/modules/",
-            "--exclude-path=lexbor_src_2.5.0/, src/misc-files",
-
-            //"--path-strip-level=3", // any kcov flags can be specified here
+            "--exclude-path=lexbor_src_master/,lexbor_master_dist/,src/misc-files/",
             "kcov-output", // output dir for kcov
             null, // to get zig to use the --test-cmd-bin flag
         });

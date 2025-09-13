@@ -1,6 +1,5 @@
 # zexplorer: a `lexbor` in `Zig` project
 
-
 [![Zig support](https://img.shields.io/badge/Zig-0.15.1-color?logo=zig&color=%23f3ab20)](http://github.com/ndrean/z-html)
 [![Scc Code Badge](https://sloc.xyz/github/ndrean/z-html/)](https://github.com/ndrean/z-html)
 
@@ -41,17 +40,33 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 
 <hr>
 
-## Library usage
+## Install
 
-Check _LIBRARY.md_.
+[![Zig support](https://img.shields.io/badge/Zig-0.15.1-color?logo=zig&color=%23f3ab20)](http://github.com/ndrean/z-html)
+
+```sh
+zig fetch --save https://github.com/ndrean/z-html/archive/main.tar.gz
+```
+
+In your _build.zig_:
+
+```zig
+const zexplorer = b.dependency("zexplorer", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+exe.root_module.addImport("zexplorer", zexplorer.module("zexplorer"));
+```
+
 
 ## Example: Create document and parse
 
 You have two methods available.
 
-1. The `parseString` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
+1. The `parseString()` creates a `<head>` and a `<body>` element and replaces BODY innerContent with the nodes created by the parsing of the given string.
 
-```cpp
+```zig
 const z = @import("zexplorer");
 
 const doc: *HTMLDocument = try z.createDocument();
@@ -75,9 +90,9 @@ Your document now contains this HTML:
 </body>
 ```
 
-You have a shortcut to directly create and parse an HTML string with `createDocFromString`.
+You have a shortcut to directly create and parse an HTML string with `createDocFromString()`.
 
-```cpp
+```zig
 const doc: *HTMLDocument = try z.createDocFromString("<div></div><p></p>");
 defer z.destroyDocument(doc);
 ```
@@ -91,9 +106,6 @@ const doc = try parser.parse("<div><p></p></div>");
 defer z.destroyDocument(doc);
 ```
 
-With `lexbor_2.5.0`, prefer to `createDocument` and `parseString(doc, html)`.
-
-If you target a specific node, use `setInnerHTML(element, new_html_String_content)`.
 
 <hr>
 
@@ -263,6 +275,7 @@ post?" hx-target="closest .blog-post">
     \\</html>
 ;
 ```
+
 </details>
 <br>
 
@@ -523,8 +536,8 @@ chunk:  </tbody></table></body></html>;
 ```
 
 <p align="center">
-  <img src="https://github.com/ndrean/z-html/blob/main/src/images/html-table.png" width="300" alt="image"/>
-  <img src="https://github.com/ndrean/z-html/blob/main/src/images/tree-table.png" width="300" alt="image"/>
+  <img src="https://github.com/ndrean/z-html/blob/main/images/html-table.png" width="300" alt="image"/>
+  <img src="https://github.com/ndrean/z-html/blob/main/images/tree-table.png" width="300" alt="image"/>
 </p>
 
 <hr>
@@ -600,11 +613,13 @@ std.debug.assert(!footer_token_list.contains("new-footer"));
 
 The library provides both DOM-based and string-based HTML normalization to clean up whitespace and comments.
 
+This helps to visualize a clean output in the terminal and also minimize what is potentially sent back over the wire (e.g. when using `HTMX` frontend).
+
 DOM-based normalization works on parsed documents and provides browser-like behavior. It is the best choice.
 
 We take the example below:
 
-```cpp
+```zig
 const doc = try z.createDocument();
 defer z.destroyDocument(doc);
 

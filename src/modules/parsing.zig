@@ -204,20 +204,6 @@ pub fn setInnerHTMLSafe(
     // Apply sanitization to the template content (not the wrapper)
     try applySanitization(allocator, fragment_root, sanitizer);
 
-    // const fragment_root = lxb_html_document_parse_fragment(
-    //     doc,
-    //     context_element,
-    //     html.ptr,
-    //     html.len,
-    // ) orelse return Err.ParseFailed;
-
-    // if (z.firstChild(fragment_root) != null) {
-    //     _ = try setInnerHTML(context_element, "");
-    //     try z.appendFragment(z.elementToNode(context_element), fragment_root);
-    // } else {
-    //     return Err.FragmentParseFailed;
-    // }
-
     // Clear existing content and append the new fragment
     _ = try setInnerHTML(context_element, "");
     try z.appendFragment(
