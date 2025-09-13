@@ -914,12 +914,13 @@ test "HTMX template" {
     try testing.expectEqualStrings("DIV", z.nodeName_zc(first_child.?));
     const txt = try z.innerHTML(allocator, z.nodeToElement(z.firstChild(content_node).?).?);
     defer allocator.free(txt);
-    std.debug.print("Template inner HTML:\n{s}\n", .{txt});
     const res = try innerTemplateHTML(allocator, template_node.?);
     defer allocator.free(res);
-    std.debug.print("innerTemplateHTML result:\n{s}\n", .{res});
 }
 
+/// [template] Get the inner HTML of the first child of a template's content
+///
+/// Caller needs to free the returned string
 pub fn innerTemplateHTML(allocator: std.mem.Allocator, template_node: *z.DomNode) ![]const u8 {
     const template = z.elementToTemplate(z.nodeToElement(template_node).?).?;
     const template_content = templateContent(template);
