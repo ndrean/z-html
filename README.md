@@ -45,7 +45,7 @@ We opted for the following convention: add `_zc` (for _zero_copy_) to the **non 
 [![Zig support](https://img.shields.io/badge/Zig-0.15.1-color?logo=zig&color=%23f3ab20)](http://github.com/ndrean/z-html)
 
 ```sh
-zig fetch --save https://github.com/ndrean/z-html/archive/main.tar.gz
+zig fetch --save https://github.com/ndrean/zexplorer/archive/main.tar.gz
 ```
 
 In your _build.zig_:
