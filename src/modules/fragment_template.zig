@@ -928,6 +928,6 @@ pub fn innerTemplateHTML(allocator: std.mem.Allocator, template_node: *z.DomNode
     const first_child = z.firstChild(content_node);
     std.debug.assert(first_child != null);
     if (first_child == null) return error.NoChildInTemplate;
-    const html = try z.innerHTML(allocator, z.nodeToElement(first_child.?).?);
+    const html = try z.outerHTML(allocator, z.nodeToElement(first_child.?).?);
     return html;
 }
