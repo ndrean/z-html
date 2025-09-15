@@ -1095,7 +1095,7 @@ test "CSS selector caching performance" {
     // std.debug.z.print("   Repeated queries now 10-100x faster!\n", .{});
 }
 
-test "multiple css_engine" {
+test "multiple reuse css_engine" {
     const html =
         \\<div>
         \\<template id="groceries-page-template" title="Grocery Page">
