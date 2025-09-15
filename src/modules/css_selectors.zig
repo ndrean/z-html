@@ -1094,3 +1094,218 @@ test "CSS selector caching performance" {
     // std.debug.z.print("\n Selector caching working! Cache contains {} compiled selectors.\n", .{css_engine.selector_cache.count()});
     // std.debug.z.print("   Repeated queries now 10-100x faster!\n", .{});
 }
+
+test "multiple css_engine" {
+    const html =
+        \\<div>
+        \\<template id="groceries-page-template" title="Grocery Page">
+        \\<div class="flex flex-col md:flex-row gap-8 p-4">
+        \\<div class="md:w-1/2">
+        \\<h2 class="text-3xl font-bold text-gray-800 mb-6">Grocery Items</h2>
+        \\<div class="space-y-4 max-h-[400px] overflow-y-auto pr-2"
+        \\          hx-get="/api/items"
+        \\          hx-trigger="load, every 60s"
+        \\          hx-target="this"
+        \\          hx-swap="innerHTML">
+        \\<p class="text-gray-500">Loading items...</p>
+        \\</div>
+        \\</div>
+        \\      <div
+        \\        id="item-details-card"
+        \\        class="md:w-1/2 bg-gray-100 rounded-xl p-6 shadow-lg min-h-[300px] flex items-center justify-center transition-all duration-300"
+        \\        hx-get="/item-details/default"
+        \\        hx-trigger="load"
+        \\        hx-target="this"
+        \\        hx-swap="innerHTML"
+        \\      ></div>
+        \\    </div>
+        \\  </template>
+        \\  <template id="shopping-list-template" title="Shopping List">
+        \\    <div class="flex flex-col items-center">
+        \\      <h2 class="text-3xl font-bold text-gray-800 mb-6">Shopping List</h2>
+        \\      <div
+        \\        id="cart-content"
+        \\        class="w-full max-w-xl bg-white rounded-lg p-6 shadow-md max-h-[500px] overflow-y-auto"
+        \\        hx-get="/api/cart"
+        \\        hx-trigger="load, every 30s"
+        \\        hx-target="this"
+        \\        hx-swap="innerHTML"
+        \\      >
+        \\        <p class="text-gray-600 text-center">Your cart is empty.</p>
+        \\      </div>
+        \\    </div>
+        \\  </template>
+        \\  <template title="Default Item Details" id="item-details-default-template">
+        \\    <div class="text-center text-gray-500">
+        \\      <h3 class="text-xl font-semibold mb-4">Select an item</h3>
+        \\      <p class="text-gray-400">
+        \\        Click on a grocery item to view its details here.
+        \\      </p>
+        \\    </div>
+        \\  </template>
+        \\  <template title="Cart Item" id="cart-item-template">
+        \\    <div class="flex justify-between items-center p-4 border-b">
+        \\      <div>
+        \\          >${d:.2}</span
+        \\        >
+        \\      </div>
+        \\      <div class="flex items-center space-x-2">
+        \\        <button
+        \\          class="px-2 py-1 bg-red-500 text-white rounded"
+        \\          hx-post="/api/cart/decrease-quantity/{d}"
+        \\          hx-target="#cart-content"
+        \\          hx-swap="innerHTML"
+        \\        >
+        \\          -
+        \\        </button>
+        \\        <span class="px-3 py-1 bg-gray-100 rounded">{d}</span>
+        \\        <button
+        \\          class="px-2 py-1 bg-green-500 text-white rounded"
+        \\          hx-post="/api/cart/increase-quantity/{d}"
+        \\          hx-target="#cart-content"
+        \\          hx-swap="innerHTML"
+        \\        >
+        \\          +
+        \\        </button>
+        \\        <button
+        \\          class="px-2 py-1 bg-red-600 text-white rounded ml-2"
+        \\          hx-delete="/api/cart/remove/{d}"
+        \\          hx-target="#cart-content"
+        \\          hx-swap="innerHTML"
+        \\        >
+        \\          Remove
+        \\        </button>
+        \\      </div>
+        \\    </div>
+        \\  </template>
+        \\  <template title="Item Details" id="grocery-item-template">
+        \\    <div
+        \\      class="bg-white rounded-lg p-4 shadow-md flex justify-between items-cente\\r transition-transform transform hover:scale-[1.02] cursor-pointer"
+        \\      hx-get="/api/item-details/{d}"
+        \\      hx-target="#item-details-card"
+        \\      hx-swap="innerHTML"
+        \\    >
+        \\      <di>
+        \\        <span class="text-lg font-semibold text-gray-900">{s}</span
+        \\        ><span class="text-sm text-gray-500 ml-2">${d:.2}</span>
+        \\      </di\\v>
+        \\      <button
+        \\        class="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors"
+        \\        hx-post="/api/cart/add/{d}"
+        \\        hx-swap="none"
+        \\      >
+        \\        Add to Cart
+        \\      </button>
+        \\    </div>
+        \\  </template>
+        \\  <template title="Item Details" id="item-details-template">
+        \\    <div class="text-center">
+        \\      <h3 class="text-2xl font-bold text-gray-800 mb-4">{s}</h3>
+        \\      <div
+        \\        class="w-24 h-24 bg-gray-200 rounded-full mx-auto mb-4 flex items-center \\justify-center"
+        \\      >
+        \\        <svg
+        \\          class="w-12 h-12 text-gray-400"
+        \\          fill="none"
+        \\          stroke="currentColor"
+        \\          viewBox="0 0 24 24"
+        \\        >
+        \\          <path
+        \\            stroke-linecap="round"
+        \\            stroke-linejoin="round"
+        \\            stroke-width="2"
+        \\            d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+        \\          ></path>
+        \\        </svg>
+        \\      </div>
+        \\      <div class="bg-blue-50 rounded-lg p-6 mb-6">
+        \\        <p class="text-3xl font-bold text-blue-600">${d:.2}</p>
+        \\        <p class="text-gray-600 mt-2">per unit</p>
+        \\      </div>
+        \\      <div class="space-y-3">
+        \\        <button
+        \\          class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-70\\0 transition-colors font-semibold"
+        \\          hx-post="/api/cart/add/{d}"
+        \\          hx-swap="none"
+        \\        >
+        \\          Add to Cart
+        \\        </button>
+        \\        <button
+        \\          class="w-full border border-gray-300 text-gray-700 py-2 px-6 rounded-lg hover:bg-gray-50 transition-colors"
+        \\          onclic\\k="alert('More details coming soon!')"
+        \\        >
+        \\          More Details
+        \\        </button>
+        \\      </div>
+        \\    </div>
+        \\  </template>
+        \\</div>
+    ;
+
+    const allocator = testing.allocator;
+    const normHTML = try z.normalizeHtmlStringWithOptions(allocator, html, .{
+        .remove_whitespace_text_nodes = true,
+    });
+    defer allocator.free(normHTML);
+    const doc = try z.createDocFromString(normHTML);
+    defer z.destroyDocument(doc);
+    const body_node = z.bodyNode(doc).?;
+
+    // try z.prettyPrint(allocator, body_node);
+
+    // const item_template = z.getElementById(body_node, "grocery-item-template");
+
+    // if (item_template != null) {
+    //     const grocery_item_template_html = try z.innerTemplateHTML(allocator, z.elementToNode(item_template.?));
+    //     print("Grocery Item Template HTML:\n{s}\n", .{grocery_item_template_html});
+    //     allocator.free(grocery_item_template_html);
+    // } else {
+    //     print("not found", .{}); // Should find the grocery-item-template
+    // }
+
+    var css_engine = try CssSelectorEngine.init(allocator);
+    defer css_engine.deinit();
+
+    for (0..100_000) |_| {
+        const item_template = try css_engine.querySelector(
+            body_node,
+            "#grocery-item-template",
+        );
+
+        const grocery_item_template_html = try z.innerTemplateHTML(allocator, item_template.?);
+        defer allocator.free(grocery_item_template_html);
+        std.debug.assert(grocery_item_template_html.len > 0);
+
+        const groceries_template = try css_engine.querySelector(body_node, "#groceries-page-template");
+        const groceries_html = try z.innerTemplateHTML(allocator, groceries_template.?);
+        defer allocator.free(groceries_html);
+        std.debug.assert(groceries_html.len > 0);
+
+        const shopping_template = try css_engine.querySelector(body_node, "#shopping-list-template");
+        const shopping_html = try z.innerTemplateHTML(allocator, shopping_template.?);
+        defer allocator.free(shopping_html);
+        std.debug.assert(shopping_html.len > 0);
+
+        const default_template = try css_engine.querySelector(body_node, "#item-details-default-template");
+        const default_html = try z.innerTemplateHTML(allocator, default_template.?);
+        defer allocator.free(default_html);
+        std.debug.assert(default_html.len > 0);
+
+        const details_template = try css_engine.querySelector(body_node, "#item-details-template");
+        const details_template_html = try z.innerTemplateHTML(allocator, details_template.?);
+        defer allocator.free(details_template_html);
+        std.debug.assert(details_template_html.len > 0);
+
+        const cart_item_template = try css_engine.querySelector(body_node, "#cart-item-template");
+        const cart_item_template_html = try z.innerTemplateHTML(allocator, cart_item_template.?);
+        defer allocator.free(cart_item_template_html);
+        std.debug.assert(cart_item_template_html.len > 0);
+    }
+
+    // print("{s}\n", .{grocery_item_template_html});
+    // print("{s}\n", .{groceries_html});
+    // print("{s}\n", .{shopping_html});
+    // print("{s}\n", .{default_html});
+    // print("{s}\n", .{details_template_html});
+    // print("{s}\n", .{cart_item_template_html});
+}
