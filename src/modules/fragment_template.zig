@@ -541,6 +541,20 @@ pub fn useTemplateElement(
     }
 }
 
+/// [template] Get the inner HTML of the first child of a template's content
+///
+/// Caller needs to free the returned string
+pub fn innerTemplateHTML(allocator: std.mem.Allocator, template_node: *z.DomNode) ![]const u8 {
+    const template = z.elementToTemplate(z.nodeToElement(template_node).?).?;
+    const template_content = templateContent(template);
+    const content_node = fragmentToNode(template_content);
+    const first_child = z.firstChild(content_node);
+    std.debug.assert(first_child != null);
+    if (first_child == null) return error.NoChildInTemplate;
+    const html = try z.outerHTML(allocator, z.nodeToElement(first_child.?).?);
+    return html;
+}
+
 test "create template programmatically" {
     const doc = try z.createDocFromString("");
     defer z.destroyDocument(doc);
@@ -916,18 +930,4 @@ test "HTMX template" {
     defer allocator.free(txt);
     const res = try innerTemplateHTML(allocator, template_node.?);
     defer allocator.free(res);
-}
-
-/// [template] Get the inner HTML of the first child of a template's content
-///
-/// Caller needs to free the returned string
-pub fn innerTemplateHTML(allocator: std.mem.Allocator, template_node: *z.DomNode) ![]const u8 {
-    const template = z.elementToTemplate(z.nodeToElement(template_node).?).?;
-    const template_content = templateContent(template);
-    const content_node = fragmentToNode(template_content);
-    const first_child = z.firstChild(content_node);
-    std.debug.assert(first_child != null);
-    if (first_child == null) return error.NoChildInTemplate;
-    const html = try z.outerHTML(allocator, z.nodeToElement(first_child.?).?);
-    return html;
 }

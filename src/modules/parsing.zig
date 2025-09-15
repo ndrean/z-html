@@ -591,7 +591,7 @@ pub const Parser = struct {
     /// Each template is parsed individually to ensure proper DocumentFragment content preservation.
     /// The caller is responsible for destroying each returned template with `z.destroyNode(z.templateToNode(template))` and freeing the slice with `allocator.free(templates)`.
     /// See test "parseTemplates - multiple template parsing" for usage example.
-    fn parseTemplates(
+    pub fn parseTemplates(
         self: *Parser,
         doc: *z.HTMLDocument,
         html: []const u8,
