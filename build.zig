@@ -32,16 +32,6 @@ pub fn build(b: *std.Build) void {
         },
     );
 
-    // const install_docs = b.addInstallDirectory(.{
-    //     .source_dir = zexplorer_lib.getEmittedDocs(),
-    //     .install_dir = .{
-    //         .custom = ".",
-    //     },
-    //     .install_subdir = "docs",
-    // });
-    // const docs_step = b.step("docs", "Generate documentation");
-    // docs_step.dependOn(&install_docs.step);
-
     // Link the module to the wrapper library: get C dependencies
     zexplorer_module.linkLibrary(zexplorer_lib);
     b.installArtifact(zexplorer_lib);
@@ -108,4 +98,21 @@ pub fn build(b: *std.Build) void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     run_unit_tests.skip_foreign_checks = true;
     lib_test.dependOn(&run_unit_tests.step);
+
+    // Documentation
+    const docs_step = b.step("docs", "Build zexplorer library docs");
+    const docs_obj = b.addObject(.{
+        .name = "zexplorer_docs",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const docs = docs_obj.getEmittedDocs();
+    docs_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = docs,
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    }).step);
 }
