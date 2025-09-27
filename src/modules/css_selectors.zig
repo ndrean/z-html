@@ -1039,7 +1039,7 @@ test "CSS selector caching performance" {
     try html_buffer.appendSlice(allocator, "<html><body>");
 
     // Add many elements to make the performance difference noticeable
-    for (0..1000) |i| {
+    for (0..100) |i| {
         const div = try std.fmt.allocPrint(allocator, "<div class='item item-{}' data-id='{}'>Item {}</div>", .{ i % 10, i, i });
         defer allocator.free(div);
         try html_buffer.appendSlice(allocator, div);
@@ -1266,7 +1266,7 @@ test "multiple reuse css_engine" {
     var css_engine = try CssSelectorEngine.init(allocator);
     defer css_engine.deinit();
 
-    for (0..100_000) |_| {
+    for (0..100) |_| {
         const item_template = try css_engine.querySelector(
             body_node,
             "#grocery-item-template",

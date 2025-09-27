@@ -1,4 +1,4 @@
-//! Z-HTML: Zig wrapper of the C library lexbor, HTML parsing and manipulation
+//! zexplorer: Zig wrapper of the C library lexbor, HTML parsing and manipulation
 
 const std = @import("std");
 const builtin = @import("builtin");
